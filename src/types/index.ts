@@ -19,6 +19,7 @@ export interface BillItem {
   itemName: string;
   primaryQuantity: number;
   secondaryQuantity: number;
+  rate: number;
   totalAmount: number;
 }
 
@@ -28,6 +29,10 @@ export interface Bill {
   items: BillItem[];
   totalAmount: number;
   billType?: BillType;
+  billNumber?: string;
+  customerName?: string;
+  supplierName?: string;
+  imageUrl?: string;
   createdAt: Date;
 }
 
@@ -139,4 +144,47 @@ export interface DailySummary {
   upiIn: number;
   upiOut: number;
   transactionCount: number;
+  drawerError?: number;
 }
+
+export const SECTIONS: { id: TransactionSection; label: string }[] = [
+  { id: 'sale', label: 'Sale' },
+  { id: 'expenses', label: 'Expenses' },
+  { id: 'purchase', label: 'Purchase' },
+  { id: 'employee', label: 'Employee' },
+  { id: 'home', label: 'Home' },
+  { id: 'exchange', label: 'Exchange' },
+];
+
+export const TYPE_OPTIONS: Record<TransactionSection, { value: string; label: string }[]> = {
+  sale: [
+    { value: 'sale', label: 'Sale' },
+    { value: 'sales_return', label: 'Sales Return' },
+    { value: 'customer_advance', label: 'Customer Advance' },
+    { value: 'balance_paid', label: 'Balance Paid' },
+  ],
+  expenses: [
+    { value: 'other_expenses', label: 'Other Expenses' },
+    { value: 'vehicle_expenses', label: 'Vehicle Expenses' },
+    { value: 'workshop_expenses', label: 'Workshop Expenses' },
+  ],
+  purchase: [
+    { value: 'purchase_bill', label: 'Purchase Bill' },
+    { value: 'purchase_delivered', label: 'Purchase Delivered' },
+    { value: 'purchase_return', label: 'Purchase Return' },
+    { value: 'purchase_payment', label: 'Purchase Payment' },
+    { value: 'purchase_expenses', label: 'Purchase Expenses' },
+  ],
+  employee: [
+    { value: 'salary', label: 'Salary Payment' },
+    { value: 'daily_wage', label: 'Daily Wage' },
+    { value: 'advance', label: 'Advance' },
+  ],
+  home: [
+    { value: 'home_credit', label: 'Home Credit' },
+    { value: 'home_debit', label: 'Home Debit' },
+  ],
+  exchange: [
+    { value: 'exchange', label: 'Mode Exchange' },
+  ],
+};

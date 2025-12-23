@@ -134,6 +134,11 @@ export async function addTransaction(transaction: Transaction): Promise<void> {
   await db.put('transactions', transaction);
 }
 
+export async function getAllTransactions(): Promise<Transaction[]> {
+  const db = await getDB();
+  return db.getAll('transactions');
+}
+
 export async function getTransactionsByDate(date: Date): Promise<Transaction[]> {
   const db = await getDB();
   const all = await db.getAll('transactions');
@@ -145,6 +150,20 @@ export async function getTransactionsByDate(date: Date): Promise<Transaction[]> 
   return all.filter(t => {
     const tDate = new Date(t.date);
     return tDate >= startOfDay && tDate <= endOfDay;
+  }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+export async function getTransactionsByDateRange(startDate: Date, endDate: Date): Promise<Transaction[]> {
+  const db = await getDB();
+  const all = await db.getAll('transactions');
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+  
+  return all.filter(t => {
+    const tDate = new Date(t.date);
+    return tDate >= start && tDate <= end;
   }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
@@ -215,16 +234,45 @@ export async function updateItem(item: Item): Promise<void> {
   await db.put('items', item);
 }
 
+export async function deleteItem(id: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('items', id);
+}
+
+export async function bulkAddItems(items: Item[]): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction('items', 'readwrite');
+  await Promise.all([
+    ...items.map(item => tx.store.put(item)),
+    tx.done
+  ]);
+}
+
 // Bill operations
 export async function addBill(bill: Bill): Promise<void> {
   const db = await getDB();
   await db.put('bills', bill);
 }
 
+export async function getAllBills(): Promise<Bill[]> {
+  const db = await getDB();
+  return db.getAll('bills');
+}
+
 export async function getBillByTransactionId(transactionId: string): Promise<Bill | undefined> {
   const db = await getDB();
   const all = await db.getAll('bills');
   return all.find(b => b.transactionId === transactionId);
+}
+
+export async function getBillById(id: string): Promise<Bill | undefined> {
+  const db = await getDB();
+  return db.get('bills', id);
+}
+
+export async function updateBill(bill: Bill): Promise<void> {
+  const db = await getDB();
+  await db.put('bills', bill);
 }
 
 // Drawer operations
@@ -280,4 +328,9 @@ export async function getExchangesByDate(date: Date): Promise<ExchangeTransactio
     const eDate = new Date(e.date);
     return eDate >= startOfDay && eDate <= endOfDay;
   });
+}
+
+export async function getAllExchanges(): Promise<ExchangeTransaction[]> {
+  const db = await getDB();
+  return db.getAll('exchanges');
 }

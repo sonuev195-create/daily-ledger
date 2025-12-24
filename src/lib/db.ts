@@ -8,11 +8,13 @@ import {
   Bill, 
   DrawerOpening, 
   DrawerClosing,
-  ExchangeTransaction 
+  ExchangeTransaction,
+  Category,
+  Batch
 } from '@/types';
 
 const DB_NAME = 'cash-management-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export type CashManagementDB = IDBPDatabase<{
   transactions: {
@@ -38,7 +40,7 @@ export type CashManagementDB = IDBPDatabase<{
   items: {
     key: string;
     value: Item;
-    indexes: { 'by-name': string };
+    indexes: { 'by-name': string; 'by-category': string };
   };
   bills: {
     key: string;
@@ -59,6 +61,16 @@ export type CashManagementDB = IDBPDatabase<{
     key: string;
     value: ExchangeTransaction;
     indexes: { 'by-date': Date };
+  };
+  categories: {
+    key: string;
+    value: Category;
+    indexes: { 'by-name': string };
+  };
+  batches: {
+    key: string;
+    value: Batch;
+    indexes: { 'by-item': string; 'by-date': Date };
   };
 }>;
 
@@ -121,6 +133,19 @@ export async function getDB(): Promise<CashManagementDB> {
         if (!db.objectStoreNames.contains('exchanges')) {
           const exchangeStore = db.createObjectStore('exchanges', { keyPath: 'id' });
           exchangeStore.createIndex('by-date', 'date');
+        }
+
+        // Categories store
+        if (!db.objectStoreNames.contains('categories')) {
+          const categoryStore = db.createObjectStore('categories', { keyPath: 'id' });
+          categoryStore.createIndex('by-name', 'name');
+        }
+
+        // Batches store
+        if (!db.objectStoreNames.contains('batches')) {
+          const batchStore = db.createObjectStore('batches', { keyPath: 'id' });
+          batchStore.createIndex('by-item', 'itemId');
+          batchStore.createIndex('by-date', 'purchaseDate');
         }
       },
     });
@@ -333,4 +358,64 @@ export async function getExchangesByDate(date: Date): Promise<ExchangeTransactio
 export async function getAllExchanges(): Promise<ExchangeTransaction[]> {
   const db = await getDB();
   return db.getAll('exchanges');
+}
+
+// Category operations
+export async function addCategory(category: Category): Promise<void> {
+  const db = await getDB();
+  await db.put('categories', category);
+}
+
+export async function getAllCategories(): Promise<Category[]> {
+  const db = await getDB();
+  return db.getAll('categories');
+}
+
+export async function updateCategory(category: Category): Promise<void> {
+  const db = await getDB();
+  category.updatedAt = new Date();
+  await db.put('categories', category);
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('categories', id);
+}
+
+// Batch operations
+export async function addBatch(batch: Batch): Promise<void> {
+  const db = await getDB();
+  await db.put('batches', batch);
+}
+
+export async function getAllBatches(): Promise<Batch[]> {
+  const db = await getDB();
+  return db.getAll('batches');
+}
+
+export async function getBatchesByItem(itemId: string): Promise<Batch[]> {
+  const db = await getDB();
+  const all = await db.getAll('batches');
+  return all.filter(b => b.itemId === itemId).sort((a, b) => 
+    new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
+  );
+}
+
+export async function updateBatch(batch: Batch): Promise<void> {
+  const db = await getDB();
+  await db.put('batches', batch);
+}
+
+export async function deleteBatch(id: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('batches', id);
+}
+
+export async function bulkAddBatches(batches: Batch[]): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction('batches', 'readwrite');
+  await Promise.all([
+    ...batches.map(batch => tx.store.put(batch)),
+    tx.done
+  ]);
 }

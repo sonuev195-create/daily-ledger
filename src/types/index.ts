@@ -14,6 +14,34 @@ export type PurchaseType = 'purchase_bill' | 'purchase_delivered' | 'purchase_re
 export type HomeType = 'home_credit' | 'home_debit';
 export type BillType = 'g_bill' | 'n_bill';
 
+// Batch preference options
+export type BatchPreference = 'latest' | 'oldest' | 'custom' | 'category';
+
+// Category for grouping items with default batch preference
+export interface Category {
+  id: string;
+  name: string;
+  batchPreference: Exclude<BatchPreference, 'category'>; // 'latest' | 'oldest' | 'custom'
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Batch for tracking inventory batches per item
+export interface Batch {
+  id: string;
+  itemId: string;
+  batchNumber?: string;
+  purchaseDate: Date;
+  purchaseRate: number;
+  primaryQuantity: number;
+  secondaryQuantity: number;
+  expiryDate?: Date;
+  supplierId?: string;
+  supplierName?: string;
+  purchaseBillId?: string;
+  createdAt: Date;
+}
+
 export interface BillItem {
   id: string;
   itemName: string;
@@ -95,11 +123,14 @@ export interface Employee {
 export interface Item {
   id: string;
   name: string;
-  primaryQuantity: number;
-  secondaryQuantity: number;
-  purchaseRate: number;
+  categoryId?: string;
+  batchPreference: BatchPreference; // 'latest' | 'oldest' | 'custom' | 'category'
   sellingPrice: number;
-  inventoryValue: number;
+  // Computed fields (sum from batches)
+  primaryQuantity?: number;
+  secondaryQuantity?: number;
+  purchaseRate?: number;
+  inventoryValue?: number;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1,21 +1,24 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Package, Plus, Search, Edit2, Trash2, Upload, FileSpreadsheet, X } from 'lucide-react';
+import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Item } from '@/types';
-import { getAllItems, addItem, updateItem, deleteItem, bulkAddItems } from '@/lib/db';
+import { Item, Category } from '@/types';
+import { getAllItems, addItem, updateItem, deleteItem, bulkAddItems, getAllCategories } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Fab } from '@/components/ui/fab';
-import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { CategorySheet } from '@/components/items/CategorySheet';
+import { BatchList } from '@/components/items/BatchList';
 
 export default function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [activeTab, setActiveTab] = useState('single');
   const [bulkData, setBulkData] = useState('');
@@ -28,14 +31,23 @@ export default function ItemsPage() {
   const [sellingPrice, setSellingPrice] = useState('');
 
   useEffect(() => {
-    loadItems();
+    loadData();
   }, []);
 
-  const loadItems = async () => {
+  const loadData = async () => {
     setLoading(true);
+    const [itemData, categoryData] = await Promise.all([
+      getAllItems(),
+      getAllCategories()
+    ]);
+    setItems(itemData);
+    setCategories(categoryData);
+    setLoading(false);
+  };
+
+  const loadItems = async () => {
     const data = await getAllItems();
     setItems(data);
-    setLoading(false);
   };
 
   const resetForm = () => {
@@ -74,6 +86,7 @@ export default function ItemsPage() {
     const itemData: Item = {
       id: editingItem?.id || uuidv4(),
       name,
+      batchPreference: 'latest',
       primaryQuantity: primaryQtyNum,
       secondaryQuantity: parseFloat(secondaryQty) || 0,
       purchaseRate: purchaseRateNum,
@@ -129,6 +142,7 @@ export default function ItemsPage() {
     const newItems: Item[] = parsedItems.map(item => ({
       id: uuidv4(),
       name: item.name || '',
+      batchPreference: 'latest' as const,
       primaryQuantity: item.primaryQuantity || 0,
       secondaryQuantity: item.secondaryQuantity || 0,
       purchaseRate: item.purchaseRate || 0,
@@ -169,6 +183,13 @@ export default function ItemsPage() {
             <h1 className="text-2xl font-bold text-foreground">Items & Inventory</h1>
             <p className="text-muted-foreground">Manage your products and stock</p>
           </div>
+          <button
+            onClick={() => setIsCategoryOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors"
+          >
+            <FolderOpen className="w-4 h-4" />
+            Categories
+          </button>
         </div>
 
         {/* Summary Card */}
@@ -231,13 +252,13 @@ export default function ItemsPage() {
                   <div className="flex-1 min-w-0">
                     <h3 className="font-medium text-foreground truncate">{item.name}</h3>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                      <span>Qty: {item.primaryQuantity} / {item.secondaryQuantity}</span>
-                      <span>Rate: {formatCurrency(item.purchaseRate)}</span>
+                      <span>Qty: {item.primaryQuantity || 0} / {item.secondaryQuantity || 0}</span>
+                      <span>Rate: {formatCurrency(item.purchaseRate || 0)}</span>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-semibold text-foreground">{formatCurrency(item.sellingPrice)}</p>
-                    <p className="text-xs text-muted-foreground">Stock: {formatCurrency(item.inventoryValue)}</p>
+                    <p className="text-xs text-muted-foreground">Stock: {formatCurrency(item.inventoryValue || 0)}</p>
                   </div>
                   <div className="flex items-center gap-1 ml-3">
                     <button
@@ -254,6 +275,7 @@ export default function ItemsPage() {
                     </button>
                   </div>
                 </div>
+                <BatchList item={item} onBatchesChange={loadItems} />
               </motion.div>
             ))
           )}

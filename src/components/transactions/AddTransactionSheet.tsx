@@ -13,6 +13,8 @@ interface AddTransactionSheetProps {
   onSave: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => void;
   editTransaction?: Transaction | null;
   selectedDate: Date;
+  initialSection?: TransactionSection | null;
+  initialType?: string | null;
 }
 
 const sections: { id: TransactionSection; label: string; icon: any }[] = [
@@ -57,9 +59,9 @@ const typeOptions: Record<TransactionSection, { value: string; label: string }[]
   ],
 };
 
-export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, selectedDate }: AddTransactionSheetProps) {
-  const [section, setSection] = useState<TransactionSection>('sale');
-  const [type, setType] = useState('sale');
+export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, selectedDate, initialSection, initialType }: AddTransactionSheetProps) {
+  const [section, setSection] = useState<TransactionSection>(initialSection || 'sale');
+  const [type, setType] = useState(initialType || 'sale');
   const [amount, setAmount] = useState('');
   const [billNumber, setBillNumber] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -87,8 +89,8 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   }, [editTransaction, isOpen]);
 
   const resetForm = () => {
-    setSection('sale');
-    setType('sale');
+    setSection(initialSection || 'sale');
+    setType(initialType || typeOptions[initialSection || 'sale']?.[0]?.value || 'sale');
     setAmount('');
     setBillNumber('');
     setCustomerName('');

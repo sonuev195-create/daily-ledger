@@ -9,6 +9,8 @@ interface TransactionCardProps {
   transaction: Transaction;
   onEdit?: (transaction: Transaction) => void;
   onDelete?: (id: string) => void;
+  onViewBill?: () => void;
+  compact?: boolean;
 }
 
 const sectionIcons = {
@@ -46,7 +48,7 @@ const typeLabels: Record<string, string> = {
   home_debit: 'Home Debit',
 };
 
-export function TransactionCard({ transaction, onEdit, onDelete }: TransactionCardProps) {
+export function TransactionCard({ transaction, onEdit, onDelete, onViewBill, compact }: TransactionCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const Icon = sectionIcons[transaction.section];

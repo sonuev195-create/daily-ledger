@@ -44,9 +44,13 @@ export interface Batch {
 
 export interface BillItem {
   id: string;
+  itemId?: string;
+  batchId?: string;
   itemName: string;
   primaryQuantity: number;
   secondaryQuantity: number;
+  secondaryUnit?: string;
+  conversionRate?: number;
   rate: number;
   totalAmount: number;
 }
@@ -126,6 +130,8 @@ export interface Item {
   categoryId?: string;
   batchPreference: BatchPreference; // 'latest' | 'oldest' | 'custom' | 'category'
   sellingPrice: number;
+  secondaryUnit?: string;
+  conversionRate?: number;
   // Computed fields (sum from batches)
   primaryQuantity?: number;
   secondaryQuantity?: number;

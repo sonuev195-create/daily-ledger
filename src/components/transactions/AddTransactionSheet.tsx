@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Minus, Receipt, ShoppingCart, Banknote, Home, Users, ArrowLeftRight, ChevronDown, Camera, Upload } from 'lucide-react';
-import { Transaction, PaymentEntry, TransactionSection, BillType } from '@/types';
+import { X, Plus, Minus, Receipt, ShoppingCart, Banknote, Home, Users, ArrowLeftRight, Trash2, Package } from 'lucide-react';
+import { Transaction, PaymentEntry, TransactionSection, BillType, BillItem } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -59,6 +59,17 @@ const typeOptions: Record<TransactionSection, { value: string; label: string }[]
   ],
 };
 
+function createEmptyBillItem(): BillItem {
+  return {
+    id: uuidv4(),
+    itemName: '',
+    primaryQuantity: 0,
+    secondaryQuantity: 0,
+    rate: 0,
+    totalAmount: 0,
+  };
+}
+
 export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, selectedDate, initialSection, initialType }: AddTransactionSheetProps) {
   const [section, setSection] = useState<TransactionSection>(initialSection || 'sale');
   const [type, setType] = useState(initialType || 'sale');
@@ -71,6 +82,9 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   const [payments, setPayments] = useState<PaymentEntry[]>([
     { id: uuidv4(), mode: 'cash', amount: 0 },
   ]);
+  
+  // Bill items for Sale transactions
+  const [billItems, setBillItems] = useState<BillItem[]>([createEmptyBillItem()]);
 
   useEffect(() => {
     if (editTransaction) {
@@ -98,12 +112,45 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     setReference('');
     setBillType('g_bill');
     setPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+    setBillItems([createEmptyBillItem()]);
   };
 
   const handleSectionChange = (newSection: TransactionSection) => {
     setSection(newSection);
     setType(typeOptions[newSection][0].value);
+    // Reset bill items when changing section
+    setBillItems([createEmptyBillItem()]);
   };
+
+  // Bill items management
+  const addBillItem = () => {
+    setBillItems([...billItems, createEmptyBillItem()]);
+  };
+
+  const removeBillItem = (id: string) => {
+    if (billItems.length > 1) {
+      setBillItems(billItems.filter(item => item.id !== id));
+    }
+  };
+
+  const updateBillItem = (id: string, field: keyof BillItem, value: any) => {
+    setBillItems(billItems.map(item => {
+      if (item.id === id) {
+        return { ...item, [field]: value };
+      }
+      return item;
+    }));
+  };
+
+  // Calculate bill total and update amount
+  const billTotal = billItems.reduce((sum, item) => sum + (item.totalAmount || 0), 0);
+
+  // Sync bill total to amount when bill items change (for sale transactions)
+  useEffect(() => {
+    if (showBillItems && billTotal > 0) {
+      setAmount(billTotal.toString());
+    }
+  }, [billTotal]);
 
   const addPaymentMode = () => {
     setPayments([...payments, { id: uuidv4(), mode: 'upi', amount: 0 }]);
@@ -146,10 +193,22 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     resetForm();
   };
 
-  const showBillButton = (section === 'sale' && type === 'sale') || (section === 'purchase' && type === 'purchase_bill');
+  // Show bill items entry for Sale -> Sale and Sale -> Sales Return
+  const showBillItems = (section === 'sale' && (type === 'sale' || type === 'sales_return'));
   const showCustomer = section === 'sale';
   const showSupplier = section === 'purchase';
   const showBillType = section === 'purchase' && type === 'purchase_bill';
+  // Show simple amount field for non-bill transactions
+  const showSimpleAmount = !showBillItems;
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
@@ -242,21 +301,6 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
               </div>
             )}
 
-            {/* Amount */}
-            <div>
-              <label className="text-sm font-medium text-muted-foreground mb-2 block">Amount</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-                <input
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0"
-                  className="input-field pl-8 text-2xl font-semibold"
-                />
-              </div>
-            </div>
-
             {/* Bill Number */}
             <div>
               <label className="text-sm font-medium text-muted-foreground mb-2 block">Bill Number (Optional)</label>
@@ -311,17 +355,136 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
               </div>
             )}
 
-            {/* Add Bill Button */}
-            {showBillButton && (
-              <div className="grid grid-cols-2 gap-2">
-                <button className="flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-border text-muted-foreground hover:bg-secondary transition-colors">
-                  <Camera className="w-4 h-4" />
-                  <span className="text-sm">Capture Bill</span>
-                </button>
-                <button className="flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-border text-muted-foreground hover:bg-secondary transition-colors">
-                  <Upload className="w-4 h-4" />
-                  <span className="text-sm">Upload Bill</span>
-                </button>
+            {/* Bill Items Entry (for Sale -> Sale and Sales Return) */}
+            {showBillItems && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <Package className="w-4 h-4" />
+                    Bill Items
+                  </label>
+                  <button
+                    onClick={addBillItem}
+                    className="text-accent text-sm font-medium flex items-center gap-1 hover:underline"
+                  >
+                    <Plus className="w-4 h-4" /> Add Item
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {billItems.map((item, index) => (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-secondary/30 rounded-xl p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">Item {index + 1}</span>
+                        {billItems.length > 1 && (
+                          <button
+                            onClick={() => removeBillItem(item.id)}
+                            className="text-destructive hover:bg-destructive/10 p-1 rounded"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      
+                      {/* Item Name */}
+                      <input
+                        type="text"
+                        value={item.itemName}
+                        onChange={(e) => updateBillItem(item.id, 'itemName', e.target.value)}
+                        placeholder="Item Name"
+                        className="input-field text-sm"
+                      />
+                      
+                      {/* Quantity and Rate Row */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Qty</label>
+                          <input
+                            type="number"
+                            value={item.primaryQuantity || ''}
+                            onChange={(e) => updateBillItem(item.id, 'primaryQuantity', parseFloat(e.target.value) || 0)}
+                            placeholder="0"
+                            className="input-field text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Rate</label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹</span>
+                            <input
+                              type="number"
+                              value={item.rate || ''}
+                              onChange={(e) => updateBillItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
+                              placeholder="0"
+                              className="input-field text-sm pl-5"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Total</label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹</span>
+                            <input
+                              type="number"
+                              value={item.totalAmount || ''}
+                              onChange={(e) => updateBillItem(item.id, 'totalAmount', parseFloat(e.target.value) || 0)}
+                              placeholder="0"
+                              className="input-field text-sm pl-5 font-medium"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Bill Total */}
+                <div className="mt-3 p-3 rounded-xl bg-accent/10 border border-accent/20">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-muted-foreground">Bill Total</span>
+                    <span className="text-xl font-bold text-accent">{formatCurrency(billTotal)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Simple Amount (for non-bill transactions) */}
+            {showSimpleAmount && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">Amount</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0"
+                    className="input-field pl-8 text-2xl font-semibold"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Sale Amount (editable, synced from bill total) */}
+            {showBillItems && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">Sale Amount</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0"
+                    className="input-field pl-8 text-2xl font-semibold"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Auto-filled from bill total. You can edit if needed.</p>
               </div>
             )}
 
@@ -420,8 +583,8 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
           <div className="px-6 py-4 border-t border-border bg-background">
             <button
               onClick={handleSave}
-              disabled={!amountNum}
-              className="btn-accent w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={amountNum <= 0}
+              className="btn-accent w-full py-3 disabled:opacity-50"
             >
               {editTransaction ? 'Update Transaction' : 'Save Transaction'}
             </button>

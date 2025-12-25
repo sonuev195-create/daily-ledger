@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Minus, Receipt, ShoppingCart, Banknote, Home, Users, ArrowLeftRight, Trash2, Package } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { X, Plus, Minus, Receipt, ShoppingCart, Banknote, Home, Users, ArrowLeftRight, Package } from 'lucide-react';
 import { Transaction, PaymentEntry, TransactionSection, BillType, BillItem } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { BillItemsEntry, createBatchesFromPurchase } from '@/components/bills/BillItemsEntry';
 
 interface AddTransactionSheetProps {
   isOpen: boolean;
@@ -62,9 +63,13 @@ const typeOptions: Record<TransactionSection, { value: string; label: string }[]
 function createEmptyBillItem(): BillItem {
   return {
     id: uuidv4(),
+    itemId: undefined,
+    batchId: undefined,
     itemName: '',
     primaryQuantity: 0,
     secondaryQuantity: 0,
+    secondaryUnit: undefined,
+    conversionRate: undefined,
     rate: 0,
     totalAmount: 0,
   };
@@ -83,8 +88,17 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     { id: uuidv4(), mode: 'cash', amount: 0 },
   ]);
   
-  // Bill items for Sale transactions
+  // Bill items for Sale/Purchase transactions
   const [billItems, setBillItems] = useState<BillItem[]>([createEmptyBillItem()]);
+
+  // Determine what to show
+  const showSaleBillItems = section === 'sale' && (type === 'sale' || type === 'sales_return');
+  const showPurchaseBillItems = section === 'purchase' && type === 'purchase_bill';
+  const showBillItems = showSaleBillItems || showPurchaseBillItems;
+  const showCustomer = section === 'sale';
+  const showSupplier = section === 'purchase';
+  const showBillType = section === 'purchase' && type === 'purchase_bill';
+  const showSimpleAmount = !showBillItems;
 
   useEffect(() => {
     if (editTransaction) {
@@ -118,39 +132,17 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   const handleSectionChange = (newSection: TransactionSection) => {
     setSection(newSection);
     setType(typeOptions[newSection][0].value);
-    // Reset bill items when changing section
     setBillItems([createEmptyBillItem()]);
   };
 
-  // Bill items management
-  const addBillItem = () => {
-    setBillItems([...billItems, createEmptyBillItem()]);
-  };
-
-  const removeBillItem = (id: string) => {
-    if (billItems.length > 1) {
-      setBillItems(billItems.filter(item => item.id !== id));
-    }
-  };
-
-  const updateBillItem = (id: string, field: keyof BillItem, value: any) => {
-    setBillItems(billItems.map(item => {
-      if (item.id === id) {
-        return { ...item, [field]: value };
-      }
-      return item;
-    }));
-  };
-
-  // Calculate bill total and update amount
+  // Calculate bill total and sync to amount
   const billTotal = billItems.reduce((sum, item) => sum + (item.totalAmount || 0), 0);
 
-  // Sync bill total to amount when bill items change (for sale transactions)
   useEffect(() => {
     if (showBillItems && billTotal > 0) {
       setAmount(billTotal.toString());
     }
-  }, [billTotal]);
+  }, [billTotal, showBillItems]);
 
   const addPaymentMode = () => {
     setPayments([...payments, { id: uuidv4(), mode: 'upi', amount: 0 }]);
@@ -172,7 +164,12 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   const amountNum = parseFloat(amount) || 0;
   const difference = amountNum - totalPayments;
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // For purchase bills, create batches automatically
+    if (showPurchaseBillItems && billItems.some(item => item.itemName && item.primaryQuantity > 0)) {
+      await createBatchesFromPurchase(billItems, billNumber || `PB-${Date.now()}`);
+    }
+
     const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
       date: selectedDate,
       section,
@@ -183,7 +180,7 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
       customerName: customerName || undefined,
       supplierName: supplierName || undefined,
       reference: reference || undefined,
-      billType: (section === 'purchase' && type === 'purchase_bill') ? billType : undefined,
+      billType: showBillType ? billType : undefined,
       due: difference > 0 ? difference : undefined,
       overpayment: difference < 0 ? Math.abs(difference) : undefined,
     };
@@ -192,14 +189,6 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     onClose();
     resetForm();
   };
-
-  // Show bill items entry for Sale -> Sale and Sale -> Sales Return
-  const showBillItems = (section === 'sale' && (type === 'sale' || type === 'sales_return'));
-  const showCustomer = section === 'sale';
-  const showSupplier = section === 'purchase';
-  const showBillType = section === 'purchase' && type === 'purchase_bill';
-  // Show simple amount field for non-bill transactions
-  const showSimpleAmount = !showBillItems;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -355,101 +344,19 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
               </div>
             )}
 
-            {/* Bill Items Entry (for Sale -> Sale and Sales Return) */}
+            {/* Bill Items Entry (for Sale and Purchase Bill) */}
             {showBillItems && (
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                    <Package className="w-4 h-4" />
-                    Bill Items
-                  </label>
-                  <button
-                    onClick={addBillItem}
-                    className="text-accent text-sm font-medium flex items-center gap-1 hover:underline"
-                  >
-                    <Plus className="w-4 h-4" /> Add Item
-                  </button>
-                </div>
-                
-                <div className="space-y-3">
-                  {billItems.map((item, index) => (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-secondary/30 rounded-xl p-3 space-y-2"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">Item {index + 1}</span>
-                        {billItems.length > 1 && (
-                          <button
-                            onClick={() => removeBillItem(item.id)}
-                            className="text-destructive hover:bg-destructive/10 p-1 rounded"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                      
-                      {/* Item Name */}
-                      <input
-                        type="text"
-                        value={item.itemName}
-                        onChange={(e) => updateBillItem(item.id, 'itemName', e.target.value)}
-                        placeholder="Item Name"
-                        className="input-field text-sm"
-                      />
-                      
-                      {/* Quantity and Rate Row */}
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">Qty</label>
-                          <input
-                            type="number"
-                            value={item.primaryQuantity || ''}
-                            onChange={(e) => updateBillItem(item.id, 'primaryQuantity', parseFloat(e.target.value) || 0)}
-                            placeholder="0"
-                            className="input-field text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">Rate</label>
-                          <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹</span>
-                            <input
-                              type="number"
-                              value={item.rate || ''}
-                              onChange={(e) => updateBillItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
-                              placeholder="0"
-                              className="input-field text-sm pl-5"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">Total</label>
-                          <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹</span>
-                            <input
-                              type="number"
-                              value={item.totalAmount || ''}
-                              onChange={(e) => updateBillItem(item.id, 'totalAmount', parseFloat(e.target.value) || 0)}
-                              placeholder="0"
-                              className="input-field text-sm pl-5 font-medium"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-
-                {/* Bill Total */}
-                <div className="mt-3 p-3 rounded-xl bg-accent/10 border border-accent/20">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-muted-foreground">Bill Total</span>
-                    <span className="text-xl font-bold text-accent">{formatCurrency(billTotal)}</span>
-                  </div>
-                </div>
+                <label className="text-sm font-medium text-foreground flex items-center gap-2 mb-3">
+                  <Package className="w-4 h-4" />
+                  {showSaleBillItems ? 'Sale Items' : 'Purchase Items'}
+                </label>
+                <BillItemsEntry
+                  billItems={billItems}
+                  setBillItems={setBillItems}
+                  mode={showSaleBillItems ? 'sale' : 'purchase'}
+                  billNumber={billNumber}
+                />
               </div>
             )}
 
@@ -470,10 +377,12 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
               </div>
             )}
 
-            {/* Sale Amount (editable, synced from bill total) */}
+            {/* Sale/Purchase Amount (editable, synced from bill total) */}
             {showBillItems && (
               <div>
-                <label className="text-sm font-medium text-muted-foreground mb-2 block">Sale Amount</label>
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                  {showSaleBillItems ? 'Sale Amount' : 'Purchase Amount'}
+                </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
                   <input
@@ -490,17 +399,9 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
 
             {/* Payment Methods */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-muted-foreground">Payment</label>
-                <button
-                  onClick={addPaymentMode}
-                  className="text-accent text-sm font-medium flex items-center gap-1 hover:underline"
-                >
-                  <Plus className="w-4 h-4" /> Add Mode
-                </button>
-              </div>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">Payment</label>
               <div className="space-y-3">
-                {payments.map((payment, index) => (
+                {payments.map((payment) => (
                   <motion.div
                     key={payment.id}
                     initial={{ opacity: 0, y: -10 }}
@@ -543,6 +444,14 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
                   </motion.div>
                 ))}
               </div>
+              
+              {/* Add Payment Mode Button - Always below last payment */}
+              <button
+                onClick={addPaymentMode}
+                className="w-full mt-3 py-2 rounded-xl border-2 border-dashed border-accent/30 text-accent text-sm font-medium flex items-center justify-center gap-2 hover:bg-accent/5 transition-colors"
+              >
+                <Plus className="w-4 h-4" /> Add Payment Mode
+              </button>
             </div>
 
             {/* Payment Summary */}

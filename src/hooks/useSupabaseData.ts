@@ -70,6 +70,8 @@ export function useItems() {
         categoryId: i.category_id || undefined,
         batchPreference: i.batch_preference as BatchPreference,
         sellingPrice: Number(i.selling_price),
+        secondaryUnit: i.secondary_unit || undefined,
+        conversionRate: i.conversion_rate ? Number(i.conversion_rate) : undefined,
         createdAt: new Date(i.created_at),
         updatedAt: new Date(i.updated_at),
       })));
@@ -85,6 +87,8 @@ export function useItems() {
       category_id: item.categoryId || null,
       batch_preference: item.batchPreference,
       selling_price: item.sellingPrice,
+      secondary_unit: item.secondaryUnit || null,
+      conversion_rate: item.conversionRate || null,
     }).select().single();
     if (!error && data) { await fetchItems(); return data.id; }
     return null;
@@ -96,6 +100,8 @@ export function useItems() {
       category_id: updates.categoryId || null,
       batch_preference: updates.batchPreference,
       selling_price: updates.sellingPrice,
+      secondary_unit: updates.secondaryUnit || null,
+      conversion_rate: updates.conversionRate || null,
       updated_at: new Date().toISOString(),
     }).eq('id', id);
     await fetchItems();

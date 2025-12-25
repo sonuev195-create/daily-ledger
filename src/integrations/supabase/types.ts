@@ -14,7 +14,488 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      batches: {
+        Row: {
+          batch_number: string | null
+          created_at: string
+          expiry_date: string | null
+          id: string
+          item_id: string
+          primary_quantity: number
+          purchase_date: string
+          purchase_rate: number
+          secondary_quantity: number
+        }
+        Insert: {
+          batch_number?: string | null
+          created_at?: string
+          expiry_date?: string | null
+          id?: string
+          item_id: string
+          primary_quantity?: number
+          purchase_date?: string
+          purchase_rate?: number
+          secondary_quantity?: number
+        }
+        Update: {
+          batch_number?: string | null
+          created_at?: string
+          expiry_date?: string | null
+          id?: string
+          item_id?: string
+          primary_quantity?: number
+          purchase_date?: string
+          purchase_rate?: number
+          secondary_quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batches_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bill_items: {
+        Row: {
+          batch_id: string | null
+          bill_id: string | null
+          id: string
+          item_id: string | null
+          item_name: string
+          primary_quantity: number
+          rate: number
+          secondary_quantity: number
+          total_amount: number
+        }
+        Insert: {
+          batch_id?: string | null
+          bill_id?: string | null
+          id?: string
+          item_id?: string | null
+          item_name: string
+          primary_quantity?: number
+          rate?: number
+          secondary_quantity?: number
+          total_amount?: number
+        }
+        Update: {
+          batch_id?: string | null
+          bill_id?: string | null
+          id?: string
+          item_id?: string | null
+          item_name?: string
+          primary_quantity?: number
+          rate?: number
+          secondary_quantity?: number
+          total_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_items_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_items_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bills: {
+        Row: {
+          bill_number: string | null
+          bill_type: string | null
+          created_at: string
+          customer_name: string | null
+          id: string
+          image_url: string | null
+          supplier_name: string | null
+          total_amount: number
+          transaction_id: string | null
+        }
+        Insert: {
+          bill_number?: string | null
+          bill_type?: string | null
+          created_at?: string
+          customer_name?: string | null
+          id?: string
+          image_url?: string | null
+          supplier_name?: string | null
+          total_amount?: number
+          transaction_id?: string | null
+        }
+        Update: {
+          bill_number?: string | null
+          bill_type?: string | null
+          created_at?: string
+          customer_name?: string | null
+          id?: string
+          image_url?: string | null
+          supplier_name?: string | null
+          total_amount?: number
+          transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bills_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      categories: {
+        Row: {
+          batch_preference: string
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          batch_preference?: string
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          batch_preference?: string
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      customers: {
+        Row: {
+          address: string | null
+          advance_balance: number
+          created_at: string
+          due_balance: number
+          id: string
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          advance_balance?: number
+          created_at?: string
+          due_balance?: number
+          id?: string
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          advance_balance?: number
+          created_at?: string
+          due_balance?: number
+          id?: string
+          name?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      drawer_closings: {
+        Row: {
+          actual_cash: number
+          created_at: string
+          date: string
+          difference: number
+          expected_cash: number
+          id: string
+          notes: string | null
+        }
+        Insert: {
+          actual_cash?: number
+          created_at?: string
+          date: string
+          difference?: number
+          expected_cash?: number
+          id?: string
+          notes?: string | null
+        }
+        Update: {
+          actual_cash?: number
+          created_at?: string
+          date?: string
+          difference?: number
+          expected_cash?: number
+          id?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
+      drawer_openings: {
+        Row: {
+          bank: number
+          cash: number
+          created_at: string
+          date: string
+          id: string
+          upi: number
+        }
+        Insert: {
+          bank?: number
+          cash?: number
+          created_at?: string
+          date: string
+          id?: string
+          upi?: number
+        }
+        Update: {
+          bank?: number
+          cash?: number
+          created_at?: string
+          date?: string
+          id?: string
+          upi?: number
+        }
+        Relationships: []
+      }
+      employees: {
+        Row: {
+          advance_balance: number
+          created_at: string
+          id: string
+          name: string
+          phone: string | null
+          role: string | null
+          salary: number
+          updated_at: string
+        }
+        Insert: {
+          advance_balance?: number
+          created_at?: string
+          id?: string
+          name: string
+          phone?: string | null
+          role?: string | null
+          salary?: number
+          updated_at?: string
+        }
+        Update: {
+          advance_balance?: number
+          created_at?: string
+          id?: string
+          name?: string
+          phone?: string | null
+          role?: string | null
+          salary?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      exchanges: {
+        Row: {
+          amount: number
+          created_at: string
+          date: string
+          from_mode: string
+          id: string
+          reference: string | null
+          to_mode: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          date?: string
+          from_mode: string
+          id?: string
+          reference?: string | null
+          to_mode: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date?: string
+          from_mode?: string
+          id?: string
+          reference?: string | null
+          to_mode?: string
+        }
+        Relationships: []
+      }
+      items: {
+        Row: {
+          batch_preference: string
+          category_id: string | null
+          conversion_rate: number | null
+          created_at: string
+          id: string
+          name: string
+          secondary_unit: string | null
+          selling_price: number
+          updated_at: string
+        }
+        Insert: {
+          batch_preference?: string
+          category_id?: string | null
+          conversion_rate?: number | null
+          created_at?: string
+          id?: string
+          name: string
+          secondary_unit?: string | null
+          selling_price?: number
+          updated_at?: string
+        }
+        Update: {
+          batch_preference?: string
+          category_id?: string | null
+          conversion_rate?: number | null
+          created_at?: string
+          id?: string
+          name?: string
+          secondary_unit?: string | null
+          selling_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      suppliers: {
+        Row: {
+          address: string | null
+          balance: number
+          created_at: string
+          id: string
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          balance?: number
+          created_at?: string
+          id?: string
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          balance?: number
+          created_at?: string
+          id?: string
+          name?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount: number
+          bill_number: string | null
+          bill_type: string | null
+          created_at: string
+          customer_id: string | null
+          customer_name: string | null
+          date: string
+          due: number | null
+          employee_id: string | null
+          id: string
+          overpayment: number | null
+          payments: Json
+          reference: string | null
+          section: string
+          supplier_id: string | null
+          supplier_name: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          bill_number?: string | null
+          bill_type?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          date?: string
+          due?: number | null
+          employee_id?: string | null
+          id?: string
+          overpayment?: number | null
+          payments?: Json
+          reference?: string | null
+          section: string
+          supplier_id?: string | null
+          supplier_name?: string | null
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          bill_number?: string | null
+          bill_type?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          date?: string
+          due?: number | null
+          employee_id?: string | null
+          id?: string
+          overpayment?: number | null
+          payments?: Json
+          reference?: string | null
+          section?: string
+          supplier_id?: string | null
+          supplier_name?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

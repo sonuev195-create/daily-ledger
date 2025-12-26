@@ -511,19 +511,29 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
                   <span className="text-muted-foreground">Total Payment</span>
                   <span className="font-medium">₹{totalPayments.toLocaleString('en-IN')}</span>
                 </div>
+                
+                {/* Show give-back in summary when overpayment */}
+                {overpaymentAmount > 0 && totalGiveBack > 0 && (
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">Given Back</span>
+                    <span className="font-medium text-info">-₹{totalGiveBack.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+                
                 <div className="border-t border-current/10 pt-2 mt-2">
                   <div className="flex justify-between text-sm">
                     <span className={cn(
                       "font-medium",
                       difference === 0 ? "text-success" : difference > 0 ? "text-warning" : "text-info"
                     )}>
-                      {difference === 0 ? 'Balanced' : difference > 0 ? 'Due' : 'Overpayment'}
+                      {difference === 0 ? 'Balanced' : difference > 0 ? 'Due' : 
+                       remainingOverpayment > 0 ? 'Saved as Advance' : 'Returned'}
                     </span>
                     <span className={cn(
                       "font-semibold",
                       difference === 0 ? "text-success" : difference > 0 ? "text-warning" : "text-info"
                     )}>
-                      ₹{Math.abs(difference).toLocaleString('en-IN')}
+                      ₹{(difference > 0 ? difference : remainingOverpayment).toLocaleString('en-IN')}
                     </span>
                   </div>
                 </div>

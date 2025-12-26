@@ -231,8 +231,8 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
             animate={{ opacity: 1, y: 0 }}
             className="bg-secondary/30 rounded-lg overflow-hidden"
           >
-            {/* Compact Single Row */}
-            <div className="flex items-center gap-1.5 p-2">
+            {/* Row 1: Item + Actions (Mobile: full width) */}
+            <div className="flex items-center gap-1.5 p-2 pb-1 md:pb-2">
               {/* Index */}
               <span className="text-xs text-muted-foreground w-5 text-center shrink-0">{index + 1}</span>
               
@@ -256,7 +256,7 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
                     onPaste={(e) => handlePaste(e as any, item.id, 'itemName')}
                     className="w-full h-8 px-2 text-xs bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent truncate"
                   >
-                    <option value="">Item</option>
+                    <option value="">Select Item</option>
                     {allItems.map(i => (
                       <option key={i.id} value={i.id}>{i.name}</option>
                     ))}
@@ -267,57 +267,60 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
                     value={item.itemName}
                     onChange={(e) => updateBillItem(item.id, { itemName: e.target.value })}
                     onPaste={(e) => handlePaste(e, item.id, 'itemName')}
-                    placeholder="Item"
+                    placeholder="Item Name"
                     className="w-full h-8 px-2 text-xs bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
                   />
                 )}
               </div>
 
-              {/* Qty (Primary) */}
-              <input
-                type="number"
-                value={item.primaryQuantity || ''}
-                onChange={(e) => updateBillItem(item.id, { primaryQuantity: parseFloat(e.target.value) || 0 })}
-                placeholder="Qty"
-                className="w-14 h-8 px-1.5 text-xs text-center bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
-              />
-
-              {/* Secondary Qty (if applicable) */}
-              {item.secondaryUnit && (
+              {/* Desktop only: Qty, Rate, Total inline */}
+              <div className="hidden md:flex items-center gap-1.5">
+                {/* Qty (Primary) */}
                 <input
                   type="number"
-                  value={item.secondaryQuantity || ''}
-                  onChange={(e) => updateBillItem(item.id, { secondaryQuantity: parseFloat(e.target.value) || 0 })}
-                  placeholder={item.secondaryUnit}
+                  value={item.primaryQuantity || ''}
+                  onChange={(e) => updateBillItem(item.id, { primaryQuantity: parseFloat(e.target.value) || 0 })}
+                  placeholder="Qty"
                   className="w-14 h-8 px-1.5 text-xs text-center bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
                 />
-              )}
 
-              {/* Rate */}
-              <div className="relative w-16">
-                <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]">₹</span>
-                <input
-                  type="number"
-                  value={item.rate || ''}
-                  onChange={(e) => {
-                    const rate = parseFloat(e.target.value) || 0;
-                    updateBillItem(item.id, { rate, totalAmount: item.primaryQuantity * rate });
-                  }}
-                  placeholder="Rate"
-                  className="w-full h-8 pl-4 pr-1 text-xs bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
-                />
-              </div>
+                {/* Secondary Qty (if applicable) */}
+                {item.secondaryUnit && (
+                  <input
+                    type="number"
+                    value={item.secondaryQuantity || ''}
+                    onChange={(e) => updateBillItem(item.id, { secondaryQuantity: parseFloat(e.target.value) || 0 })}
+                    placeholder={item.secondaryUnit}
+                    className="w-14 h-8 px-1.5 text-xs text-center bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                  />
+                )}
 
-              {/* Total */}
-              <div className="relative w-16">
-                <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]">₹</span>
-                <input
-                  type="number"
-                  value={item.totalAmount || ''}
-                  onChange={(e) => updateBillItem(item.id, { totalAmount: parseFloat(e.target.value) || 0 })}
-                  placeholder="Total"
-                  className="w-full h-8 pl-4 pr-1 text-xs font-medium bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
-                />
+                {/* Rate */}
+                <div className="relative w-16">
+                  <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]">₹</span>
+                  <input
+                    type="number"
+                    value={item.rate || ''}
+                    onChange={(e) => {
+                      const rate = parseFloat(e.target.value) || 0;
+                      updateBillItem(item.id, { rate, totalAmount: item.primaryQuantity * rate });
+                    }}
+                    placeholder="Rate"
+                    className="w-full h-8 pl-4 pr-1 text-xs bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+
+                {/* Total */}
+                <div className="relative w-16">
+                  <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]">₹</span>
+                  <input
+                    type="number"
+                    value={item.totalAmount || ''}
+                    onChange={(e) => updateBillItem(item.id, { totalAmount: parseFloat(e.target.value) || 0 })}
+                    placeholder="Total"
+                    className="w-full h-8 pl-4 pr-1 text-xs font-medium bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                  />
+                </div>
               </div>
 
               {/* Expand/Actions */}
@@ -338,6 +341,62 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
+              </div>
+            </div>
+
+            {/* Row 2: Qty, Rate, Total (Mobile only) */}
+            <div className="flex md:hidden items-center gap-1.5 px-2 pb-2 pt-1">
+              <span className="w-5 shrink-0"></span>
+              
+              {/* Qty */}
+              <div className="flex-1">
+                <input
+                  type="number"
+                  value={item.primaryQuantity || ''}
+                  onChange={(e) => updateBillItem(item.id, { primaryQuantity: parseFloat(e.target.value) || 0 })}
+                  placeholder="Qty"
+                  className="w-full h-8 px-2 text-xs text-center bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                />
+              </div>
+
+              {/* Secondary Qty (if applicable) */}
+              {item.secondaryUnit && (
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    value={item.secondaryQuantity || ''}
+                    onChange={(e) => updateBillItem(item.id, { secondaryQuantity: parseFloat(e.target.value) || 0 })}
+                    placeholder={item.secondaryUnit}
+                    className="w-full h-8 px-2 text-xs text-center bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+              )}
+
+              {/* Rate */}
+              <div className="flex-1 relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]">₹</span>
+                <input
+                  type="number"
+                  value={item.rate || ''}
+                  onChange={(e) => {
+                    const rate = parseFloat(e.target.value) || 0;
+                    updateBillItem(item.id, { rate, totalAmount: item.primaryQuantity * rate });
+                  }}
+                  placeholder="Rate"
+                  className="w-full h-8 pl-5 pr-1 text-xs bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                />
+              </div>
+
+              {/* Total */}
+              <div className="flex-1 relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]">₹</span>
+                <input
+                  type="number"
+                  value={item.totalAmount || ''}
+                  onChange={(e) => updateBillItem(item.id, { totalAmount: parseFloat(e.target.value) || 0 })}
+                  placeholder="Total"
+                  className="w-full h-8 pl-5 pr-1 text-xs font-medium bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                />
               </div>
             </div>
 

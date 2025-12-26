@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Plus, Minus, Receipt, ShoppingCart, Banknote, Home, Users, ArrowLeftRight, Package } from 'lucide-react';
-import { Transaction, PaymentEntry, TransactionSection, BillType, BillItem } from '@/types';
+import { Transaction, PaymentEntry, TransactionSection, BillType, BillItem, PaymentMode } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BillItemsEntry, createBatchesFromPurchase } from '@/components/bills/BillItemsEntry';
+import { SaleBillItemsEntry } from '@/components/bills/SaleBillItemsEntry';
+import { OverpaymentHandler, GiveBackEntry } from '@/components/transactions/OverpaymentHandler';
+import { deductFromBatch } from '@/hooks/useSupabaseData';
 
 interface AddTransactionSheetProps {
   isOpen: boolean;
@@ -90,6 +93,9 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   
   // Bill items for Sale/Purchase transactions
   const [billItems, setBillItems] = useState<BillItem[]>([createEmptyBillItem()]);
+  
+  // Overpayment give-back entries
+  const [giveBackEntries, setGiveBackEntries] = useState<GiveBackEntry[]>([]);
 
   // Determine what to show
   const showSaleBillItems = section === 'sale' && (type === 'sale' || type === 'sales_return');
@@ -127,12 +133,14 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     setBillType('g_bill');
     setPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
     setBillItems([createEmptyBillItem()]);
+    setGiveBackEntries([]);
   };
 
   const handleSectionChange = (newSection: TransactionSection) => {
     setSection(newSection);
     setType(typeOptions[newSection][0].value);
     setBillItems([createEmptyBillItem()]);
+    setGiveBackEntries([]);
   };
 
   // Calculate bill total and sync to amount
@@ -161,13 +169,34 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   };
 
   const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
+  const totalGiveBack = giveBackEntries.reduce((sum, e) => sum + e.amount, 0);
   const amountNum = parseFloat(amount) || 0;
   const difference = amountNum - totalPayments;
+  const overpaymentAmount = difference < 0 ? Math.abs(difference) : 0;
+  const remainingOverpayment = overpaymentAmount - totalGiveBack;
+
+  // Initialize give-back entries when overpayment occurs
+  useEffect(() => {
+    if (overpaymentAmount > 0 && giveBackEntries.length === 0) {
+      setGiveBackEntries([{ id: uuidv4(), mode: 'cash', amount: overpaymentAmount }]);
+    } else if (overpaymentAmount === 0) {
+      setGiveBackEntries([]);
+    }
+  }, [overpaymentAmount]);
 
   const handleSave = async () => {
     // For purchase bills, create batches automatically
     if (showPurchaseBillItems && billItems.some(item => item.itemName && item.primaryQuantity > 0)) {
       await createBatchesFromPurchase(billItems, billNumber || `PB-${Date.now()}`);
+    }
+
+    // For sales, deduct from batches
+    if (showSaleBillItems && billItems.some(item => item.batchId && item.primaryQuantity > 0)) {
+      for (const item of billItems) {
+        if (item.batchId && item.primaryQuantity > 0) {
+          await deductFromBatch(item.batchId, item.primaryQuantity, item.secondaryQuantity);
+        }
+      }
     }
 
     const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -182,7 +211,7 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
       reference: reference || undefined,
       billType: showBillType ? billType : undefined,
       due: difference > 0 ? difference : undefined,
-      overpayment: difference < 0 ? Math.abs(difference) : undefined,
+      overpayment: remainingOverpayment > 0 ? remainingOverpayment : undefined, // Only remaining after give-back
     };
 
     onSave(transaction);
@@ -344,17 +373,31 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
               </div>
             )}
 
-            {/* Bill Items Entry (for Sale and Purchase Bill) */}
-            {showBillItems && (
+            {/* Sale Bill Items (Compact with Batch Selection) */}
+            {showSaleBillItems && (
               <div>
                 <label className="text-sm font-medium text-foreground flex items-center gap-2 mb-3">
                   <Package className="w-4 h-4" />
-                  {showSaleBillItems ? 'Sale Items' : 'Purchase Items'}
+                  Sale Items
+                </label>
+                <SaleBillItemsEntry
+                  billItems={billItems}
+                  setBillItems={setBillItems}
+                />
+              </div>
+            )}
+
+            {/* Purchase Bill Items */}
+            {showPurchaseBillItems && (
+              <div>
+                <label className="text-sm font-medium text-foreground flex items-center gap-2 mb-3">
+                  <Package className="w-4 h-4" />
+                  Purchase Items
                 </label>
                 <BillItemsEntry
                   billItems={billItems}
                   setBillItems={setBillItems}
-                  mode={showSaleBillItems ? 'sale' : 'purchase'}
+                  mode="purchase"
                   billNumber={billNumber}
                 />
               </div>
@@ -485,6 +528,16 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Overpayment Give-Back Handler */}
+            {overpaymentAmount > 0 && section === 'sale' && (
+              <OverpaymentHandler
+                overpayment={overpaymentAmount}
+                giveBackEntries={giveBackEntries}
+                setGiveBackEntries={setGiveBackEntries}
+                customerName={customerName}
+              />
             )}
           </div>
 

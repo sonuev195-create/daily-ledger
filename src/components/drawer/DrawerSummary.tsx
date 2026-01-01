@@ -116,8 +116,13 @@ export function DrawerSummary({ date, summary, opening, onEditOpening }: DrawerS
                   <h3 className="text-sm font-medium text-foreground">Opening Drawer</h3>
                   {onEditOpening && (
                     <button
-                      onClick={onEditOpening}
-                      className="text-xs text-accent flex items-center gap-1 hover:underline"
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onEditOpening();
+                      }}
+                      className="text-xs text-accent flex items-center gap-1 hover:underline cursor-pointer"
                     >
                       <Edit2 className="w-3 h-3" /> Edit
                     </button>

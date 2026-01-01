@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import AllDatesPage from "./pages/AllDatesPage";
 import ItemsPage from "./pages/ItemsPage";
 import ReportsPage from "./pages/ReportsPage";
+import BillsPage from "./pages/BillsPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 
@@ -21,7 +22,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/all-dates" element={<AllDatesPage />} />
-          <Route path="/bills" element={<PlaceholderPage title="Bills" />} />
+          <Route path="/bills" element={<BillsPage />} />
           <Route path="/customer-advance" element={<PlaceholderPage title="Customer Advance" />} />
           <Route path="/balance-paid" element={<PlaceholderPage title="Balance Paid" />} />
           <Route path="/purchase" element={<PlaceholderPage title="Purchase" />} />

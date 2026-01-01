@@ -122,11 +122,38 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     }
   }, [editTransaction, isOpen]);
 
+  // Generate auto bill number based on section and type
+  const generateBillNumber = (sec: TransactionSection, typ: string): string => {
+    const timestamp = Date.now().toString().slice(-4);
+    let prefix = 'TX';
+    if (sec === 'sale') {
+      if (typ === 'sale') prefix = 'S';
+      else if (typ === 'sales_return') prefix = 'SR';
+      else if (typ === 'balance_paid') prefix = 'BP';
+      else if (typ === 'customer_advance') prefix = 'CA';
+    } else if (sec === 'purchase') {
+      if (typ === 'purchase_bill') prefix = 'PB';
+      else if (typ === 'purchase_return') prefix = 'PR';
+      else if (typ === 'purchase_payment') prefix = 'PP';
+    } else if (sec === 'expenses') {
+      prefix = 'EX';
+    } else if (sec === 'employee') {
+      prefix = 'EM';
+    } else if (sec === 'home') {
+      prefix = 'HM';
+    } else if (sec === 'exchange') {
+      prefix = 'XC';
+    }
+    return `${prefix}${timestamp}`;
+  };
+
   const resetForm = () => {
-    setSection(initialSection || 'sale');
-    setType(initialType || typeOptions[initialSection || 'sale']?.[0]?.value || 'sale');
+    const sec = initialSection || 'sale';
+    const typ = initialType || typeOptions[sec]?.[0]?.value || 'sale';
+    setSection(sec);
+    setType(typ);
     setAmount('');
-    setBillNumber('');
+    setBillNumber(generateBillNumber(sec, typ));
     setCustomerName('');
     setSupplierName('');
     setReference('');
@@ -138,9 +165,17 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
 
   const handleSectionChange = (newSection: TransactionSection) => {
     setSection(newSection);
-    setType(typeOptions[newSection][0].value);
+    const newType = typeOptions[newSection][0].value;
+    setType(newType);
+    setBillNumber(generateBillNumber(newSection, newType));
     setBillItems([createEmptyBillItem()]);
     setGiveBackEntries([]);
+  };
+
+  // Update bill number when type changes
+  const handleTypeChange = (newType: string) => {
+    setType(newType);
+    setBillNumber(generateBillNumber(section, newType));
   };
 
   // Calculate bill total and sync to amount
@@ -274,7 +309,7 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
             {/* Type Selector */}
             <div>
               <label className="text-sm font-medium text-muted-foreground mb-2 block">Type</label>
-              <Select value={type} onValueChange={setType}>
+              <Select value={type} onValueChange={handleTypeChange}>
                 <SelectTrigger className="input-field">
                   <SelectValue />
                 </SelectTrigger>
@@ -319,16 +354,26 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
               </div>
             )}
 
-            {/* Bill Number */}
+            {/* Bill Number - Mandatory with auto-generation */}
             <div>
-              <label className="text-sm font-medium text-muted-foreground mb-2 block">Bill Number (Optional)</label>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                Bill Number <span className="text-destructive">*</span>
+              </label>
               <input
                 type="text"
                 value={billNumber}
                 onChange={(e) => setBillNumber(e.target.value)}
-                placeholder="Enter bill number"
+                placeholder="Auto-generated"
                 className="input-field"
+                required
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Auto-generated: {section === 'sale' && type === 'sale' ? 'S' : 
+                  section === 'sale' && type === 'sales_return' ? 'SR' :
+                  section === 'sale' && type === 'balance_paid' ? 'BP' :
+                  section === 'sale' && type === 'customer_advance' ? 'CA' :
+                  section === 'purchase' && type === 'purchase_bill' ? 'PB' : 'TX'}-prefix
+              </p>
             </div>
 
             {/* Customer Name (for Sale) */}

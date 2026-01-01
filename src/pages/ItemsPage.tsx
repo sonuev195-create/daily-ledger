@@ -25,10 +25,14 @@ export default function ItemsPage() {
 
   // Form state
   const [name, setName] = useState('');
+  const [categoryId, setCategoryId] = useState<string>('');
+  const [secondaryUnit, setSecondaryUnit] = useState('');
+  const [conversionRate, setConversionRate] = useState('');
   const [primaryQty, setPrimaryQty] = useState('');
   const [secondaryQty, setSecondaryQty] = useState('');
   const [purchaseRate, setPurchaseRate] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
+  const [batchPreference, setBatchPreference] = useState<'latest' | 'oldest' | 'custom' | 'category'>('category');
 
   useEffect(() => {
     loadData();
@@ -52,10 +56,14 @@ export default function ItemsPage() {
 
   const resetForm = () => {
     setName('');
+    setCategoryId('');
+    setSecondaryUnit('');
+    setConversionRate('');
     setPrimaryQty('');
     setSecondaryQty('');
     setPurchaseRate('');
     setSellingPrice('');
+    setBatchPreference('category');
     setEditingItem(null);
     setBulkData('');
   };
@@ -63,10 +71,14 @@ export default function ItemsPage() {
   const handleEdit = (item: Item) => {
     setEditingItem(item);
     setName(item.name);
-    setPrimaryQty(item.primaryQuantity.toString());
-    setSecondaryQty(item.secondaryQuantity.toString());
-    setPurchaseRate(item.purchaseRate.toString());
+    setCategoryId(item.categoryId || '');
+    setSecondaryUnit(item.secondaryUnit || '');
+    setConversionRate(item.conversionRate?.toString() || '');
+    setPrimaryQty((item.primaryQuantity || 0).toString());
+    setSecondaryQty((item.secondaryQuantity || 0).toString());
+    setPurchaseRate((item.purchaseRate || 0).toString());
     setSellingPrice(item.sellingPrice.toString());
+    setBatchPreference(item.batchPreference || 'category');
     setActiveTab('single');
     setIsAddOpen(true);
   };
@@ -86,7 +98,10 @@ export default function ItemsPage() {
     const itemData: Item = {
       id: editingItem?.id || uuidv4(),
       name,
-      batchPreference: 'latest',
+      categoryId: categoryId || undefined,
+      batchPreference: batchPreference,
+      secondaryUnit: secondaryUnit || undefined,
+      conversionRate: parseFloat(conversionRate) || undefined,
       primaryQuantity: primaryQtyNum,
       secondaryQuantity: parseFloat(secondaryQty) || 0,
       purchaseRate: purchaseRateNum,
@@ -324,6 +339,45 @@ export default function ItemsPage() {
                       placeholder="Enter item name"
                       className="input-field"
                     />
+                  </div>
+
+                  {/* Category Selector */}
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground mb-2 block">Category <span className="text-destructive">*</span></label>
+                    <select
+                      value={categoryId}
+                      onChange={(e) => setCategoryId(e.target.value)}
+                      className="input-field"
+                    >
+                      <option value="">Select Category</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Secondary Unit & Conversion */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-2 block">Secondary Unit</label>
+                      <input
+                        type="text"
+                        value={secondaryUnit}
+                        onChange={(e) => setSecondaryUnit(e.target.value)}
+                        placeholder="e.g., pcs, kg"
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-2 block">Conversion Rate</label>
+                      <input
+                        type="number"
+                        value={conversionRate}
+                        onChange={(e) => setConversionRate(e.target.value)}
+                        placeholder="1 primary = ? secondary"
+                        className="input-field"
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">

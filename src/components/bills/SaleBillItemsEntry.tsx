@@ -215,6 +215,16 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
     return totalQty > 0 ? `${totalQty}*${avgRate.toFixed(0)}` : '0';
   };
 
+  // Auto-add next row when current row has item selected
+  useEffect(() => {
+    const lastItem = billItems[billItems.length - 1];
+    if (lastItem && lastItem.itemId && lastItem.primaryQuantity > 0) {
+      // Add new row if last item has item selected and quantity
+      const newItem = createEmptyBillItem();
+      setBillItems([...billItems, newItem]);
+    }
+  }, [billItems.length > 0 && billItems[billItems.length - 1]?.itemId, billItems[billItems.length - 1]?.primaryQuantity]);
+
   return (
     <div className="space-y-2">
       {billItems.map((item, index) => {
@@ -223,6 +233,8 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
         const isExpanded = expandedItem === item.id;
         const selectedItem = allItems.find(i => i.id === item.itemId);
         const effectivePref = selectedItem ? getEffectiveBatchPreference(selectedItem) : 'latest';
+        // Batch info label: qty*rate
+        const batchInfoLabel = selectedBatch ? `${selectedBatch.primaryQuantity}*${selectedBatch.purchaseRate}` : null;
 
         return (
           <motion.div
@@ -231,7 +243,7 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
             animate={{ opacity: 1, y: 0 }}
             className="bg-secondary/30 rounded-lg overflow-hidden"
           >
-            {/* Row 1: Item + Actions (Mobile: full width) */}
+            {/* Row 1: Item + Batch Info + Actions (Mobile: full width) */}
             <div className="flex items-center gap-1.5 p-2 pb-1 md:pb-2">
               {/* Index */}
               <span className="text-xs text-muted-foreground w-5 text-center shrink-0">{index + 1}</span>
@@ -239,28 +251,36 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
               {/* Item Select/Input */}
               <div className="flex-1 min-w-0">
                 {allItems.length > 0 ? (
-                  <select
-                    value={item.itemId || ''}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleItemSelect(item.id, e.target.value);
-                      } else {
-                        updateBillItem(item.id, { 
-                          itemId: undefined, 
-                          itemName: '', 
-                          rate: 0,
-                          batchId: undefined,
-                        });
-                      }
-                    }}
-                    onPaste={(e) => handlePaste(e as any, item.id, 'itemName')}
-                    className="w-full h-8 px-2 text-xs bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent truncate"
-                  >
-                    <option value="">Select Item</option>
-                    {allItems.map(i => (
-                      <option key={i.id} value={i.id}>{i.name}</option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-1">
+                    <select
+                      value={item.itemId || ''}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleItemSelect(item.id, e.target.value);
+                        } else {
+                          updateBillItem(item.id, { 
+                            itemId: undefined, 
+                            itemName: '', 
+                            rate: 0,
+                            batchId: undefined,
+                          });
+                        }
+                      }}
+                      onPaste={(e) => handlePaste(e as any, item.id, 'itemName')}
+                      className="flex-1 h-8 px-2 text-xs bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent truncate"
+                    >
+                      <option value="">Select Item</option>
+                      {allItems.map(i => (
+                        <option key={i.id} value={i.id}>{i.name}</option>
+                      ))}
+                    </select>
+                    {/* Inline batch info */}
+                    {batchInfoLabel && (
+                      <span className="text-[10px] text-info bg-info/10 px-1.5 py-0.5 rounded whitespace-nowrap">
+                        {batchInfoLabel}
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <input
                     type="text"

@@ -68,6 +68,12 @@ export interface Bill {
   createdAt: Date;
 }
 
+export interface GiveBackPayment {
+  id: string;
+  mode: PaymentMode;
+  amount: number;
+}
+
 export interface Transaction {
   id: string;
   date: Date;
@@ -75,6 +81,7 @@ export interface Transaction {
   type: string;
   amount: number;
   payments: PaymentEntry[];
+  giveBack?: GiveBackPayment[]; // Overpayment returned to customer
   billNumber?: string;
   customerId?: string;
   customerName?: string;
@@ -87,6 +94,7 @@ export interface Transaction {
   billId?: string;
   due?: number;
   overpayment?: number;
+  adjustedFromSales?: number; // For expenses paid from sales cash
   createdAt: Date;
   updatedAt: Date;
 }

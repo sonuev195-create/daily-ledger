@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Receipt, Search, Filter, ChevronDown, Phone, MapPin, AlertCircle, CreditCard } from 'lucide-react';
+import { Receipt, Search, Phone, MapPin, AlertCircle, CreditCard, ChevronDown, Wallet } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,8 @@ interface BillWithCustomer {
   created_at: string;
   transaction_id: string | null;
   due_amount?: number;
+  advance_used?: number;
+  adjusted_from_sales?: number;
   customer?: {
     id: string;
     name: string;
@@ -46,34 +48,40 @@ export default function BillsPage() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      // Also fetch transactions with due > 0 that might not have bills
-      const { data: dueTxData, error: dueTxError } = await supabase
+      // Fetch all transactions to get bill info
+      const { data: transactionsData, error: txError } = await supabase
         .from('transactions')
-        .select('id, bill_number, customer_name, supplier_name, amount, due, created_at, type')
-        .gt('due', 0)
+        .select('id, bill_number, customer_name, supplier_name, amount, due, created_at, type, adjusted_from_sales')
         .order('created_at', { ascending: false });
 
       if (billsError) throw billsError;
 
-      // Merge bills and due transactions
-      const allBills: BillWithCustomer[] = [
-        ...(billsData || []).map(bill => ({
-          id: bill.id,
-          bill_number: bill.bill_number,
-          bill_type: bill.bill_type,
-          customer_name: bill.customer_name,
-          supplier_name: bill.supplier_name,
-          total_amount: Number(bill.total_amount),
-          created_at: bill.created_at,
-          transaction_id: bill.transaction_id,
-        })),
-      ];
+      // Create a map of transaction IDs to bills
+      const billTransactionIds = new Set((billsData || []).map(b => b.transaction_id).filter(Boolean));
 
-      // Add due transactions that don't have bills yet
-      if (dueTxData) {
-        const billIds = new Set(allBills.map(b => b.bill_number));
-        dueTxData.forEach(tx => {
-          if (tx.bill_number && !billIds.has(tx.bill_number)) {
+      // Merge bills from bills table
+      const allBills: BillWithCustomer[] = (billsData || []).map(bill => ({
+        id: bill.id,
+        bill_number: bill.bill_number,
+        bill_type: bill.bill_type,
+        customer_name: bill.customer_name,
+        supplier_name: bill.supplier_name,
+        total_amount: Number(bill.total_amount),
+        created_at: bill.created_at,
+        transaction_id: bill.transaction_id,
+      }));
+
+      // Add transactions that don't have bills yet (including those with dues)
+      if (transactionsData) {
+        const existingBillNumbers = new Set(allBills.map(b => b.bill_number));
+        
+        transactionsData.forEach(tx => {
+          // Skip if this transaction already has a bill
+          if (tx.bill_number && existingBillNumbers.has(tx.bill_number)) return;
+          if (billTransactionIds.has(tx.id)) return;
+          
+          // Add transaction as a bill entry
+          if (tx.bill_number) {
             allBills.push({
               id: tx.id,
               bill_number: tx.bill_number,
@@ -83,7 +91,8 @@ export default function BillsPage() {
               total_amount: Number(tx.amount),
               created_at: tx.created_at,
               transaction_id: tx.id,
-              due_amount: Number(tx.due),
+              due_amount: tx.due ? Number(tx.due) : undefined,
+              adjusted_from_sales: tx.adjusted_from_sales ? Number(tx.adjusted_from_sales) : undefined,
             });
           }
         });
@@ -178,6 +187,7 @@ export default function BillsPage() {
   // Calculate totals
   const totalDue = bills.reduce((sum, b) => sum + (b.due_amount || 0), 0);
   const totalAdvance = bills.reduce((sum, b) => sum + (b.customer?.advance_balance || 0), 0);
+  const totalAdjusted = bills.reduce((sum, b) => sum + (b.adjusted_from_sales || 0), 0);
 
   return (
     <AppLayout title="Bills">
@@ -191,20 +201,27 @@ export default function BillsPage() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="bg-warning/10 border border-warning/20 rounded-xl p-4">
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="bg-warning/10 border border-warning/20 rounded-xl p-3">
             <div className="flex items-center gap-2 mb-1">
               <AlertCircle className="w-4 h-4 text-warning" />
-              <span className="text-xs font-medium text-warning">Total Due</span>
+              <span className="text-xs font-medium text-warning">Due</span>
             </div>
-            <p className="text-xl font-bold text-warning">{formatCurrency(totalDue)}</p>
+            <p className="text-lg font-bold text-warning">{formatCurrency(totalDue)}</p>
           </div>
-          <div className="bg-success/10 border border-success/20 rounded-xl p-4">
+          <div className="bg-success/10 border border-success/20 rounded-xl p-3">
             <div className="flex items-center gap-2 mb-1">
               <CreditCard className="w-4 h-4 text-success" />
-              <span className="text-xs font-medium text-success">Customer Advance</span>
+              <span className="text-xs font-medium text-success">Advance</span>
             </div>
-            <p className="text-xl font-bold text-success">{formatCurrency(totalAdvance)}</p>
+            <p className="text-lg font-bold text-success">{formatCurrency(totalAdvance)}</p>
+          </div>
+          <div className="bg-info/10 border border-info/20 rounded-xl p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Wallet className="w-4 h-4 text-info" />
+              <span className="text-xs font-medium text-info">Adjusted</span>
+            </div>
+            <p className="text-lg font-bold text-info">{formatCurrency(totalAdjusted)}</p>
           </div>
         </div>
 
@@ -257,6 +274,7 @@ export default function BillsPage() {
               const prefix = getBillPrefix(bill.bill_number);
               const isExpanded = expandedBill === bill.id;
               const hasDue = bill.due_amount && bill.due_amount > 0;
+              const hasAdvance = bill.customer?.advance_balance && bill.customer.advance_balance > 0;
               
               return (
                 <motion.div
@@ -284,6 +302,11 @@ export default function BillsPage() {
                         {hasDue && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-warning/20 text-warning font-medium">
                             Due: {formatCurrency(bill.due_amount || 0)}
+                          </span>
+                        )}
+                        {bill.adjusted_from_sales && bill.adjusted_from_sales > 0 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-info/20 text-info font-medium">
+                            Adj: {formatCurrency(bill.adjusted_from_sales)}
                           </span>
                         )}
                       </div>
@@ -345,11 +368,16 @@ export default function BillsPage() {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Advance Balance</p>
-                          <p className={cn("font-medium", bill.customer.advance_balance > 0 ? "text-success" : "text-muted-foreground")}>
+                          <p className={cn("font-medium", hasAdvance ? "text-success" : "text-muted-foreground")}>
                             {formatCurrency(bill.customer.advance_balance)}
                           </p>
                         </div>
                       </div>
+                      {hasAdvance && (
+                        <div className="mt-3 p-2 bg-success/10 rounded-lg text-xs text-success">
+                          Customer has advance balance available for use in sales
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </motion.div>

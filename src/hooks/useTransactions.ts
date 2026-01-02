@@ -65,6 +65,13 @@ export function useTransactions(date: Date) {
             if (p.mode === 'cash') cashIn += p.amount;
             if (p.mode === 'upi') upiIn += p.amount;
           });
+          // Deduct giveBack from cash/UPI (overpayment returned to customer)
+          if (t.giveBack) {
+            t.giveBack.forEach(g => {
+              if (g.mode === 'cash') cashOut += g.amount;
+              if (g.mode === 'upi') upiOut += g.amount;
+            });
+          }
         } else if (t.type === 'sales_return') {
           totalSales -= t.amount;
           t.payments.forEach(p => {

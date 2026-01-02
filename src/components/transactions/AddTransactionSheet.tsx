@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Plus, Minus, Receipt, ShoppingCart, Banknote, Home, Users, ArrowLeftRight, Package } from 'lucide-react';
-import { Transaction, PaymentEntry, TransactionSection, BillType, BillItem, PaymentMode } from '@/types';
+import { Transaction, PaymentEntry, TransactionSection, BillType, BillItem, PaymentMode, GiveBackPayment } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -9,7 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { BillItemsEntry, createBatchesFromPurchase } from '@/components/bills/BillItemsEntry';
 import { SaleBillItemsEntry } from '@/components/bills/SaleBillItemsEntry';
 import { OverpaymentHandler, GiveBackEntry } from '@/components/transactions/OverpaymentHandler';
-import { deductFromBatch } from '@/hooks/useSupabaseData';
+import { CustomerSearchInput } from '@/components/transactions/CustomerSearchInput';
+import { deductFromBatch, saveBillToSupabase, updateCustomerBalance, getOrCreateCustomer } from '@/hooks/useSupabaseData';
+
+interface DueBill {
+  id: string;
+  billNumber: string;
+  totalAmount: number;
+  dueAmount: number;
+  createdAt: Date;
+}
 
 interface AddTransactionSheetProps {
   isOpen: boolean;
@@ -84,6 +93,9 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   const [amount, setAmount] = useState('');
   const [billNumber, setBillNumber] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [customerId, setCustomerId] = useState<string | undefined>();
+  const [customerAdvance, setCustomerAdvance] = useState(0);
+  const [selectedDueBill, setSelectedDueBill] = useState<DueBill | null>(null);
   const [supplierName, setSupplierName] = useState('');
   const [reference, setReference] = useState('');
   const [billType, setBillType] = useState<BillType>('g_bill');
@@ -155,6 +167,9 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     setAmount('');
     setBillNumber(generateBillNumber(sec, typ));
     setCustomerName('');
+    setCustomerId(undefined);
+    setCustomerAdvance(0);
+    setSelectedDueBill(null);
     setSupplierName('');
     setReference('');
     setBillType('g_bill');
@@ -170,6 +185,21 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     setBillNumber(generateBillNumber(newSection, newType));
     setBillItems([createEmptyBillItem()]);
     setGiveBackEntries([]);
+    setSelectedDueBill(null);
+  };
+
+  // Handle customer selection
+  const handleCustomerChange = (name: string, id?: string, advance?: number) => {
+    setCustomerName(name);
+    setCustomerId(id);
+    setCustomerAdvance(advance || 0);
+  };
+
+  // Handle due bill selection (for Balance Paid type)
+  const handleDueBillSelect = (bill: DueBill) => {
+    setSelectedDueBill(bill);
+    setAmount(bill.dueAmount.toString());
+    setReference(`Payment for ${bill.billNumber}`);
   };
 
   // Update bill number when type changes
@@ -234,20 +264,75 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
       }
     }
 
+    // Get or create customer if customer name is provided
+    let finalCustomerId = customerId;
+    if (customerName && !customerId) {
+      finalCustomerId = await getOrCreateCustomer(customerName) || undefined;
+    }
+
+    // Prepare giveBack array for transaction
+    const giveBack: GiveBackPayment[] = giveBackEntries.filter(g => g.amount > 0).map(g => ({
+      id: g.id,
+      mode: g.mode as PaymentMode,
+      amount: g.amount,
+    }));
+
     const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
       date: selectedDate,
       section,
       type,
       amount: amountNum,
       payments: payments.filter(p => p.amount > 0),
+      giveBack: giveBack.length > 0 ? giveBack : undefined,
       billNumber: billNumber || undefined,
+      customerId: finalCustomerId,
       customerName: customerName || undefined,
       supplierName: supplierName || undefined,
       reference: reference || undefined,
       billType: showBillType ? billType : undefined,
       due: difference > 0 ? difference : undefined,
-      overpayment: remainingOverpayment > 0 ? remainingOverpayment : undefined, // Only remaining after give-back
+      overpayment: remainingOverpayment > 0 ? remainingOverpayment : undefined,
     };
+
+    // Save bill to Supabase for sale/purchase transactions with items
+    const billTypeStr = section === 'sale' ? type : section === 'purchase' ? type : '';
+    if (showBillItems && billItems.some(item => item.itemName && item.primaryQuantity > 0)) {
+      const billItemsForSupabase = billItems
+        .filter(item => item.itemName && item.primaryQuantity > 0)
+        .map(item => ({
+          itemId: item.itemId,
+          batchId: item.batchId,
+          itemName: item.itemName,
+          primaryQty: item.primaryQuantity,
+          secondaryQty: item.secondaryQuantity,
+          rate: item.rate,
+          total: item.totalAmount,
+        }));
+
+      // Generate a transaction ID to link bill with transaction
+      const tempTransactionId = uuidv4();
+      await saveBillToSupabase(
+        tempTransactionId,
+        billNumber || '',
+        billTypeStr,
+        amountNum,
+        customerName || undefined,
+        supplierName || undefined,
+        billItemsForSupabase
+      );
+    }
+
+    // Update customer balance if there's due or advance
+    if (finalCustomerId) {
+      if (difference > 0 && section === 'sale') {
+        // Due amount - increase customer due balance
+        await updateCustomerBalance(finalCustomerId, difference, 0);
+      }
+      if (remainingOverpayment > 0 && section === 'sale') {
+        // Overpayment saved as advance
+        await updateCustomerBalance(finalCustomerId, 0, remainingOverpayment);
+      }
+    }
 
     onSave(transaction);
     onClose();
@@ -379,14 +464,23 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
             {/* Customer Name (for Sale) */}
             {showCustomer && (
               <div>
-                <label className="text-sm font-medium text-muted-foreground mb-2 block">Customer (Optional)</label>
-                <input
-                  type="text"
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                  Customer {type === 'balance_paid' ? '' : '(Optional)'}
+                </label>
+                <CustomerSearchInput
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Enter customer name"
-                  className="input-field"
+                  onChange={handleCustomerChange}
+                  showDueBills={type === 'balance_paid'}
+                  onSelectDueBill={handleDueBillSelect}
+                  placeholder="Search by name or phone..."
                 />
+                {/* Show customer advance available for use */}
+                {customerAdvance > 0 && type === 'sale' && (
+                  <div className="mt-2 p-2 bg-success/10 rounded-lg text-xs text-success flex items-center justify-between">
+                    <span>Customer Advance Available</span>
+                    <span className="font-semibold">₹{customerAdvance.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
               </div>
             )}
 

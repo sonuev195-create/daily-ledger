@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Receipt, Search, Filter, ChevronDown, Phone, MapPin } from 'lucide-react';
+import { Receipt, Search, Filter, ChevronDown, Phone, MapPin, AlertCircle, CreditCard } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,7 @@ interface BillWithCustomer {
   total_amount: number;
   created_at: string;
   transaction_id: string | null;
+  due_amount?: number;
   customer?: {
     id: string;
     name: string;
@@ -29,7 +30,7 @@ export default function BillsPage() {
   const [bills, setBills] = useState<BillWithCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'sale' | 'purchase'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'sale' | 'purchase' | 'due'>('all');
   const [expandedBill, setExpandedBill] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,23 +40,65 @@ export default function BillsPage() {
   const fetchBills = async () => {
     setLoading(true);
     try {
-      const { data: billsData, error } = await supabase
+      // Fetch bills from bills table
+      const { data: billsData, error: billsError } = await supabase
         .from('bills')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      // Also fetch transactions with due > 0 that might not have bills
+      const { data: dueTxData, error: dueTxError } = await supabase
+        .from('transactions')
+        .select('id, bill_number, customer_name, supplier_name, amount, due, created_at, type')
+        .gt('due', 0)
+        .order('created_at', { ascending: false });
+
+      if (billsError) throw billsError;
+
+      // Merge bills and due transactions
+      const allBills: BillWithCustomer[] = [
+        ...(billsData || []).map(bill => ({
+          id: bill.id,
+          bill_number: bill.bill_number,
+          bill_type: bill.bill_type,
+          customer_name: bill.customer_name,
+          supplier_name: bill.supplier_name,
+          total_amount: Number(bill.total_amount),
+          created_at: bill.created_at,
+          transaction_id: bill.transaction_id,
+        })),
+      ];
+
+      // Add due transactions that don't have bills yet
+      if (dueTxData) {
+        const billIds = new Set(allBills.map(b => b.bill_number));
+        dueTxData.forEach(tx => {
+          if (tx.bill_number && !billIds.has(tx.bill_number)) {
+            allBills.push({
+              id: tx.id,
+              bill_number: tx.bill_number,
+              bill_type: tx.type,
+              customer_name: tx.customer_name,
+              supplier_name: tx.supplier_name,
+              total_amount: Number(tx.amount),
+              created_at: tx.created_at,
+              transaction_id: tx.id,
+              due_amount: Number(tx.due),
+            });
+          }
+        });
+      }
 
       // Fetch customer details for each bill
       const billsWithCustomers = await Promise.all(
-        (billsData || []).map(async (bill) => {
+        allBills.map(async (bill) => {
           if (bill.customer_name) {
             const { data: customerData } = await supabase
               .from('customers')
               .select('id, name, phone, address, due_balance, advance_balance')
               .eq('name', bill.customer_name)
               .limit(1)
-              .single();
+              .maybeSingle();
             return { ...bill, customer: customerData };
           }
           return { ...bill, customer: null };
@@ -71,15 +114,23 @@ export default function BillsPage() {
   };
 
   const filteredBills = bills.filter(bill => {
+    // Search filter - check name, phone, bill number
     const matchesSearch = 
       bill.bill_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       bill.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      bill.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      bill.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      bill.customer?.phone?.includes(searchQuery);
     
-    const matchesFilter = 
-      filterType === 'all' ||
-      (filterType === 'sale' && bill.customer_name) ||
-      (filterType === 'purchase' && bill.supplier_name);
+    // Type filter
+    let matchesFilter = true;
+    if (filterType === 'sale') {
+      matchesFilter = !!bill.customer_name && !bill.supplier_name;
+    } else if (filterType === 'purchase') {
+      matchesFilter = !!bill.supplier_name;
+    } else if (filterType === 'due') {
+      matchesFilter = (bill.due_amount && bill.due_amount > 0) || 
+                     (bill.customer?.due_balance && bill.customer.due_balance > 0);
+    }
 
     return matchesSearch && matchesFilter;
   });
@@ -124,6 +175,10 @@ export default function BillsPage() {
     }
   };
 
+  // Calculate totals
+  const totalDue = bills.reduce((sum, b) => sum + (b.due_amount || 0), 0);
+  const totalAdvance = bills.reduce((sum, b) => sum + (b.customer?.advance_balance || 0), 0);
+
   return (
     <AppLayout title="Bills">
       <div className="max-w-4xl mx-auto px-4 py-6 lg:py-8">
@@ -135,6 +190,24 @@ export default function BillsPage() {
           </div>
         </div>
 
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="bg-warning/10 border border-warning/20 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertCircle className="w-4 h-4 text-warning" />
+              <span className="text-xs font-medium text-warning">Total Due</span>
+            </div>
+            <p className="text-xl font-bold text-warning">{formatCurrency(totalDue)}</p>
+          </div>
+          <div className="bg-success/10 border border-success/20 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <CreditCard className="w-4 h-4 text-success" />
+              <span className="text-xs font-medium text-success">Customer Advance</span>
+            </div>
+            <p className="text-xl font-bold text-success">{formatCurrency(totalAdvance)}</p>
+          </div>
+        </div>
+
         {/* Search & Filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">
@@ -143,23 +216,25 @@ export default function BillsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by bill number, customer, or supplier..."
+              placeholder="Search by bill number, name, or phone..."
               className="w-full h-10 pl-10 pr-4 bg-secondary/50 border border-border rounded-xl text-sm focus:ring-2 focus:ring-accent focus:border-transparent"
             />
           </div>
-          <div className="flex gap-2">
-            {(['all', 'sale', 'purchase'] as const).map((type) => (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {(['all', 'sale', 'purchase', 'due'] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => setFilterType(type)}
                 className={cn(
-                  "px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                  "px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap",
                   filterType === type
-                    ? "bg-accent text-accent-foreground"
+                    ? type === 'due' 
+                      ? "bg-warning text-warning-foreground"
+                      : "bg-accent text-accent-foreground"
                     : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
                 )}
               >
-                {type.charAt(0).toUpperCase() + type.slice(1)}
+                {type === 'due' ? 'Due Bills' : type.charAt(0).toUpperCase() + type.slice(1)}
               </button>
             ))}
           </div>
@@ -172,12 +247,16 @@ export default function BillsPage() {
           <div className="text-center py-12">
             <Receipt className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground">No bills found</p>
+            {filterType === 'due' && (
+              <p className="text-sm text-muted-foreground mt-1">No pending dues</p>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
             {filteredBills.map((bill, index) => {
               const prefix = getBillPrefix(bill.bill_number);
               const isExpanded = expandedBill === bill.id;
+              const hasDue = bill.due_amount && bill.due_amount > 0;
               
               return (
                 <motion.div
@@ -185,7 +264,10 @@ export default function BillsPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
-                  className="bg-card border border-border rounded-xl overflow-hidden"
+                  className={cn(
+                    "bg-card border rounded-xl overflow-hidden",
+                    hasDue ? "border-warning/50" : "border-border"
+                  )}
                 >
                   {/* Main Row */}
                   <div 
@@ -194,15 +276,28 @@ export default function BillsPage() {
                   >
                     {/* Bill Number */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", getBillTypeColor(prefix))}>
                           {getBillTypeLabel(prefix)}
                         </span>
                         <span className="text-sm font-semibold text-foreground">{bill.bill_number}</span>
+                        {hasDue && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-warning/20 text-warning font-medium">
+                            Due: {formatCurrency(bill.due_amount || 0)}
+                          </span>
+                        )}
                       </div>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {bill.customer_name || bill.supplier_name || 'Unknown'}
-                      </p>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span className="truncate">
+                          {bill.customer_name || bill.supplier_name || 'Unknown'}
+                        </span>
+                        {bill.customer?.phone && (
+                          <span className="flex items-center gap-1 text-xs">
+                            <Phone className="w-3 h-3" />
+                            {bill.customer.phone}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Amount & Date */}
@@ -243,14 +338,14 @@ export default function BillsPage() {
                       </div>
                       <div className="flex gap-4 mt-3 pt-3 border-t border-border/50">
                         <div>
-                          <p className="text-xs text-muted-foreground">Due Balance</p>
+                          <p className="text-xs text-muted-foreground">Total Due</p>
                           <p className={cn("font-medium", bill.customer.due_balance > 0 ? "text-warning" : "text-success")}>
                             {formatCurrency(bill.customer.due_balance)}
                           </p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Advance Balance</p>
-                          <p className={cn("font-medium", bill.customer.advance_balance > 0 ? "text-info" : "text-muted-foreground")}>
+                          <p className={cn("font-medium", bill.customer.advance_balance > 0 ? "text-success" : "text-muted-foreground")}>
                             {formatCurrency(bill.customer.advance_balance)}
                           </p>
                         </div>

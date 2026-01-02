@@ -256,3 +256,163 @@ export async function deductFromBatch(
   
   return !error;
 }
+
+// Save bill and bill items to Supabase
+export async function saveBillToSupabase(
+  transactionId: string,
+  billNumber: string,
+  billType: string,
+  totalAmount: number,
+  customerName?: string,
+  supplierName?: string,
+  billItems?: { itemId?: string; batchId?: string; itemName: string; primaryQty: number; secondaryQty: number; rate: number; total: number }[]
+): Promise<string | null> {
+  // Create the bill
+  const { data: bill, error: billError } = await supabase
+    .from('bills')
+    .insert({
+      transaction_id: transactionId,
+      bill_number: billNumber,
+      bill_type: billType,
+      total_amount: totalAmount,
+      customer_name: customerName || null,
+      supplier_name: supplierName || null,
+    })
+    .select()
+    .single();
+
+  if (billError || !bill) {
+    console.error('Error creating bill:', billError);
+    return null;
+  }
+
+  // Insert bill items if provided
+  if (billItems && billItems.length > 0) {
+    const itemsToInsert = billItems.filter(i => i.itemName && i.primaryQty > 0).map(item => ({
+      bill_id: bill.id,
+      item_id: item.itemId || null,
+      batch_id: item.batchId || null,
+      item_name: item.itemName,
+      primary_quantity: item.primaryQty,
+      secondary_quantity: item.secondaryQty,
+      rate: item.rate,
+      total_amount: item.total,
+    }));
+
+    if (itemsToInsert.length > 0) {
+      const { error: itemsError } = await supabase
+        .from('bill_items')
+        .insert(itemsToInsert);
+
+      if (itemsError) {
+        console.error('Error creating bill items:', itemsError);
+      }
+    }
+  }
+
+  return bill.id;
+}
+
+// Fetch customers with search and due bills
+export async function searchCustomers(query: string): Promise<{
+  id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  dueBalance: number;
+  advanceBalance: number;
+}[]> {
+  let queryBuilder = supabase.from('customers').select('*');
+  
+  if (query) {
+    queryBuilder = queryBuilder.or(`name.ilike.%${query}%,phone.ilike.%${query}%`);
+  }
+  
+  const { data, error } = await queryBuilder.order('name').limit(10);
+  if (error || !data) return [];
+  
+  return data.map(c => ({
+    id: c.id,
+    name: c.name,
+    phone: c.phone,
+    address: c.address,
+    dueBalance: Number(c.due_balance),
+    advanceBalance: Number(c.advance_balance),
+  }));
+}
+
+// Fetch due bills for a customer
+export async function getDueBillsForCustomer(customerName: string): Promise<{
+  id: string;
+  billNumber: string;
+  totalAmount: number;
+  dueAmount: number;
+  createdAt: Date;
+}[]> {
+  // Get transactions with due > 0 for this customer
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id, bill_number, amount, due, created_at')
+    .eq('customer_name', customerName)
+    .gt('due', 0)
+    .order('created_at', { ascending: false });
+
+  if (error || !data) return [];
+
+  return data.map(t => ({
+    id: t.id,
+    billNumber: t.bill_number || '',
+    totalAmount: Number(t.amount),
+    dueAmount: Number(t.due),
+    createdAt: new Date(t.created_at),
+  }));
+}
+
+// Update customer balance
+export async function updateCustomerBalance(
+  customerId: string,
+  dueChange: number,
+  advanceChange: number
+): Promise<boolean> {
+  const { data: customer, error: fetchError } = await supabase
+    .from('customers')
+    .select('due_balance, advance_balance')
+    .eq('id', customerId)
+    .single();
+
+  if (fetchError || !customer) return false;
+
+  const { error } = await supabase
+    .from('customers')
+    .update({
+      due_balance: Number(customer.due_balance) + dueChange,
+      advance_balance: Number(customer.advance_balance) + advanceChange,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', customerId);
+
+  return !error;
+}
+
+// Create or get customer by name
+export async function getOrCreateCustomer(name: string, phone?: string): Promise<string | null> {
+  // First try to find existing customer
+  const { data: existing } = await supabase
+    .from('customers')
+    .select('id')
+    .eq('name', name)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  // Create new customer
+  const { data, error } = await supabase
+    .from('customers')
+    .insert({ name, phone: phone || null })
+    .select()
+    .single();
+
+  if (error || !data) return null;
+  return data.id;
+}

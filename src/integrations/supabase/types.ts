@@ -413,6 +413,7 @@ export type Database = {
       }
       transactions: {
         Row: {
+          adjusted_from_sales: number | null
           amount: number
           bill_number: string | null
           bill_type: string | null
@@ -422,6 +423,7 @@ export type Database = {
           date: string
           due: number | null
           employee_id: string | null
+          give_back: Json | null
           id: string
           overpayment: number | null
           payments: Json
@@ -433,6 +435,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          adjusted_from_sales?: number | null
           amount?: number
           bill_number?: string | null
           bill_type?: string | null
@@ -442,6 +445,7 @@ export type Database = {
           date?: string
           due?: number | null
           employee_id?: string | null
+          give_back?: Json | null
           id?: string
           overpayment?: number | null
           payments?: Json
@@ -453,6 +457,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          adjusted_from_sales?: number | null
           amount?: number
           bill_number?: string | null
           bill_type?: string | null
@@ -462,6 +467,7 @@ export type Database = {
           date?: string
           due?: number | null
           employee_id?: string | null
+          give_back?: Json | null
           id?: string
           overpayment?: number | null
           payments?: Json

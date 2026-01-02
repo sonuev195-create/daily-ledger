@@ -143,9 +143,12 @@ export function useBatches(itemId?: string) {
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
 
   const addBatch = async (batch: Omit<Batch, 'id' | 'createdAt'>) => {
+    // Auto generate batch name as qty*rate
+    const batchName = batch.batchNumber || `${batch.primaryQuantity}*${batch.purchaseRate}`;
+    
     const { data, error } = await supabase.from('batches').insert({
       item_id: batch.itemId,
-      batch_number: batch.batchNumber || null,
+      batch_number: batchName,
       purchase_date: batch.purchaseDate.toISOString().split('T')[0],
       purchase_rate: batch.purchaseRate,
       primary_quantity: batch.primaryQuantity,
@@ -156,12 +159,30 @@ export function useBatches(itemId?: string) {
     return null;
   };
 
+  const updateBatch = async (id: string, updates: Partial<Batch>) => {
+    // Auto generate batch name as qty*rate if not provided
+    const batchName = updates.batchNumber || 
+      (updates.primaryQuantity !== undefined && updates.purchaseRate !== undefined 
+        ? `${updates.primaryQuantity}*${updates.purchaseRate}` 
+        : undefined);
+
+    await supabase.from('batches').update({
+      batch_number: batchName,
+      purchase_date: updates.purchaseDate?.toISOString().split('T')[0],
+      purchase_rate: updates.purchaseRate,
+      primary_quantity: updates.primaryQuantity,
+      secondary_quantity: updates.secondaryQuantity,
+      expiry_date: updates.expiryDate?.toISOString().split('T')[0] || null,
+    }).eq('id', id);
+    await fetchBatches();
+  };
+
   const deleteBatch = async (id: string) => {
     await supabase.from('batches').delete().eq('id', id);
     await fetchBatches();
   };
 
-  return { batches, loading, addBatch, deleteBatch, refetch: fetchBatches };
+  return { batches, loading, addBatch, updateBatch, deleteBatch, refetch: fetchBatches };
 }
 
 // Get batches for a specific item
@@ -186,7 +207,7 @@ export async function getAllCategoriesAsync(): Promise<Category[]> {
   }));
 }
 
-// Create batch from purchase
+// Create batch from purchase with auto batch name
 export async function createBatchFromPurchase(
   itemId: string,
   itemName: string,
@@ -214,12 +235,15 @@ export async function createBatchFromPurchase(
     actualItemId = newItem.id;
   }
   
+  // Auto batch name as qty*rate
+  const batchName = `${primaryQty}*${rate}`;
+  
   // Create the batch
   const { data, error } = await supabase
     .from('batches')
     .insert({
       item_id: actualItemId,
-      batch_number: billNumber,
+      batch_number: batchName,
       purchase_date: new Date().toISOString().split('T')[0],
       purchase_rate: rate,
       primary_quantity: primaryQty,
@@ -257,6 +281,39 @@ export async function deductFromBatch(
   return !error;
 }
 
+// Update batch in Supabase
+export async function updateBatchInSupabase(
+  batchId: string,
+  updates: {
+    batchNumber?: string;
+    purchaseDate?: Date;
+    purchaseRate?: number;
+    primaryQuantity?: number;
+    secondaryQuantity?: number;
+    expiryDate?: Date;
+  }
+): Promise<boolean> {
+  // Auto generate batch name if qty and rate are provided
+  const batchName = updates.batchNumber || 
+    (updates.primaryQuantity !== undefined && updates.purchaseRate !== undefined 
+      ? `${updates.primaryQuantity}*${updates.purchaseRate}` 
+      : undefined);
+
+  const { error } = await supabase
+    .from('batches')
+    .update({
+      batch_number: batchName,
+      purchase_date: updates.purchaseDate?.toISOString().split('T')[0],
+      purchase_rate: updates.purchaseRate,
+      primary_quantity: updates.primaryQuantity,
+      secondary_quantity: updates.secondaryQuantity,
+      expiry_date: updates.expiryDate?.toISOString().split('T')[0] || null,
+    })
+    .eq('id', batchId);
+
+  return !error;
+}
+
 // Save bill and bill items to Supabase
 export async function saveBillToSupabase(
   transactionId: string,
@@ -267,6 +324,36 @@ export async function saveBillToSupabase(
   supplierName?: string,
   billItems?: { itemId?: string; batchId?: string; itemName: string; primaryQty: number; secondaryQty: number; rate: number; total: number }[]
 ): Promise<string | null> {
+  // First, insert the transaction to ensure foreign key constraint is satisfied
+  // We create a minimal transaction record if it doesn't exist
+  const { data: existingTx } = await supabase
+    .from('transactions')
+    .select('id')
+    .eq('id', transactionId)
+    .maybeSingle();
+
+  if (!existingTx) {
+    // Create a placeholder transaction
+    const { error: txError } = await supabase
+      .from('transactions')
+      .insert({
+        id: transactionId,
+        section: billType.includes('purchase') ? 'purchase' : 'sale',
+        type: billType,
+        amount: totalAmount,
+        date: new Date().toISOString().split('T')[0],
+        payments: [],
+        customer_name: customerName || null,
+        supplier_name: supplierName || null,
+        bill_number: billNumber,
+      });
+    
+    if (txError) {
+      console.error('Error creating transaction:', txError);
+      return null;
+    }
+  }
+
   // Create the bill
   const { data: bill, error: billError } = await supabase
     .from('bills')
@@ -415,4 +502,31 @@ export async function getOrCreateCustomer(name: string, phone?: string): Promise
 
   if (error || !data) return null;
   return data.id;
+}
+
+// Use customer advance for sale
+export async function useCustomerAdvance(
+  customerId: string,
+  amountToUse: number
+): Promise<boolean> {
+  const { data: customer, error: fetchError } = await supabase
+    .from('customers')
+    .select('advance_balance')
+    .eq('id', customerId)
+    .single();
+
+  if (fetchError || !customer) return false;
+
+  const currentAdvance = Number(customer.advance_balance);
+  if (currentAdvance < amountToUse) return false;
+
+  const { error } = await supabase
+    .from('customers')
+    .update({
+      advance_balance: currentAdvance - amountToUse,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', customerId);
+
+  return !error;
 }

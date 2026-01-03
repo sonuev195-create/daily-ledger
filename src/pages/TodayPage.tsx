@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { Calendar, ChevronLeft, ChevronRight, Plus, Receipt, Banknote, ShoppingCart, Users, Home, ArrowLeftRight } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { DrawerSummary } from '@/components/drawer/DrawerSummary';
+import { DrawerOpeningSheet } from '@/components/drawer/DrawerOpeningSheet';
 import { TransactionCard } from '@/components/transactions/TransactionCard';
 import { AddTransactionSheet } from '@/components/transactions/AddTransactionSheet';
 import { BillDetailsSheet } from '@/components/bills/BillDetailsSheet';
@@ -33,6 +34,7 @@ export default function TodayPage() {
     return new Date();
   });
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isDrawerEditOpen, setIsDrawerEditOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedSection, setSelectedSection] = useState<TransactionSection | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -186,9 +188,7 @@ export default function TodayPage() {
             date={selectedDate}
             summary={summary}
             opening={opening}
-            onEditOpening={() => {
-              // TODO: Open drawer editing modal
-            }}
+            onEditOpening={() => setIsDrawerEditOpen(true)}
           />
         </motion.div>
 
@@ -294,6 +294,14 @@ export default function TodayPage() {
         }}
         bill={viewingBill}
         transaction={viewingTransaction}
+      />
+
+      {/* Drawer Opening Edit Sheet */}
+      <DrawerOpeningSheet
+        isOpen={isDrawerEditOpen}
+        onClose={() => setIsDrawerEditOpen(false)}
+        opening={opening}
+        onSave={updateOpening}
       />
     </AppLayout>
   );

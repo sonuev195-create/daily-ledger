@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isToday } from 'date-fns';
-import { ChevronLeft, ChevronRight, Calendar, AlertTriangle } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isToday, isSunday } from 'date-fns';
+import { ChevronLeft, ChevronRight, Calendar, AlertTriangle, Receipt, Wallet, CreditCard, ShoppingCart } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { getTransactionsByDate, getDrawerClosing } from '@/lib/db';
 import { Transaction, DrawerClosing } from '@/types';
@@ -12,8 +12,12 @@ interface DaySummary {
   date: Date;
   transactions: Transaction[];
   totalSales: number;
-  totalReceived: number;
-  totalSpent: number;
+  cashReceived: number;
+  upiReceived: number;
+  cashExpenses: number;
+  upiExpenses: number;
+  purchasePayment: number;
+  purchaseCount: number;
   drawerError: number;
   count: number;
 }
@@ -40,35 +44,46 @@ export default function AllDatesPage() {
         const closing = await getDrawerClosing(date);
         
         let totalSales = 0;
-        let totalReceived = 0;
-        let totalSpent = 0;
+        let cashReceived = 0;
+        let upiReceived = 0;
+        let cashExpenses = 0;
+        let upiExpenses = 0;
+        let purchasePayment = 0;
+        let purchaseCount = 0;
 
         transactions.forEach((t) => {
           // Calculate total sales
-          if (t.section === 'sale' && t.type !== 'sales_return') {
+          if (t.section === 'sale' && t.type === 'sale') {
             totalSales += t.amount;
           }
           
-          // Calculate received (money in)
+          // Calculate received by mode
           if (['sale', 'customer_advance', 'balance_paid'].includes(t.type) || 
               (t.section === 'purchase' && t.type === 'purchase_return')) {
             t.payments.forEach(p => {
-              if (['cash', 'upi', 'bank'].includes(p.mode)) {
-                totalReceived += p.amount;
-              }
+              if (p.mode === 'cash') cashReceived += p.amount;
+              if (p.mode === 'upi') upiReceived += p.amount;
             });
           }
           
-          // Calculate spent (money out)
-          if (t.section === 'expenses' || 
-              (t.section === 'purchase' && t.type !== 'purchase_return') ||
-              t.section === 'employee' ||
-              t.type === 'sales_return') {
+          // Calculate expenses by mode
+          if (t.section === 'expenses') {
+            t.payments.forEach(p => {
+              if (p.mode === 'cash') cashExpenses += p.amount;
+              if (p.mode === 'upi') upiExpenses += p.amount;
+            });
+          }
+          
+          // Calculate purchase payments
+          if (t.section === 'purchase' && t.type !== 'purchase_return') {
             t.payments.forEach(p => {
               if (['cash', 'upi', 'bank'].includes(p.mode)) {
-                totalSpent += p.amount;
+                purchasePayment += p.amount;
               }
             });
+            if (t.type === 'purchase_bill') {
+              purchaseCount++;
+            }
           }
         });
 
@@ -76,8 +91,12 @@ export default function AllDatesPage() {
           date,
           transactions,
           totalSales,
-          totalReceived,
-          totalSpent,
+          cashReceived,
+          upiReceived,
+          cashExpenses,
+          upiExpenses,
+          purchasePayment,
+          purchaseCount,
           drawerError: closing?.difference || 0,
           count: transactions.length,
         };
@@ -101,6 +120,7 @@ export default function AllDatesPage() {
   };
 
   const formatCurrency = (amount: number) => {
+    if (amount === 0) return '-';
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
@@ -109,15 +129,27 @@ export default function AllDatesPage() {
     }).format(amount);
   };
 
+  const formatCurrencyCompact = (amount: number) => {
+    if (amount === 0) return '-';
+    if (amount >= 1000) {
+      return `₹${(amount / 1000).toFixed(1)}k`;
+    }
+    return `₹${amount}`;
+  };
+
   const monthTotals = daySummaries.reduce(
     (acc, day) => ({
       totalSales: acc.totalSales + day.totalSales,
-      totalReceived: acc.totalReceived + day.totalReceived,
-      totalSpent: acc.totalSpent + day.totalSpent,
+      cashReceived: acc.cashReceived + day.cashReceived,
+      upiReceived: acc.upiReceived + day.upiReceived,
+      cashExpenses: acc.cashExpenses + day.cashExpenses,
+      upiExpenses: acc.upiExpenses + day.upiExpenses,
+      purchasePayment: acc.purchasePayment + day.purchasePayment,
+      purchaseCount: acc.purchaseCount + day.purchaseCount,
       count: acc.count + day.count,
       errors: acc.errors + (day.drawerError !== 0 ? 1 : 0),
     }),
-    { totalSales: 0, totalReceived: 0, totalSpent: 0, count: 0, errors: 0 }
+    { totalSales: 0, cashReceived: 0, upiReceived: 0, cashExpenses: 0, upiExpenses: 0, purchasePayment: 0, purchaseCount: 0, count: 0, errors: 0 }
   );
 
   const handleDayClick = (date: Date) => {
@@ -126,7 +158,7 @@ export default function AllDatesPage() {
 
   return (
     <AppLayout title="All Dates">
-      <div className="max-w-3xl mx-auto px-4 py-6 lg:py-8">
+      <div className="max-w-4xl mx-auto px-4 py-6 lg:py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -166,11 +198,11 @@ export default function AllDatesPage() {
               <p className="text-xs text-muted-foreground">Total Sales</p>
             </div>
             <div>
-              <p className="text-xl font-bold text-success">{formatCurrency(monthTotals.totalReceived)}</p>
+              <p className="text-xl font-bold text-success">{formatCurrency(monthTotals.cashReceived + monthTotals.upiReceived)}</p>
               <p className="text-xs text-muted-foreground">Received</p>
             </div>
             <div>
-              <p className="text-xl font-bold text-destructive">{formatCurrency(monthTotals.totalSpent)}</p>
+              <p className="text-xl font-bold text-destructive">{formatCurrency(monthTotals.cashExpenses + monthTotals.upiExpenses + monthTotals.purchasePayment)}</p>
               <p className="text-xs text-muted-foreground">Spent</p>
             </div>
             <div>
@@ -184,73 +216,99 @@ export default function AllDatesPage() {
         <div className="space-y-2">
           {loading ? (
             Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="h-20 rounded-xl bg-secondary/50 animate-pulse" />
+              <div key={i} className="h-24 rounded-xl bg-secondary/50 animate-pulse" />
             ))
           ) : (
-            daySummaries.map((day, index) => (
-              <motion.button
-                key={day.date.toISOString()}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.02 }}
-                onClick={() => handleDayClick(day.date)}
-                className={cn(
-                  "w-full transaction-card p-4 text-left",
-                  isToday(day.date) && "ring-2 ring-accent"
-                )}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  {/* Date */}
-                  <div className="flex items-center gap-3">
+            daySummaries.map((day, index) => {
+              const isSundayDate = isSunday(day.date);
+              
+              return (
+                <motion.button
+                  key={day.date.toISOString()}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.02 }}
+                  onClick={() => handleDayClick(day.date)}
+                  className={cn(
+                    "w-full transaction-card p-3 text-left",
+                    isToday(day.date) && "ring-2 ring-accent"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Date Box */}
                     <div className={cn(
-                      "w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0",
-                      isToday(day.date) ? "gradient-accent text-accent-foreground" : "bg-secondary text-foreground"
+                      "w-14 h-14 rounded-xl flex flex-col items-center justify-center shrink-0",
+                      isSundayDate 
+                        ? "bg-destructive/10 text-destructive" 
+                        : isToday(day.date) 
+                          ? "gradient-accent text-accent-foreground" 
+                          : "bg-secondary text-foreground"
                     )}>
-                      <span className="text-lg font-bold leading-none">{format(day.date, 'd')}</span>
-                      <span className="text-[10px] uppercase">{format(day.date, 'EEE')}</span>
+                      <span className="text-xl font-bold leading-none">{format(day.date, 'd')}</span>
+                      <span className={cn(
+                        "text-[10px] uppercase mt-0.5",
+                        isSundayDate ? "text-destructive" : ""
+                      )}>
+                        {format(day.date, 'EEE')}
+                      </span>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-foreground">
-                        {isToday(day.date) ? 'Today' : format(day.date, 'EEEE')}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {day.count} transaction{day.count !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                  </div>
 
-                  {/* Summary */}
-                  <div className="text-right shrink-0">
-                    <div className="flex flex-col gap-0.5">
-                      {day.totalSales > 0 && (
-                        <p className="text-sm font-medium text-foreground">
-                          Sale: {formatCurrency(day.totalSales)}
-                        </p>
+                    {/* Day Report */}
+                    <div className="flex-1 min-w-0">
+                      {day.count > 0 ? (
+                        <div className="grid grid-cols-4 gap-x-2 gap-y-1 text-xs">
+                          {/* Row 1 */}
+                          <div className="flex items-center gap-1">
+                            <Receipt className="w-3 h-3 text-primary shrink-0" />
+                            <span className="text-foreground font-medium truncate">{formatCurrencyCompact(day.totalSales)}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Wallet className="w-3 h-3 text-success shrink-0" />
+                            <span className="text-success truncate">{formatCurrencyCompact(day.cashReceived)}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <CreditCard className="w-3 h-3 text-info shrink-0" />
+                            <span className="text-info truncate">{formatCurrencyCompact(day.upiReceived)}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-muted-foreground">{day.count} txn</span>
+                          </div>
+                          
+                          {/* Row 2 */}
+                          <div className="flex items-center gap-1 text-destructive">
+                            <span className="truncate">C.Exp: {formatCurrencyCompact(day.cashExpenses)}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-destructive">
+                            <span className="truncate">U.Exp: {formatCurrencyCompact(day.upiExpenses)}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <ShoppingCart className="w-3 h-3 text-warning shrink-0" />
+                            <span className="text-warning truncate">{formatCurrencyCompact(day.purchasePayment)}</span>
+                          </div>
+                          <div className="text-right">
+                            {day.purchaseCount > 0 && (
+                              <span className="text-muted-foreground">{day.purchaseCount} pur</span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground py-2">
+                          No transactions
+                        </div>
                       )}
-                      {day.totalReceived > 0 && (
-                        <p className="text-xs text-success">
-                          +{formatCurrency(day.totalReceived)}
-                        </p>
-                      )}
-                      {day.totalSpent > 0 && (
-                        <p className="text-xs text-destructive">
-                          -{formatCurrency(day.totalSpent)}
-                        </p>
-                      )}
+                      
+                      {/* Drawer Error */}
                       {day.drawerError !== 0 && (
-                        <p className="text-xs text-warning flex items-center gap-1 justify-end">
+                        <div className="flex items-center gap-1 mt-1 text-xs text-warning">
                           <AlertTriangle className="w-3 h-3" />
-                          {formatCurrency(Math.abs(day.drawerError))}
-                        </p>
-                      )}
-                      {day.count === 0 && (
-                        <p className="text-sm text-muted-foreground">No activity</p>
+                          <span>Drawer: {formatCurrencyCompact(Math.abs(day.drawerError))}</span>
+                        </div>
                       )}
                     </div>
                   </div>
-                </div>
-              </motion.button>
-            ))
+                </motion.button>
+              );
+            })
           )}
         </div>
       </div>

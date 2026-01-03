@@ -93,7 +93,7 @@ export function TransactionCard({ transaction, onEdit, onDelete, onViewBill, com
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
             <span>{format(new Date(transaction.createdAt), 'h:mm a')}</span>
             {transaction.customerName && (
               <>
@@ -105,6 +105,12 @@ export function TransactionCard({ transaction, onEdit, onDelete, onViewBill, com
               <>
                 <span>•</span>
                 <span className="truncate">{transaction.supplierName}</span>
+              </>
+            )}
+            {transaction.reference && transaction.section === 'purchase' && (
+              <>
+                <span>•</span>
+                <span className="truncate text-info">{transaction.reference}</span>
               </>
             )}
           </div>

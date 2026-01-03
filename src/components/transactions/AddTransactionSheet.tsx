@@ -95,6 +95,7 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   const [customerName, setCustomerName] = useState('');
   const [customerId, setCustomerId] = useState<string | undefined>();
   const [customerAdvance, setCustomerAdvance] = useState(0);
+  const [useAdvanceAmount, setUseAdvanceAmount] = useState(0);
   const [selectedDueBill, setSelectedDueBill] = useState<DueBill | null>(null);
   const [supplierName, setSupplierName] = useState('');
   const [reference, setReference] = useState('');
@@ -169,6 +170,7 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     setCustomerName('');
     setCustomerId(undefined);
     setCustomerAdvance(0);
+    setUseAdvanceAmount(0);
     setSelectedDueBill(null);
     setSupplierName('');
     setReference('');
@@ -193,6 +195,7 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     setCustomerName(name);
     setCustomerId(id);
     setCustomerAdvance(advance || 0);
+    setUseAdvanceAmount(0); // Reset advance usage when customer changes
   };
 
   // Handle due bill selection (for Balance Paid type)
@@ -236,7 +239,8 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
   const totalGiveBack = giveBackEntries.reduce((sum, e) => sum + e.amount, 0);
   const amountNum = parseFloat(amount) || 0;
-  const difference = amountNum - totalPayments;
+  const effectivePayment = totalPayments + useAdvanceAmount; // Include advance usage
+  const difference = amountNum - effectivePayment;
   const overpaymentAmount = difference < 0 ? Math.abs(difference) : 0;
   const remainingOverpayment = overpaymentAmount - totalGiveBack;
 
@@ -331,6 +335,10 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
       if (remainingOverpayment > 0 && section === 'sale') {
         // Overpayment saved as advance
         await updateCustomerBalance(finalCustomerId, 0, remainingOverpayment);
+      }
+      // Deduct advance if used
+      if (useAdvanceAmount > 0 && section === 'sale') {
+        await updateCustomerBalance(finalCustomerId, 0, -useAdvanceAmount);
       }
     }
 
@@ -476,9 +484,34 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
                 />
                 {/* Show customer advance available for use */}
                 {customerAdvance > 0 && type === 'sale' && (
-                  <div className="mt-2 p-2 bg-success/10 rounded-lg text-xs text-success flex items-center justify-between">
-                    <span>Customer Advance Available</span>
-                    <span className="font-semibold">₹{customerAdvance.toLocaleString('en-IN')}</span>
+                  <div className="mt-2 p-3 bg-success/10 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-success font-medium">Customer Advance Available</span>
+                      <span className="font-bold text-success">₹{customerAdvance.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-muted-foreground">Use advance:</label>
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
+                        <input
+                          type="number"
+                          value={useAdvanceAmount || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            setUseAdvanceAmount(Math.min(val, customerAdvance));
+                          }}
+                          max={customerAdvance}
+                          placeholder="0"
+                          className="input-field pl-7 py-1.5 text-sm"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setUseAdvanceAmount(Math.min(customerAdvance, amountNum))}
+                        className="px-2 py-1 text-xs bg-success/20 text-success rounded-lg hover:bg-success/30"
+                      >
+                        Use All
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -647,9 +680,17 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
                   <span className="font-medium">₹{amountNum.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-muted-foreground">Total Payment</span>
+                  <span className="text-muted-foreground">Cash/UPI/Bank Payment</span>
                   <span className="font-medium">₹{totalPayments.toLocaleString('en-IN')}</span>
                 </div>
+                
+                {/* Show advance used */}
+                {useAdvanceAmount > 0 && (
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">Advance Used</span>
+                    <span className="font-medium text-success">₹{useAdvanceAmount.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
                 
                 {/* Show give-back in summary when overpayment */}
                 {overpaymentAmount > 0 && totalGiveBack > 0 && (

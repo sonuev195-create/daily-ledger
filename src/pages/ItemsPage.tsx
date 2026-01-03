@@ -116,7 +116,23 @@ export default function ItemsPage() {
       toast.success('Item updated');
     } else {
       await addItem(itemData);
-      toast.success('Item added');
+      
+      // If opening quantity is provided, create first batch
+      if (primaryQtyNum > 0 && purchaseRateNum > 0) {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const batchName = `${primaryQtyNum}*${purchaseRateNum}`;
+        await supabase.from('batches').insert({
+          item_id: itemData.id,
+          batch_number: batchName,
+          purchase_date: new Date().toISOString().split('T')[0],
+          purchase_rate: purchaseRateNum,
+          primary_quantity: primaryQtyNum,
+          secondary_quantity: parseFloat(secondaryQty) || 0,
+        });
+        toast.success('Item added with opening batch');
+      } else {
+        toast.success('Item added');
+      }
     }
 
     await loadItems();

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Plus, Minus, Receipt, ShoppingCart, Banknote, Home, Users, ArrowLeftRight, Package } from 'lucide-react';
+import { X, Plus, Minus, Receipt, ShoppingCart, Banknote, Home, Users, ArrowLeftRight, Package, Tag } from 'lucide-react';
 import { Transaction, PaymentEntry, TransactionSection, BillType, BillItem, PaymentMode, GiveBackPayment } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,6 +11,8 @@ import { SaleBillItemsEntry } from '@/components/bills/SaleBillItemsEntry';
 import { OverpaymentHandler, GiveBackEntry } from '@/components/transactions/OverpaymentHandler';
 import { CustomerSearchInput } from '@/components/transactions/CustomerSearchInput';
 import { deductFromBatch, saveBillToSupabase, updateCustomerBalance, getOrCreateCustomer } from '@/hooks/useSupabaseData';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface DueBill {
   id: string;
@@ -72,6 +74,11 @@ const typeOptions: Record<TransactionSection, { value: string; label: string }[]
   ],
 };
 
+interface AdvancePurpose {
+  id: string;
+  name: string;
+}
+
 function createEmptyBillItem(): BillItem {
   return {
     id: uuidv4(),
@@ -104,6 +111,13 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     { id: uuidv4(), mode: 'cash', amount: 0 },
   ]);
   
+  // Advance purpose state
+  const [advancePurposes, setAdvancePurposes] = useState<AdvancePurpose[]>([]);
+  const [selectedPurpose, setSelectedPurpose] = useState<string>('');
+  const [newPurpose, setNewPurpose] = useState('');
+  const [showNewPurpose, setShowNewPurpose] = useState(false);
+  const [advanceRate, setAdvanceRate] = useState('');
+  
   // Bill items for Sale/Purchase transactions
   const [billItems, setBillItems] = useState<BillItem[]>([createEmptyBillItem()]);
   
@@ -118,6 +132,38 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   const showSupplier = section === 'purchase';
   const showBillType = section === 'purchase' && type === 'purchase_bill';
   const showSimpleAmount = !showBillItems;
+  const showAdvancePurpose = section === 'sale' && type === 'customer_advance';
+
+  // Load advance purposes
+  useEffect(() => {
+    loadAdvancePurposes();
+  }, []);
+
+  const loadAdvancePurposes = async () => {
+    const { data } = await supabase.from('advance_purposes').select('*').order('name');
+    if (data) {
+      setAdvancePurposes(data);
+      if (data.length > 0 && !selectedPurpose) {
+        setSelectedPurpose(data[0].id);
+      }
+    }
+  };
+
+  const handleAddNewPurpose = async () => {
+    if (!newPurpose.trim()) return;
+    const { data, error } = await supabase.from('advance_purposes').insert({ name: newPurpose.trim() }).select().single();
+    if (error) {
+      toast.error('Purpose already exists or error adding');
+      return;
+    }
+    if (data) {
+      setAdvancePurposes([...advancePurposes, data]);
+      setSelectedPurpose(data.id);
+      setNewPurpose('');
+      setShowNewPurpose(false);
+      toast.success('Purpose added');
+    }
+  };
 
   useEffect(() => {
     if (editTransaction) {
@@ -178,6 +224,10 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     setPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
     setBillItems([createEmptyBillItem()]);
     setGiveBackEntries([]);
+    setSelectedPurpose(advancePurposes[0]?.id || '');
+    setAdvanceRate('');
+    setNewPurpose('');
+    setShowNewPurpose(false);
   };
 
   const handleSectionChange = (newSection: TransactionSection) => {
@@ -528,6 +578,74 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
                   placeholder="Enter supplier name"
                   className="input-field"
                 />
+              </div>
+            )}
+
+            {/* Advance Purpose (for Customer Advance) */}
+            {showAdvancePurpose && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+                    <Tag className="w-4 h-4" />
+                    Advance Purpose
+                  </label>
+                  {!showNewPurpose ? (
+                    <div className="flex gap-2">
+                      <Select value={selectedPurpose} onValueChange={setSelectedPurpose}>
+                        <SelectTrigger className="input-field flex-1">
+                          <SelectValue placeholder="Select purpose" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover border-border">
+                          {advancePurposes.map((purpose) => (
+                            <SelectItem key={purpose.id} value={purpose.id}>
+                              {purpose.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        onClick={() => setShowNewPurpose(true)}
+                        className="px-3 py-2 rounded-xl bg-accent/10 text-accent hover:bg-accent/20 text-sm font-medium"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newPurpose}
+                        onChange={(e) => setNewPurpose(e.target.value)}
+                        placeholder="Enter new purpose"
+                        className="input-field flex-1"
+                      />
+                      <button
+                        onClick={handleAddNewPurpose}
+                        className="px-3 py-2 rounded-xl bg-success text-success-foreground text-sm font-medium"
+                      >
+                        Add
+                      </button>
+                      <button
+                        onClick={() => { setShowNewPurpose(false); setNewPurpose(''); }}
+                        className="px-3 py-2 rounded-xl bg-secondary text-muted-foreground text-sm font-medium"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Advance Rate */}
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground mb-2 block">Rate / Note (Optional)</label>
+                  <input
+                    type="text"
+                    value={advanceRate}
+                    onChange={(e) => setAdvanceRate(e.target.value)}
+                    placeholder="e.g., 10% discount, specific item rate"
+                    className="input-field"
+                  />
+                </div>
               </div>
             )}
 

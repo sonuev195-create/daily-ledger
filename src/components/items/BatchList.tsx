@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronUp, Plus, Trash2, Package2, Edit2, Check, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, Trash2, Package2, Edit2, Check, X, Scissors } from 'lucide-react';
 import { Batch, Item } from '@/types';
 import { getBatchesByItem, addBatch, deleteBatch, updateBatch } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,12 +17,18 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
   const [loading, setLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+  const [splittingBatchId, setSplittingBatchId] = useState<string | null>(null);
   
   // Form state for adding/editing batch
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
   const [purchaseRate, setPurchaseRate] = useState('');
   const [primaryQty, setPrimaryQty] = useState('');
   const [secondaryQty, setSecondaryQty] = useState('');
+  
+  // Split form state
+  const [splitQty, setSplitQty] = useState('');
+  const [splitSecondaryQty, setSplitSecondaryQty] = useState('');
+  const [splitRate, setSplitRate] = useState('');
 
   useEffect(() => {
     if (isExpanded) {
@@ -44,6 +50,10 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
     setSecondaryQty('');
     setIsAdding(false);
     setEditingBatchId(null);
+    setSplittingBatchId(null);
+    setSplitQty('');
+    setSplitSecondaryQty('');
+    setSplitRate('');
   };
 
   // Auto generate batch name as quantity * purchase rate
@@ -75,10 +85,57 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
 
   const handleStartEdit = (batch: Batch) => {
     setEditingBatchId(batch.id);
+    setSplittingBatchId(null);
     setPurchaseDate(new Date(batch.purchaseDate).toISOString().split('T')[0]);
     setPurchaseRate(batch.purchaseRate.toString());
     setPrimaryQty(batch.primaryQuantity.toString());
     setSecondaryQty(batch.secondaryQuantity.toString());
+  };
+
+  const handleStartSplit = (batch: Batch) => {
+    setSplittingBatchId(batch.id);
+    setEditingBatchId(null);
+    setSplitQty('');
+    setSplitSecondaryQty('');
+    setSplitRate(batch.purchaseRate.toString());
+  };
+
+  const handleSplitBatch = async (originalBatch: Batch) => {
+    const splitQtyNum = parseFloat(splitQty) || 0;
+    const splitSecQtyNum = parseFloat(splitSecondaryQty) || 0;
+    const splitRateNum = parseFloat(splitRate) || originalBatch.purchaseRate;
+    
+    if (splitQtyNum <= 0 || splitQtyNum >= originalBatch.primaryQuantity) {
+      toast.error('Split quantity must be less than original batch quantity');
+      return;
+    }
+
+    // Update original batch with reduced quantity
+    const updatedOriginal: Batch = {
+      ...originalBatch,
+      primaryQuantity: originalBatch.primaryQuantity - splitQtyNum,
+      secondaryQuantity: originalBatch.secondaryQuantity - splitSecQtyNum,
+      batchNumber: generateBatchName(originalBatch.primaryQuantity - splitQtyNum, originalBatch.purchaseRate),
+    };
+
+    // Create new batch with split quantity
+    const newBatch: Batch = {
+      id: uuidv4(),
+      itemId: item.id,
+      batchNumber: generateBatchName(splitQtyNum, splitRateNum),
+      purchaseDate: new Date(originalBatch.purchaseDate),
+      purchaseRate: splitRateNum,
+      primaryQuantity: splitQtyNum,
+      secondaryQuantity: splitSecQtyNum,
+      createdAt: new Date(),
+    };
+
+    await updateBatch(updatedOriginal);
+    await addBatch(newBatch);
+    await loadBatches();
+    onBatchesChange?.();
+    resetForm();
+    toast.success('Batch split successfully');
   };
 
   const handleSaveEdit = async (batchId: string) => {
@@ -179,6 +236,7 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                   
                   {batches.map((batch) => {
                     const isEditing = editingBatchId === batch.id;
+                    const isSplitting = splittingBatchId === batch.id;
                     
                     if (isEditing) {
                       return (
@@ -228,6 +286,54 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                         </div>
                       );
                     }
+
+                    if (isSplitting) {
+                      return (
+                        <div key={batch.id} className="p-3 rounded-xl bg-warning/10 border border-warning/30 space-y-3">
+                          <div className="text-xs font-medium text-warning mb-2 flex items-center gap-1">
+                            <Scissors className="w-3 h-3" />
+                            Split Batch: {batch.batchNumber} (Current: {batch.primaryQuantity})
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <input
+                              type="number"
+                              value={splitQty}
+                              onChange={(e) => setSplitQty(e.target.value)}
+                              placeholder="Split Qty"
+                              max={batch.primaryQuantity - 1}
+                              className="input-field text-sm py-2"
+                            />
+                            <input
+                              type="number"
+                              value={splitSecondaryQty}
+                              onChange={(e) => setSplitSecondaryQty(e.target.value)}
+                              placeholder="Sec. Qty"
+                              className="input-field text-sm py-2"
+                            />
+                            <input
+                              type="number"
+                              value={splitRate}
+                              onChange={(e) => setSplitRate(e.target.value)}
+                              placeholder="Rate"
+                              className="input-field text-sm py-2"
+                            />
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Will create: {generateBatchName(parseFloat(splitQty) || 0, parseFloat(splitRate) || batch.purchaseRate)}
+                            <br />
+                            Original becomes: {generateBatchName(batch.primaryQuantity - (parseFloat(splitQty) || 0), batch.purchaseRate)}
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={resetForm} className="flex-1 py-2 text-sm rounded-lg bg-secondary flex items-center justify-center gap-1">
+                              <X className="w-3 h-3" /> Cancel
+                            </button>
+                            <button onClick={() => handleSplitBatch(batch)} className="flex-1 py-2 text-sm rounded-lg bg-warning text-warning-foreground flex items-center justify-center gap-1">
+                              <Scissors className="w-3 h-3" /> Split
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
                     
                     return (
                       <div
@@ -248,6 +354,13 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleStartSplit(batch)}
+                            className="p-1.5 rounded hover:bg-warning/10"
+                            title="Split batch"
+                          >
+                            <Scissors className="w-3.5 h-3.5 text-warning" />
+                          </button>
                           <button
                             onClick={() => handleStartEdit(batch)}
                             className="p-1.5 rounded hover:bg-accent/10"

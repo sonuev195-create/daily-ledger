@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      advance_purposes: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       batches: {
         Row: {
           batch_number: string | null
@@ -414,6 +432,8 @@ export type Database = {
       transactions: {
         Row: {
           adjusted_from_sales: number | null
+          advance_purpose_id: string | null
+          advance_rate: number | null
           amount: number
           bill_number: string | null
           bill_type: string | null
@@ -436,6 +456,8 @@ export type Database = {
         }
         Insert: {
           adjusted_from_sales?: number | null
+          advance_purpose_id?: string | null
+          advance_rate?: number | null
           amount?: number
           bill_number?: string | null
           bill_type?: string | null
@@ -458,6 +480,8 @@ export type Database = {
         }
         Update: {
           adjusted_from_sales?: number | null
+          advance_purpose_id?: string | null
+          advance_rate?: number | null
           amount?: number
           bill_number?: string | null
           bill_type?: string | null
@@ -479,6 +503,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_advance_purpose_id_fkey"
+            columns: ["advance_purpose_id"]
+            isOneToOne: false
+            referencedRelation: "advance_purposes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transactions_customer_id_fkey"
             columns: ["customer_id"]

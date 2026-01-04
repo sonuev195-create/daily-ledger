@@ -94,6 +94,7 @@ export default function ItemsPage() {
   const handleSave = async () => {
     const primaryQtyNum = parseFloat(primaryQty) || 0;
     const purchaseRateNum = parseFloat(purchaseRate) || 0;
+    const secondaryQtyNum = parseFloat(secondaryQty) || 0;
 
     const itemData: Item = {
       id: editingItem?.id || uuidv4(),
@@ -103,7 +104,7 @@ export default function ItemsPage() {
       secondaryUnit: secondaryUnit || undefined,
       conversionRate: parseFloat(conversionRate) || undefined,
       primaryQuantity: primaryQtyNum,
-      secondaryQuantity: parseFloat(secondaryQty) || 0,
+      secondaryQuantity: secondaryQtyNum,
       purchaseRate: purchaseRateNum,
       sellingPrice: parseFloat(sellingPrice) || 0,
       inventoryValue: primaryQtyNum * purchaseRateNum,
@@ -117,19 +118,27 @@ export default function ItemsPage() {
     } else {
       await addItem(itemData);
       
-      // If opening quantity is provided, create first batch
-      if (primaryQtyNum > 0 && purchaseRateNum > 0) {
+      // ALWAYS create opening batch if any quantity is provided (even without rate)
+      if (primaryQtyNum > 0 || secondaryQtyNum > 0) {
         const { supabase } = await import('@/integrations/supabase/client');
-        const batchName = `${primaryQtyNum}*${purchaseRateNum}`;
-        await supabase.from('batches').insert({
+        const rate = purchaseRateNum || 0;
+        const batchName = `Opening Stock: ${primaryQtyNum}${secondaryQtyNum > 0 ? ` + ${secondaryQtyNum} ${secondaryUnit || 'pcs'}` : ''}${rate > 0 ? ` @₹${rate}` : ''}`;
+        
+        const { error } = await supabase.from('batches').insert({
           item_id: itemData.id,
           batch_number: batchName,
           purchase_date: new Date().toISOString().split('T')[0],
-          purchase_rate: purchaseRateNum,
+          purchase_rate: rate,
           primary_quantity: primaryQtyNum,
-          secondary_quantity: parseFloat(secondaryQty) || 0,
+          secondary_quantity: secondaryQtyNum,
         });
-        toast.success('Item added with opening batch');
+        
+        if (error) {
+          console.error('Error creating opening batch:', error);
+          toast.error('Item added but failed to create opening batch');
+        } else {
+          toast.success('Item added with opening batch');
+        }
       } else {
         toast.success('Item added');
       }

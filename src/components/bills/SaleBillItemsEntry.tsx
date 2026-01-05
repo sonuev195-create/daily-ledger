@@ -128,14 +128,11 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
   };
 
   const loadBatchesForItem = useCallback(async (itemId: string) => {
-    if (!batchesMap[itemId]) {
-      const batches = await getBatchesForItem(itemId);
-      const displayBatches = sortBatchesForDisplay(batches);
-      setBatchesMap(prev => ({ ...prev, [itemId]: displayBatches }));
-      return batches;
-    }
-    return batchesMap[itemId] || [];
-  }, [batchesMap]);
+    const batches = await getBatchesForItem(itemId);
+    const displayBatches = sortBatchesForDisplay(batches);
+    setBatchesMap(prev => ({ ...prev, [itemId]: displayBatches }));
+    return batches;
+  }, []);
 
   const handleItemSelect = async (billItemId: string, itemId: string) => {
     const selectedItem = allItems.find(i => i.id === itemId);

@@ -316,6 +316,7 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
           await deductFromBatch(item.batchId, item.primaryQuantity, item.secondaryQuantity);
         }
       }
+      window.dispatchEvent(new Event('batches:changed'));
     }
 
     // Get or create customer if customer name is provided
@@ -331,12 +332,19 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
       amount: g.amount,
     }));
 
+    // Persist "advance used" as a payment entry so bills/reports can show it
+    const advancePaymentEntry: PaymentEntry[] = useAdvanceAmount > 0
+      ? [{ id: uuidv4(), mode: 'advance', amount: useAdvanceAmount }]
+      : [];
+
+    const finalPayments: PaymentEntry[] = [...payments.filter(p => p.amount > 0), ...advancePaymentEntry];
+
     const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
       date: selectedDate,
       section,
       type,
       amount: amountNum,
-      payments: payments.filter(p => p.amount > 0),
+      payments: finalPayments,
       giveBack: giveBack.length > 0 ? giveBack : undefined,
       billNumber: billNumber || undefined,
       customerId: finalCustomerId,
@@ -348,7 +356,38 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
       overpayment: remainingOverpayment > 0 ? remainingOverpayment : undefined,
     };
 
-    // Save bill to Supabase for sale/purchase transactions with items
+    // Create a backend transaction (used by Bills/Due/Reports)
+    const backendTransactionId = uuidv4();
+    const txRow: any = {
+      id: backendTransactionId,
+      date: selectedDate.toISOString().split('T')[0],
+      section,
+      type,
+      amount: amountNum,
+      payments: finalPayments as any,
+      give_back: (giveBack.length > 0
+        ? giveBack.map(g => ({ id: g.id, mode: g.mode, amount: g.amount }))
+        : []) as any,
+      bill_number: billNumber || null,
+      customer_id: finalCustomerId || null,
+      customer_name: customerName || null,
+      supplier_name: supplierName || null,
+      reference: reference || null,
+      bill_type: showBillType ? billType : null,
+      due: difference > 0 ? difference : null,
+      overpayment: remainingOverpayment > 0 ? remainingOverpayment : null,
+      advance_purpose_id: showAdvancePurpose ? (selectedPurpose || null) : null,
+      advance_rate: showAdvancePurpose ? (parseFloat(advanceRate) || 0) : null,
+    };
+
+    const { error: txInsertError } = await supabase
+      .from('transactions')
+      .upsert([txRow], { onConflict: 'id' });
+    if (txInsertError) {
+      console.error('Error saving transaction to backend:', txInsertError);
+    }
+
+    // Save bill + bill items to backend for sale/purchase transactions with items
     const billTypeStr = section === 'sale' ? type : section === 'purchase' ? type : '';
     if (showBillItems && billItems.some(item => item.itemName && item.primaryQuantity > 0)) {
       const billItemsForSupabase = billItems
@@ -363,10 +402,8 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
           total: item.totalAmount,
         }));
 
-      // Generate a transaction ID to link bill with transaction
-      const tempTransactionId = uuidv4();
       await saveBillToSupabase(
-        tempTransactionId,
+        backendTransactionId,
         billNumber || '',
         billTypeStr,
         amountNum,
@@ -391,6 +428,8 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
         await updateCustomerBalance(finalCustomerId, 0, -useAdvanceAmount);
       }
     }
+
+    window.dispatchEvent(new Event('items:changed'));
 
     onSave(transaction);
     onClose();

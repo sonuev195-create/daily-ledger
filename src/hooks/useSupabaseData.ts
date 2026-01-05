@@ -81,6 +81,13 @@ export function useItems() {
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
+  // Allow other screens to request a refresh after creating/updating items
+  useEffect(() => {
+    const handler = () => fetchItems();
+    window.addEventListener('items:changed', handler);
+    return () => window.removeEventListener('items:changed', handler);
+  }, [fetchItems]);
+
   const addItem = async (item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>) => {
     const { data, error } = await supabase.from('items').insert({
       name: item.name,

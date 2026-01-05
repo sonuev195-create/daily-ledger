@@ -4,6 +4,7 @@ import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen } 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Item, Category } from '@/types';
 import { getAllItems, addItem, updateItem, deleteItem, bulkAddItems, getAllCategories } from '@/lib/db';
+import { supabase } from '@/integrations/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -112,18 +113,36 @@ export default function ItemsPage() {
       updatedAt: new Date(),
     };
 
+    // Keep local storage in sync (offline), AND mirror to backend (for sales/bills screens)
     if (editingItem) {
       await updateItem(itemData);
+      await supabase.from('items').upsert({
+        id: itemData.id,
+        name: itemData.name,
+        category_id: itemData.categoryId || null,
+        batch_preference: itemData.batchPreference,
+        selling_price: itemData.sellingPrice,
+        secondary_unit: itemData.secondaryUnit || null,
+        conversion_rate: itemData.conversionRate || null,
+      });
       toast.success('Item updated');
     } else {
       await addItem(itemData);
-      
+      await supabase.from('items').upsert({
+        id: itemData.id,
+        name: itemData.name,
+        category_id: itemData.categoryId || null,
+        batch_preference: itemData.batchPreference,
+        selling_price: itemData.sellingPrice,
+        secondary_unit: itemData.secondaryUnit || null,
+        conversion_rate: itemData.conversionRate || null,
+      });
+
       // ALWAYS create opening batch if any quantity is provided (even without rate)
       if (primaryQtyNum > 0 || secondaryQtyNum > 0) {
-        const { supabase } = await import('@/integrations/supabase/client');
         const rate = purchaseRateNum || 0;
         const batchName = `Opening Stock: ${primaryQtyNum}${secondaryQtyNum > 0 ? ` + ${secondaryQtyNum} ${secondaryUnit || 'pcs'}` : ''}${rate > 0 ? ` @₹${rate}` : ''}`;
-        
+
         const { error } = await supabase.from('batches').insert({
           item_id: itemData.id,
           batch_number: batchName,
@@ -132,7 +151,7 @@ export default function ItemsPage() {
           primary_quantity: primaryQtyNum,
           secondary_quantity: secondaryQtyNum,
         });
-        
+
         if (error) {
           console.error('Error creating opening batch:', error);
           toast.error('Item added but failed to create opening batch');
@@ -145,6 +164,8 @@ export default function ItemsPage() {
     }
 
     await loadItems();
+    window.dispatchEvent(new Event('items:changed'));
+    window.dispatchEvent(new Event('batches:changed'));
     setIsAddOpen(false);
     resetForm();
   };

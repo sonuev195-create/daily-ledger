@@ -39,6 +39,13 @@ interface BillWithCustomer {
     due_balance: number;
     advance_balance: number;
   } | null;
+  supplier?: {
+    id: string;
+    name: string;
+    phone: string | null;
+    address: string | null;
+    balance: number;
+  } | null;
 }
 
 export default function BillsPage() {
@@ -64,47 +71,72 @@ export default function BillsPage() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      // Fetch all transactions including advance transactions
+      // Fetch all transactions (used to enrich bill rows with due/advance/etc + show non-bill transactions)
       const { data: transactionsData, error: txError } = await supabase
         .from('transactions')
-        .select('id, bill_number, customer_name, supplier_name, amount, due, created_at, type, section, adjusted_from_sales, advance_rate')
+        .select('id, bill_number, customer_id, customer_name, supplier_id, supplier_name, amount, due, created_at, type, section, adjusted_from_sales, advance_rate, advance_purpose_id, payments')
         .order('created_at', { ascending: false });
 
       if (billsError) throw billsError;
+      if (txError) throw txError;
 
-      // Create a map of transaction IDs to bills
-      const billTransactionIds = new Set((billsData || []).map(b => b.transaction_id).filter(Boolean));
+      const txMap = new Map<string, any>();
+      (transactionsData || []).forEach((tx) => txMap.set(tx.id, tx));
 
-      // Merge bills from bills table
-      const allBills: BillWithCustomer[] = (billsData || []).map(bill => ({
-        id: bill.id,
-        bill_number: bill.bill_number,
-        bill_type: bill.bill_type,
-        customer_name: bill.customer_name,
-        supplier_name: bill.supplier_name,
-        total_amount: Number(bill.total_amount),
-        created_at: bill.created_at,
-        transaction_id: bill.transaction_id,
-        source: 'bill' as const,
-      }));
+      // Advance purposes lookup
+      const { data: purposesData } = await supabase
+        .from('advance_purposes')
+        .select('id, name')
+        .order('name');
+      const purposeMap = new Map<string, string>();
+      (purposesData || []).forEach((p) => purposeMap.set(p.id, p.name));
 
-      // Add transactions that don't have bills yet (including those with dues and advances)
+      const getAdvanceUsed = (paymentsRaw: any): number => {
+        if (!Array.isArray(paymentsRaw)) return 0;
+        return paymentsRaw
+          .filter((p) => p?.mode === 'advance')
+          .reduce((sum, p) => sum + Number(p?.amount || 0), 0);
+      };
+
+      // Bills already linked to transactions
+      const billTransactionIds = new Set((billsData || []).map((b) => b.transaction_id).filter(Boolean));
+
+      // Merge bills from bills table, enriched by the linked transaction
+      const allBills: BillWithCustomer[] = (billsData || []).map((bill) => {
+        const tx = bill.transaction_id ? txMap.get(bill.transaction_id) : null;
+        const advanceUsed = tx ? getAdvanceUsed(tx.payments) : 0;
+
+        return {
+          id: bill.id,
+          bill_number: bill.bill_number,
+          bill_type: bill.bill_type,
+          customer_name: bill.customer_name,
+          supplier_name: bill.supplier_name,
+          total_amount: Number(bill.total_amount),
+          created_at: bill.created_at,
+          transaction_id: bill.transaction_id,
+          due_amount: tx?.due ? Number(tx.due) : undefined,
+          adjusted_from_sales: tx?.adjusted_from_sales ? Number(tx.adjusted_from_sales) : undefined,
+          advance_used: advanceUsed > 0 ? advanceUsed : undefined,
+          advance_purpose: tx?.advance_purpose_id ? purposeMap.get(tx.advance_purpose_id) : undefined,
+          source: 'bill' as const,
+        };
+      });
+
+      // Add transactions that don't have bills yet (including dues, advances, balance paid, purchase payments etc.)
       if (transactionsData) {
-        const existingBillNumbers = new Set(allBills.map(b => b.bill_number));
-        
-        transactionsData.forEach(tx => {
+        const existingBillNumbers = new Set(allBills.map((b) => b.bill_number));
+
+        transactionsData.forEach((tx) => {
           // Skip if this transaction already has a bill
           if (tx.bill_number && existingBillNumbers.has(tx.bill_number)) return;
           if (billTransactionIds.has(tx.id)) return;
-          
-          // Add transaction as a bill entry - include sale, purchase, advance, and balance_paid types
-          const isSale = tx.section === 'sale' && tx.type === 'sale';
-          const isPurchase = tx.section === 'purchase' && tx.type === 'purchase_bill';
-          const isAdvance = tx.type === 'customer_advance';
-          const isBalancePaid = tx.type === 'balance_paid';
+
           const hasDue = tx.due && Number(tx.due) > 0;
-          
-          if (isSale || isPurchase || isAdvance || isBalancePaid || hasDue || tx.bill_number) {
+          const advanceUsed = getAdvanceUsed(tx.payments);
+
+          // Keep it broad: if it has bill_number OR meaningful financial flags, show it
+          if (tx.bill_number || hasDue || tx.type === 'customer_advance' || tx.type === 'balance_paid' || tx.type?.startsWith('purchase_')) {
             allBills.push({
               id: tx.id,
               bill_number: tx.bill_number || `TX-${tx.id.slice(0, 8)}`,
@@ -114,16 +146,18 @@ export default function BillsPage() {
               total_amount: Number(tx.amount),
               created_at: tx.created_at,
               transaction_id: tx.id,
-              due_amount: tx.due ? Number(tx.due) : undefined,
+              due_amount: hasDue ? Number(tx.due) : undefined,
               adjusted_from_sales: tx.adjusted_from_sales ? Number(tx.adjusted_from_sales) : undefined,
+              advance_used: advanceUsed > 0 ? advanceUsed : undefined,
+              advance_purpose: tx.advance_purpose_id ? purposeMap.get(tx.advance_purpose_id) : undefined,
               source: 'transaction' as const,
             });
           }
         });
       }
 
-      // Fetch customer details for each bill
-      const billsWithCustomers = await Promise.all(
+      // Fetch customer/supplier details for each bill
+      const billsWithPeople = await Promise.all(
         allBills.map(async (bill) => {
           if (bill.customer_name) {
             const { data: customerData } = await supabase
@@ -132,13 +166,24 @@ export default function BillsPage() {
               .eq('name', bill.customer_name)
               .limit(1)
               .maybeSingle();
-            return { ...bill, customer: customerData };
+            return { ...bill, customer: customerData, supplier: null };
           }
-          return { ...bill, customer: null };
+
+          if (bill.supplier_name) {
+            const { data: supplierData } = await supabase
+              .from('suppliers')
+              .select('id, name, phone, address, balance')
+              .eq('name', bill.supplier_name)
+              .limit(1)
+              .maybeSingle();
+            return { ...bill, customer: null, supplier: supplierData };
+          }
+
+          return { ...bill, customer: null, supplier: null };
         })
       );
 
-      setBills(billsWithCustomers);
+      setBills(billsWithPeople);
     } catch (error) {
       console.error('Error fetching bills:', error);
     } finally {
@@ -462,7 +507,7 @@ export default function BillsPage() {
       </div>
 
       {/* Bill Details Sheet */}
-      <Sheet open={!!selectedBill} onOpenChange={() => setSelectedBill(null)}>
+      <Sheet open={!!selectedBill} onOpenChange={(open) => { if (!open) setSelectedBill(null); }}>
         <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl p-0 bg-background">
           <div className="flex flex-col h-full">
             <SheetHeader className="px-6 py-4 border-b border-border">

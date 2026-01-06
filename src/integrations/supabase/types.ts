@@ -238,30 +238,48 @@ export type Database = {
       drawer_closings: {
         Row: {
           actual_cash: number
+          cash_to_home: number
           created_at: string
           date: string
           difference: number
           expected_cash: number
           id: string
+          manual_cash: number
+          manual_coin: number
           notes: string | null
+          system_bank: number
+          system_cash: number
+          system_upi: number
         }
         Insert: {
           actual_cash?: number
+          cash_to_home?: number
           created_at?: string
           date: string
           difference?: number
           expected_cash?: number
           id?: string
+          manual_cash?: number
+          manual_coin?: number
           notes?: string | null
+          system_bank?: number
+          system_cash?: number
+          system_upi?: number
         }
         Update: {
           actual_cash?: number
+          cash_to_home?: number
           created_at?: string
           date?: string
           difference?: number
           expected_cash?: number
           id?: string
+          manual_cash?: number
+          manual_coin?: number
           notes?: string | null
+          system_bank?: number
+          system_cash?: number
+          system_upi?: number
         }
         Relationships: []
       }
@@ -271,7 +289,10 @@ export type Database = {
           cash: number
           created_at: string
           date: string
+          home_advance: number
           id: string
+          shop_cash: number
+          shop_coin: number
           upi: number
         }
         Insert: {
@@ -279,7 +300,10 @@ export type Database = {
           cash?: number
           created_at?: string
           date: string
+          home_advance?: number
           id?: string
+          shop_cash?: number
+          shop_coin?: number
           upi?: number
         }
         Update: {
@@ -287,7 +311,10 @@ export type Database = {
           cash?: number
           created_at?: string
           date?: string
+          home_advance?: number
           id?: string
+          shop_cash?: number
+          shop_coin?: number
           upi?: number
         }
         Relationships: []
@@ -399,6 +426,27 @@ export type Database = {
           },
         ]
       }
+      salary_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       suppliers: {
         Row: {
           address: string | null
@@ -448,6 +496,7 @@ export type Database = {
           overpayment: number | null
           payments: Json
           reference: string | null
+          salary_category_id: string | null
           section: string
           supplier_id: string | null
           supplier_name: string | null
@@ -472,6 +521,7 @@ export type Database = {
           overpayment?: number | null
           payments?: Json
           reference?: string | null
+          salary_category_id?: string | null
           section: string
           supplier_id?: string | null
           supplier_name?: string | null
@@ -496,6 +546,7 @@ export type Database = {
           overpayment?: number | null
           payments?: Json
           reference?: string | null
+          salary_category_id?: string | null
           section?: string
           supplier_id?: string | null
           supplier_name?: string | null
@@ -522,6 +573,13 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_salary_category_id_fkey"
+            columns: ["salary_category_id"]
+            isOneToOne: false
+            referencedRelation: "salary_categories"
             referencedColumns: ["id"]
           },
           {

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Receipt, Search, Phone, MapPin, AlertCircle, CreditCard, ChevronDown, Wallet, Package, Eye } from 'lucide-react';
+import { Receipt, Search, Phone, MapPin, AlertCircle, CreditCard, ChevronDown, Wallet, Package, Edit2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 interface BillItem {
   id: string;
@@ -49,6 +51,7 @@ interface BillWithCustomer {
 }
 
 export default function BillsPage() {
+  const navigate = useNavigate();
   const [bills, setBills] = useState<BillWithCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -396,13 +399,13 @@ export default function BillsPage() {
                     hasDue ? "border-warning/50" : isAdvanceBill ? "border-accent/50" : "border-border"
                   )}
                 >
-                  {/* Main Row */}
-                  <div className="flex items-center gap-4 p-4">
+                  {/* Main Row - Clickable to open details */}
+                  <div 
+                    className="flex items-center gap-4 p-4 cursor-pointer hover:bg-secondary/30 transition-colors"
+                    onClick={() => handleOpenBill(bill)}
+                  >
                     {/* Bill Info */}
-                    <div 
-                      className="flex-1 min-w-0 cursor-pointer"
-                      onClick={() => setExpandedBill(isExpanded ? null : bill.id)}
-                    >
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", getBillTypeColor(prefix, bill.bill_type))}>
                           {getBillTypeLabel(prefix, bill.bill_type)}
@@ -440,20 +443,15 @@ export default function BillsPage() {
                       </p>
                     </div>
 
-                    {/* View Bill Button */}
-                    <button
-                      onClick={() => handleOpenBill(bill)}
-                      className="w-10 h-10 rounded-xl flex items-center justify-center bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
-                    >
-                      <Eye className="w-5 h-5" />
-                    </button>
-
                     {/* Expand Icon */}
                     <motion.div
                       animate={{ rotate: isExpanded ? 180 : 0 }}
                       transition={{ duration: 0.2 }}
-                      className="cursor-pointer"
-                      onClick={() => setExpandedBill(isExpanded ? null : bill.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedBill(isExpanded ? null : bill.id);
+                      }}
+                      className="cursor-pointer p-2 hover:bg-secondary rounded-lg"
                     >
                       <ChevronDown className="w-5 h-5 text-muted-foreground" />
                     </motion.div>
@@ -513,6 +511,22 @@ export default function BillsPage() {
             <SheetHeader className="px-6 py-4 border-b border-border">
               <div className="flex items-center justify-between">
                 <SheetTitle className="text-lg font-semibold">Bill Details</SheetTitle>
+                {selectedBill && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Navigate to Today page with the bill date to edit
+                      const billDate = new Date(selectedBill.created_at);
+                      setSelectedBill(null);
+                      navigate('/', { state: { date: billDate.toISOString() } });
+                    }}
+                    className="gap-2"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Edit
+                  </Button>
+                )}
               </div>
             </SheetHeader>
 

@@ -5,6 +5,7 @@ import { Calendar, ChevronLeft, ChevronRight, Plus, Receipt, Banknote, ShoppingC
 import { AppLayout } from '@/components/layout/AppLayout';
 import { DrawerSummary } from '@/components/drawer/DrawerSummary';
 import { DrawerOpeningSheet } from '@/components/drawer/DrawerOpeningSheet';
+import { DrawerClosingSheet } from '@/components/drawer/DrawerClosingSheet';
 import { TransactionCard } from '@/components/transactions/TransactionCard';
 import { AddTransactionSheet } from '@/components/transactions/AddTransactionSheet';
 import { BillDetailsSheet } from '@/components/bills/BillDetailsSheet';
@@ -35,6 +36,7 @@ export default function TodayPage() {
   });
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isDrawerEditOpen, setIsDrawerEditOpen] = useState(false);
+  const [isDrawerClosingOpen, setIsDrawerClosingOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedSection, setSelectedSection] = useState<TransactionSection | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export default function TodayPage() {
   const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null);
   
   const { transactions, loading, add, update, remove, getSummary } = useTransactions(selectedDate);
-  const { opening, updateOpening } = useDrawer(selectedDate);
+  const { opening, closing, updateOpening, updateClosing } = useDrawer(selectedDate);
   
   const summary = getSummary();
 
@@ -188,7 +190,9 @@ export default function TodayPage() {
             date={selectedDate}
             summary={summary}
             opening={opening}
+            closing={closing}
             onEditOpening={() => setIsDrawerEditOpen(true)}
+            onEditClosing={() => setIsDrawerClosingOpen(true)}
           />
         </motion.div>
 
@@ -302,6 +306,16 @@ export default function TodayPage() {
         onClose={() => setIsDrawerEditOpen(false)}
         opening={opening}
         onSave={updateOpening}
+      />
+
+      {/* Drawer Closing Sheet */}
+      <DrawerClosingSheet
+        isOpen={isDrawerClosingOpen}
+        onClose={() => setIsDrawerClosingOpen(false)}
+        opening={opening}
+        closing={closing}
+        summary={summary}
+        onSave={updateClosing}
       />
     </AppLayout>
   );

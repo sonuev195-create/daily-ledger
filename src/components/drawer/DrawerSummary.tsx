@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Wallet, CreditCard, Building2, TrendingUp, TrendingDown, Edit2 } from 'lucide-react';
-import { DailySummary, DrawerOpening } from '@/types';
+import { ChevronDown, Wallet, CreditCard, Building2, TrendingUp, TrendingDown, Edit2, Calculator } from 'lucide-react';
+import { DailySummary, DrawerOpening, DrawerClosing } from '@/types';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -9,10 +9,12 @@ interface DrawerSummaryProps {
   date: Date;
   summary: DailySummary;
   opening: DrawerOpening | null;
+  closing?: DrawerClosing | null;
   onEditOpening?: () => void;
+  onEditClosing?: () => void;
 }
 
-export function DrawerSummary({ date, summary, opening, onEditOpening }: DrawerSummaryProps) {
+export function DrawerSummary({ date, summary, opening, closing, onEditOpening, onEditClosing }: DrawerSummaryProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const openingCash = opening ? opening.coin + opening.cash + opening.homeAdvance : 0;
@@ -148,6 +150,52 @@ export function DrawerSummary({ date, summary, opening, onEditOpening }: DrawerS
                     <span className="font-semibold">{formatCurrency(openingCash)}</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Closing Section */}
+              <div className="bg-secondary/30 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-foreground">Closing Drawer</h3>
+                  {onEditClosing && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onEditClosing();
+                      }}
+                      className="text-xs text-accent flex items-center gap-1 hover:underline cursor-pointer"
+                    >
+                      <Calculator className="w-3 h-3" /> {closing ? 'Edit' : 'Close Drawer'}
+                    </button>
+                  )}
+                </div>
+                {closing ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Coin</p>
+                        <p className="font-medium">{formatCurrency(closing.manualCoin)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Cash</p>
+                        <p className="font-medium">{formatCurrency(closing.manualCash)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">To Home</p>
+                        <p className="font-medium">{formatCurrency(closing.cashToHome)}</p>
+                      </div>
+                    </div>
+                    <div className={cn(
+                      "mt-2 p-2 rounded-lg text-xs",
+                      closing.difference === 0 ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+                    )}>
+                      Difference: {formatCurrency(closing.difference)}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Not closed yet</p>
+                )}
               </div>
 
               {/* Day Flow */}

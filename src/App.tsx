@@ -8,7 +8,13 @@ import AllDatesPage from "./pages/AllDatesPage";
 import ItemsPage from "./pages/ItemsPage";
 import ReportsPage from "./pages/ReportsPage";
 import BillsPage from "./pages/BillsPage";
-import PlaceholderPage from "./pages/PlaceholderPage";
+import CustomerAdvancePage from "./pages/CustomerAdvancePage";
+import BalancePaidPage from "./pages/BalancePaidPage";
+import PurchasePage from "./pages/PurchasePage";
+import SuppliersPage from "./pages/SuppliersPage";
+import EmployeesPage from "./pages/EmployeesPage";
+import CommissionPage from "./pages/CommissionPage";
+import ExchangePage from "./pages/ExchangePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,14 +29,14 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/all-dates" element={<AllDatesPage />} />
           <Route path="/bills" element={<BillsPage />} />
-          <Route path="/customer-advance" element={<PlaceholderPage title="Customer Advance" />} />
-          <Route path="/balance-paid" element={<PlaceholderPage title="Balance Paid" />} />
-          <Route path="/purchase" element={<PlaceholderPage title="Purchase" />} />
+          <Route path="/customer-advance" element={<CustomerAdvancePage />} />
+          <Route path="/balance-paid" element={<BalancePaidPage />} />
+          <Route path="/purchase" element={<PurchasePage />} />
           <Route path="/items" element={<ItemsPage />} />
-          <Route path="/suppliers" element={<PlaceholderPage title="Suppliers" />} />
-          <Route path="/employees" element={<PlaceholderPage title="Employees" />} />
-          <Route path="/commission" element={<PlaceholderPage title="Commission" />} />
-          <Route path="/exchange" element={<PlaceholderPage title="Exchange" />} />
+          <Route path="/suppliers" element={<SuppliersPage />} />
+          <Route path="/employees" element={<EmployeesPage />} />
+          <Route path="/commission" element={<CommissionPage />} />
+          <Route path="/exchange" element={<ExchangePage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

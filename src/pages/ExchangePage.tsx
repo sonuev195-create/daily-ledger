@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeftRight, Plus, Wallet, CreditCard, Building2 } from 'lucide-react';
+import { ArrowLeftRight, Plus, Wallet, CreditCard, Building2, ArrowRight } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
 interface Exchange {
@@ -22,17 +21,17 @@ interface Exchange {
 }
 
 const modeOptions = [
-  { value: 'cash', label: 'Cash', icon: Wallet },
-  { value: 'upi', label: 'UPI', icon: CreditCard },
-  { value: 'bank', label: 'Bank', icon: Building2 },
+  { value: 'cash', label: 'Cash', icon: Wallet, color: 'bg-success/10 text-success' },
+  { value: 'upi', label: 'UPI', icon: CreditCard, color: 'bg-info/10 text-info' },
+  { value: 'bank', label: 'Bank', icon: Building2, color: 'bg-primary/10 text-primary' },
 ];
 
 export default function ExchangePage() {
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [givenMode, setGivenMode] = useState('cash');
-  const [takenMode, setTakenMode] = useState('upi');
+  const [customerGivesMode, setCustomerGivesMode] = useState('upi');
+  const [youGiveMode, setYouGiveMode] = useState('cash');
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
 
@@ -64,8 +63,8 @@ export default function ExchangePage() {
       return;
     }
 
-    if (givenMode === takenMode) {
-      toast.error('Given and taken modes must be different');
+    if (customerGivesMode === youGiveMode) {
+      toast.error('Customer gives and you give modes must be different');
       return;
     }
 
@@ -73,8 +72,8 @@ export default function ExchangePage() {
       const { error } = await supabase
         .from('exchanges')
         .insert({
-          from_mode: givenMode,
-          to_mode: takenMode,
+          from_mode: customerGivesMode,
+          to_mode: youGiveMode,
           amount: amountNum,
           reference: reference || null,
         });
@@ -85,8 +84,8 @@ export default function ExchangePage() {
       setIsAddOpen(false);
       setAmount('');
       setReference('');
-      setGivenMode('cash');
-      setTakenMode('upi');
+      setCustomerGivesMode('upi');
+      setYouGiveMode('cash');
       fetchExchanges();
     } catch (error) {
       console.error('Error saving exchange:', error);
@@ -102,23 +101,16 @@ export default function ExchangePage() {
     }).format(amount);
   };
 
-  const getModeIcon = (mode: string) => {
-    switch (mode) {
-      case 'cash': return Wallet;
-      case 'upi': return CreditCard;
-      case 'bank': return Building2;
-      default: return Wallet;
-    }
+  const getModeInfo = (mode: string) => {
+    return modeOptions.find(m => m.value === mode) || modeOptions[0];
   };
 
-  const getModeColor = (mode: string) => {
-    switch (mode) {
-      case 'cash': return 'bg-success/10 text-success';
-      case 'upi': return 'bg-info/10 text-info';
-      case 'bank': return 'bg-primary/10 text-primary';
-      default: return 'bg-secondary text-muted-foreground';
-    }
-  };
+  // Calculate totals by mode changes
+  const modeTotals = exchanges.reduce((acc, ex) => {
+    const key = `${ex.from_mode}_to_${ex.to_mode}`;
+    acc[key] = (acc[key] || 0) + ex.amount;
+    return acc;
+  }, {} as Record<string, number>);
 
   return (
     <AppLayout title="Exchange">
@@ -135,19 +127,41 @@ export default function ExchangePage() {
           </Button>
         </div>
 
-        {/* Info Card */}
+        {/* How it works */}
         <div className="bg-accent/10 border border-accent/20 rounded-xl p-4 mb-6">
           <div className="flex items-start gap-3">
             <ArrowLeftRight className="w-5 h-5 text-accent mt-0.5" />
             <div>
-              <p className="font-medium text-foreground">How Exchange Works</p>
+              <p className="font-medium text-foreground">Give & Take</p>
               <p className="text-sm text-muted-foreground">
-                Customer gives money in one mode (e.g., UPI) and you return in another mode (e.g., Cash).
-                The amounts are always equal.
+                Customer gives money in one mode (e.g., UPI) and you return in another mode (e.g., Cash). 
+                This affects your daily cash/UPI balance calculations.
               </p>
             </div>
           </div>
         </div>
+
+        {/* Summary by exchange type */}
+        {Object.keys(modeTotals).length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+            {Object.entries(modeTotals).map(([key, total]) => {
+              const [from, , to] = key.split('_');
+              const fromInfo = getModeInfo(from);
+              const toInfo = getModeInfo(to);
+              return (
+                <div key={key} className="bg-secondary/50 border border-border rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <fromInfo.icon className="w-4 h-4 text-muted-foreground" />
+                    <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                    <toInfo.icon className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                  <p className="text-lg font-bold text-foreground">{formatCurrency(total)}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{from} → {to}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Exchange List */}
         {loading ? (
@@ -160,8 +174,10 @@ export default function ExchangePage() {
         ) : (
           <div className="space-y-3">
             {exchanges.map((exchange, index) => {
-              const FromIcon = getModeIcon(exchange.from_mode);
-              const ToIcon = getModeIcon(exchange.to_mode);
+              const fromInfo = getModeInfo(exchange.from_mode);
+              const toInfo = getModeInfo(exchange.to_mode);
+              const FromIcon = fromInfo.icon;
+              const ToIcon = toInfo.icon;
               
               return (
                 <motion.div
@@ -173,21 +189,21 @@ export default function ExchangePage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      {/* Given By Customer */}
+                      {/* Customer Gives */}
                       <div className="text-center">
                         <p className="text-xs text-muted-foreground mb-1">Customer Gave</p>
-                        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", getModeColor(exchange.from_mode))}>
+                        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", fromInfo.color)}>
                           <FromIcon className="w-5 h-5" />
                         </div>
                         <p className="text-xs font-medium mt-1 capitalize">{exchange.from_mode}</p>
                       </div>
                       
-                      <ArrowLeftRight className="w-5 h-5 text-muted-foreground" />
+                      <ArrowRight className="w-5 h-5 text-muted-foreground" />
                       
-                      {/* Given To Customer */}
+                      {/* You Give */}
                       <div className="text-center">
                         <p className="text-xs text-muted-foreground mb-1">You Gave</p>
-                        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", getModeColor(exchange.to_mode))}>
+                        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", toInfo.color)}>
                           <ToIcon className="w-5 h-5" />
                         </div>
                         <p className="text-xs font-medium mt-1 capitalize">{exchange.to_mode}</p>
@@ -218,71 +234,103 @@ export default function ExchangePage() {
             <SheetTitle>New Exchange</SheetTitle>
           </SheetHeader>
           
-          <div className="space-y-4">
+          <div className="space-y-5">
             {/* Customer Gives */}
             <div>
-              <label className="text-sm font-medium">Customer Gives (Mode)</label>
-              <Select value={givenMode} onValueChange={setGivenMode}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {modeOptions.map((mode) => (
-                    <SelectItem key={mode.value} value={mode.value}>
-                      <div className="flex items-center gap-2">
-                        <mode.icon className="w-4 h-4" />
+              <label className="text-sm font-medium mb-2 block">Customer Gives</label>
+              <div className="grid grid-cols-3 gap-2">
+                {modeOptions.map((mode) => {
+                  const Icon = mode.icon;
+                  const isSelected = customerGivesMode === mode.value;
+                  return (
+                    <button
+                      key={mode.value}
+                      onClick={() => {
+                        setCustomerGivesMode(mode.value);
+                        // Auto-switch the other mode
+                        if (youGiveMode === mode.value) {
+                          const other = modeOptions.find(m => m.value !== mode.value);
+                          if (other) setYouGiveMode(other.value);
+                        }
+                      }}
+                      className={cn(
+                        "flex flex-col items-center gap-2 p-3 rounded-xl border transition-all",
+                        isSelected
+                          ? "border-accent bg-accent/10"
+                          : "border-border bg-secondary/30 hover:bg-secondary"
+                      )}
+                    >
+                      <Icon className={cn("w-6 h-6", isSelected ? "text-accent" : "text-muted-foreground")} />
+                      <span className={cn("text-sm font-medium", isSelected ? "text-accent" : "text-muted-foreground")}>
                         {mode.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Arrow */}
+            <div className="flex justify-center">
+              <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                <ArrowRight className="w-5 h-5 text-muted-foreground rotate-90" />
+              </div>
             </div>
 
             {/* You Give */}
             <div>
-              <label className="text-sm font-medium">You Give (Mode)</label>
-              <Select value={takenMode} onValueChange={setTakenMode}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {modeOptions.filter(m => m.value !== givenMode).map((mode) => (
-                    <SelectItem key={mode.value} value={mode.value}>
-                      <div className="flex items-center gap-2">
-                        <mode.icon className="w-4 h-4" />
+              <label className="text-sm font-medium mb-2 block">You Give</label>
+              <div className="grid grid-cols-3 gap-2">
+                {modeOptions.filter(m => m.value !== customerGivesMode).map((mode) => {
+                  const Icon = mode.icon;
+                  const isSelected = youGiveMode === mode.value;
+                  return (
+                    <button
+                      key={mode.value}
+                      onClick={() => setYouGiveMode(mode.value)}
+                      className={cn(
+                        "flex flex-col items-center gap-2 p-3 rounded-xl border transition-all",
+                        isSelected
+                          ? "border-accent bg-accent/10"
+                          : "border-border bg-secondary/30 hover:bg-secondary"
+                      )}
+                    >
+                      <Icon className={cn("w-6 h-6", isSelected ? "text-accent" : "text-muted-foreground")} />
+                      <span className={cn("text-sm font-medium", isSelected ? "text-accent" : "text-muted-foreground")}>
                         {mode.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Amount */}
             <div>
-              <label className="text-sm font-medium">Amount</label>
-              <Input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0"
-                className="mt-1 text-2xl font-bold h-14"
-              />
+              <label className="text-sm font-medium mb-2 block">Amount</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
+                <Input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0"
+                  className="pl-8 text-2xl font-bold h-14"
+                />
+              </div>
             </div>
 
             {/* Reference */}
             <div>
-              <label className="text-sm font-medium">Reference (Optional)</label>
+              <label className="text-sm font-medium mb-2 block">Reference (Optional)</label>
               <Input
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
                 placeholder="Customer name or note"
-                className="mt-1"
               />
             </div>
 
-            <Button onClick={handleSaveExchange} className="w-full">
+            <Button onClick={handleSaveExchange} className="w-full h-12 text-base">
               Record Exchange
             </Button>
           </div>

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { UserPlus, Search, Phone, MapPin, Plus, CreditCard, ArrowUpRight } from 'lucide-react';
+import { UserPlus, Search, Phone, MapPin, Plus, CreditCard, ArrowUpRight, Settings, Edit2, Wrench } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 
 interface Customer {
@@ -23,7 +25,13 @@ interface AdvanceTransaction {
   advance_rate: number | null;
   advance_purpose_id: string | null;
   created_at: string;
+  date: string;
   payments: any;
+}
+
+interface AdvancePurpose {
+  id: string;
+  name: string;
 }
 
 export default function CustomerAdvancePage() {
@@ -32,7 +40,10 @@ export default function CustomerAdvancePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [advanceTransactions, setAdvanceTransactions] = useState<AdvanceTransaction[]>([]);
-  const [purposes, setPurposes] = useState<{ id: string; name: string }[]>([]);
+  const [purposes, setPurposes] = useState<AdvancePurpose[]>([]);
+  const [isServicesOpen, setIsServicesOpen] = useState(false);
+  const [newServiceName, setNewServiceName] = useState('');
+  const [editingService, setEditingService] = useState<AdvancePurpose | null>(null);
 
   useEffect(() => {
     fetchCustomers();
@@ -65,12 +76,12 @@ export default function CustomerAdvancePage() {
     setPurposes(data || []);
   };
 
-  const fetchAdvanceTransactions = async (customerName: string) => {
+  const fetchAdvanceTransactions = async (customerId: string) => {
     const { data } = await supabase
       .from('transactions')
-      .select('id, amount, advance_rate, advance_purpose_id, created_at, payments')
+      .select('id, amount, advance_rate, advance_purpose_id, created_at, date, payments')
       .eq('type', 'customer_advance')
-      .eq('customer_name', customerName)
+      .eq('customer_id', customerId)
       .order('created_at', { ascending: false });
     
     setAdvanceTransactions(data || []);
@@ -78,7 +89,51 @@ export default function CustomerAdvancePage() {
 
   const handleSelectCustomer = async (customer: Customer) => {
     setSelectedCustomer(customer);
-    await fetchAdvanceTransactions(customer.name);
+    await fetchAdvanceTransactions(customer.id);
+  };
+
+  const handleSaveService = async () => {
+    if (!newServiceName.trim()) {
+      toast.error('Service name is required');
+      return;
+    }
+
+    try {
+      if (editingService) {
+        const { error } = await supabase
+          .from('advance_purposes')
+          .update({ name: newServiceName.trim() })
+          .eq('id', editingService.id);
+        
+        if (error) throw error;
+        toast.success('Service updated');
+      } else {
+        const { error } = await supabase
+          .from('advance_purposes')
+          .insert({ name: newServiceName.trim() });
+        
+        if (error) throw error;
+        toast.success('Service added');
+      }
+      
+      setNewServiceName('');
+      setEditingService(null);
+      fetchPurposes();
+    } catch (error) {
+      console.error('Error saving service:', error);
+      toast.error('Failed to save service');
+    }
+  };
+
+  const handleDeleteService = async (id: string) => {
+    if (!confirm('Delete this service?')) return;
+    const { error } = await supabase.from('advance_purposes').delete().eq('id', id);
+    if (error) {
+      toast.error('Cannot delete - may be in use');
+    } else {
+      toast.success('Service deleted');
+      fetchPurposes();
+    }
   };
 
   const filteredCustomers = customers.filter(c =>
@@ -95,11 +150,18 @@ export default function CustomerAdvancePage() {
   };
 
   const getPurposeName = (id: string | null) => {
-    if (!id) return 'N/A';
+    if (!id) return 'General';
     return purposes.find(p => p.id === id)?.name || 'Unknown';
   };
 
   const totalAdvance = customers.reduce((sum, c) => sum + c.advance_balance, 0);
+
+  // Group transactions by purpose
+  const purposeTotals = advanceTransactions.reduce((acc, tx) => {
+    const purposeId = tx.advance_purpose_id || 'general';
+    acc[purposeId] = (acc[purposeId] || 0) + tx.amount;
+    return acc;
+  }, {} as Record<string, number>);
 
   return (
     <AppLayout title="Customer Advance">
@@ -110,6 +172,10 @@ export default function CustomerAdvancePage() {
             <h1 className="text-2xl font-bold text-foreground">Customer Advance</h1>
             <p className="text-sm text-muted-foreground">{customers.length} customers with advance</p>
           </div>
+          <Button variant="outline" onClick={() => setIsServicesOpen(true)} className="gap-2">
+            <Wrench className="w-4 h-4" />
+            Services
+          </Button>
         </div>
 
         {/* Summary Card */}
@@ -223,6 +289,21 @@ export default function CustomerAdvancePage() {
                 </div>
               </div>
 
+              {/* Service-wise Summary */}
+              {Object.keys(purposeTotals).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-foreground mb-2">Service-wise Summary</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(purposeTotals).map(([purposeId, total]) => (
+                      <div key={purposeId} className="bg-accent/10 rounded-lg p-2">
+                        <p className="text-xs text-muted-foreground">{getPurposeName(purposeId === 'general' ? null : purposeId)}</p>
+                        <p className="font-semibold text-accent">{formatCurrency(total)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Advance Transactions */}
               <div>
                 <h4 className="text-sm font-medium text-foreground mb-3">Advance Transactions</h4>
@@ -235,14 +316,24 @@ export default function CustomerAdvancePage() {
                         <div>
                           <p className="font-medium text-foreground">{formatCurrency(tx.amount)}</p>
                           <p className="text-xs text-muted-foreground">
-                            {format(new Date(tx.created_at), 'MMM d, yyyy')}
-                            {tx.advance_rate && ` • Rate: ${tx.advance_rate}%`}
+                            {format(new Date(tx.date), 'MMM d, yyyy')}
+                            {tx.advance_rate && ` • Rate: ${tx.advance_rate}`}
                           </p>
                           {tx.advance_purpose_id && (
-                            <p className="text-xs text-accent">{getPurposeName(tx.advance_purpose_id)}</p>
+                            <p className="text-xs text-accent flex items-center gap-1">
+                              <Wrench className="w-3 h-3" />
+                              {getPurposeName(tx.advance_purpose_id)}
+                            </p>
                           )}
                         </div>
-                        <ArrowUpRight className="w-4 h-4 text-success" />
+                        <div className="flex items-center gap-2">
+                          {tx.payments && Array.isArray(tx.payments) && tx.payments.map((p: any, i: number) => (
+                            <span key={i} className="text-xs px-2 py-1 bg-secondary rounded-full capitalize">
+                              {p.mode}: ₹{p.amount}
+                            </span>
+                          ))}
+                          <ArrowUpRight className="w-4 h-4 text-success" />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -250,6 +341,68 @@ export default function CustomerAdvancePage() {
               </div>
             </div>
           )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Services (Advance Purposes) Sheet */}
+      <Sheet open={isServicesOpen} onOpenChange={setIsServicesOpen}>
+        <SheetContent side="bottom" className="h-[70vh] rounded-t-3xl">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Services / Advance Purposes</SheetTitle>
+          </SheetHeader>
+          
+          <div className="space-y-4 overflow-y-auto max-h-[calc(70vh-150px)]">
+            {/* Add/Edit Service */}
+            <div className="flex gap-2 p-3 bg-secondary/30 rounded-xl">
+              <Input
+                value={newServiceName}
+                onChange={(e) => setNewServiceName(e.target.value)}
+                placeholder={editingService ? "Edit service name" : "New service (e.g., Hole, Welding, Leveling)"}
+                className="flex-1"
+              />
+              <Button onClick={handleSaveService}>
+                {editingService ? 'Update' : 'Add'}
+              </Button>
+              {editingService && (
+                <Button variant="outline" onClick={() => { setEditingService(null); setNewServiceName(''); }}>
+                  Cancel
+                </Button>
+              )}
+            </div>
+
+            {/* Info */}
+            <p className="text-xs text-muted-foreground px-1">
+              Services are used to categorize customer advances. Common examples: Hole, Welding, Leveling, Cutting, etc.
+            </p>
+
+            {/* Service List */}
+            <div className="space-y-2">
+              {purposes.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No services yet. Add one above.</p>
+              ) : (
+                purposes.map((purpose) => (
+                  <div key={purpose.id} className="bg-card border border-border rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Wrench className="w-4 h-4 text-accent" />
+                      <p className="font-medium text-foreground">{purpose.name}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingService(purpose);
+                          setNewServiceName(purpose.name);
+                        }}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </SheetContent>
       </Sheet>
     </AppLayout>

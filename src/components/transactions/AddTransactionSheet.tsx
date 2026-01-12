@@ -66,8 +66,8 @@ const typeOptions: Record<TransactionSection, { value: string; label: string }[]
     { value: 'advance', label: 'Advance' },
   ],
   home: [
-    { value: 'home_credit', label: 'Home Credit' },
-    { value: 'home_debit', label: 'Home Debit' },
+    { value: 'home_credit', label: 'Credit (Money In)' },
+    { value: 'home_debit', label: 'Debit (Money Out)' },
   ],
   exchange: [
     { value: 'exchange', label: 'Mode Exchange' },
@@ -181,9 +181,8 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     }
   }, [editTransaction, isOpen]);
 
-  // Generate auto bill number based on section and type
-  const generateBillNumber = (sec: TransactionSection, typ: string): string => {
-    const timestamp = Date.now().toString().slice(-4);
+  // Generate auto bill number based on section and type - series with sequential number
+  const generateBillNumber = async (sec: TransactionSection, typ: string): Promise<string> => {
     let prefix = 'TX';
     if (sec === 'sale') {
       if (typ === 'sale') prefix = 'S';
@@ -203,7 +202,22 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     } else if (sec === 'exchange') {
       prefix = 'XC';
     }
-    return `${prefix}${timestamp}`;
+    
+    // Get the last bill number with this prefix to generate next in series
+    const { data } = await supabase
+      .from('transactions')
+      .select('bill_number')
+      .like('bill_number', `${prefix}%`)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    
+    let nextNum = 1;
+    if (data && data.length > 0 && data[0].bill_number) {
+      const lastNum = parseInt(data[0].bill_number.replace(prefix, ''), 10);
+      if (!isNaN(lastNum)) nextNum = lastNum + 1;
+    }
+    
+    return `${prefix}${nextNum.toString().padStart(4, '0')}`;
   };
 
   const resetForm = () => {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Truck, Search, Phone, MapPin, Plus, Edit2, CreditCard, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Truck, Search, Phone, MapPin, Plus, Edit2, CreditCard, ArrowUpRight, ArrowDownLeft, Wallet } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface Supplier {
   id: string;
@@ -27,6 +28,7 @@ interface SupplierTransaction {
 }
 
 export default function SuppliersPage() {
+  const navigate = useNavigate();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,10 +145,20 @@ export default function SuppliersPage() {
             <h1 className="text-2xl font-bold text-foreground">Suppliers</h1>
             <p className="text-sm text-muted-foreground">{suppliers.length} suppliers</p>
           </div>
-          <Button onClick={() => setIsAddOpen(true)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Add Supplier
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setIsAddOpen(true)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Add Supplier
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => navigate('/', { state: { openTransaction: true, section: 'purchase', type: 'purchase_payment' } })}
+              className="gap-2"
+            >
+              <Wallet className="w-4 h-4" />
+              Payment
+            </Button>
+          </div>
         </div>
 
         {/* Summary Card */}

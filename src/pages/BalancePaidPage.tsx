@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Wallet, Search, Phone, AlertCircle, CheckCircle, ArrowDownRight } from 'lucide-react';
+import { Wallet, Search, Phone, AlertCircle, CheckCircle, ArrowDownRight, Plus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 interface Customer {
   id: string;
@@ -24,6 +26,7 @@ interface BalanceTransaction {
 }
 
 export default function BalancePaidPage() {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,6 +95,13 @@ export default function BalancePaidPage() {
             <h1 className="text-2xl font-bold text-foreground">Due Balances</h1>
             <p className="text-sm text-muted-foreground">{customers.length} customers with dues</p>
           </div>
+          <Button 
+            onClick={() => navigate('/', { state: { openTransaction: true, section: 'sale', type: 'balance_paid' } })}
+            className="gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Record Payment
+          </Button>
         </div>
 
         {/* Summary Card */}

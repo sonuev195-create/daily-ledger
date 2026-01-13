@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Wallet, Search, Phone, AlertCircle, CheckCircle, ArrowDownRight, Plus } from 'lucide-react';
+import { Wallet, Search, Phone, AlertCircle, CheckCircle, ArrowDownRight, Plus, Receipt } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -18,6 +18,15 @@ interface Customer {
   due_balance: number;
 }
 
+interface DueBill {
+  id: string;
+  bill_number: string | null;
+  amount: number;
+  due: number;
+  date: string;
+  created_at: string;
+}
+
 interface BalanceTransaction {
   id: string;
   amount: number;
@@ -32,6 +41,7 @@ export default function BalancePaidPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [balanceTransactions, setBalanceTransactions] = useState<BalanceTransaction[]>([]);
+  const [dueBills, setDueBills] = useState<DueBill[]>([]);
 
   useEffect(() => {
     fetchCustomers();
@@ -66,9 +76,23 @@ export default function BalancePaidPage() {
     setBalanceTransactions(data || []);
   };
 
+  const fetchDueBills = async (customerName: string) => {
+    const { data } = await supabase
+      .from('transactions')
+      .select('id, bill_number, amount, due, date, created_at')
+      .eq('customer_name', customerName)
+      .gt('due', 0)
+      .order('created_at', { ascending: false });
+    
+    setDueBills(data || []);
+  };
+
   const handleSelectCustomer = async (customer: Customer) => {
     setSelectedCustomer(customer);
-    await fetchBalanceTransactions(customer.name);
+    await Promise.all([
+      fetchBalanceTransactions(customer.name),
+      fetchDueBills(customer.name)
+    ]);
   };
 
   const filteredCustomers = customers.filter(c =>
@@ -193,6 +217,34 @@ export default function BalancePaidPage() {
                   </p>
                 </div>
               </div>
+
+              {/* Due Bills Section */}
+              {dueBills.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-warning" />
+                    Due Bills
+                  </h4>
+                  <div className="space-y-2">
+                    {dueBills.map((bill) => (
+                      <div key={bill.id} className="bg-warning/10 border border-warning/20 rounded-lg p-3 flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-foreground">
+                            {bill.bill_number || `TX-${bill.id.slice(0, 8)}`}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(bill.date), 'dd MMM yyyy')} • Total: {formatCurrency(bill.amount)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-warning">{formatCurrency(bill.due)}</p>
+                          <p className="text-xs text-muted-foreground">Due</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Balance Payment History */}
               <div>

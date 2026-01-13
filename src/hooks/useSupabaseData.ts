@@ -214,7 +214,7 @@ export async function getAllCategoriesAsync(): Promise<Category[]> {
   }));
 }
 
-// Create batch from purchase with auto batch name
+// Create batch from purchase with auto batch name (serial/date/qty*rate)
 export async function createBatchFromPurchase(
   itemId: string,
   itemName: string,
@@ -242,8 +242,19 @@ export async function createBatchFromPurchase(
     actualItemId = newItem.id;
   }
   
-  // Auto batch name as qty*rate
-  const batchName = `${primaryQty}*${rate}`;
+  // Get the next serial number for this item
+  const { data: existingBatches } = await supabase
+    .from('batches')
+    .select('batch_number')
+    .eq('item_id', actualItemId)
+    .order('created_at', { ascending: true });
+  
+  // Serial starts from 0 for opening, 1 for first purchase, etc.
+  const nextSerial = existingBatches ? existingBatches.length : 0;
+  const purchaseDate = new Date().toISOString().split('T')[0];
+  
+  // Batch name format: serial/date/qty*rate
+  const batchName = `${nextSerial}/${purchaseDate}/${primaryQty}*${rate}`;
   
   // Create the batch
   const { data, error } = await supabase
@@ -251,7 +262,7 @@ export async function createBatchFromPurchase(
     .insert({
       item_id: actualItemId,
       batch_number: batchName,
-      purchase_date: new Date().toISOString().split('T')[0],
+      purchase_date: purchaseDate,
       purchase_rate: rate,
       primary_quantity: primaryQty,
       secondary_quantity: secondaryQty,

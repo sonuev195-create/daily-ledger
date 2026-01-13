@@ -79,12 +79,26 @@ export function useTransactions(date: Date) {
             if (p.mode === 'upi') upiOut += p.amount;
           });
         }
-      } else if (t.section === 'expenses' || t.section === 'home') {
+      } else if (t.section === 'expenses') {
         totalExpenses += t.amount;
         t.payments.forEach(p => {
           if (p.mode === 'cash') cashOut += p.amount;
           if (p.mode === 'upi') upiOut += p.amount;
         });
+      } else if (t.section === 'home') {
+        // Home transactions - credit is money in, debit is money out
+        if (t.type === 'home_credit') {
+          t.payments.forEach(p => {
+            if (p.mode === 'cash') cashIn += p.amount;
+            if (p.mode === 'upi') upiIn += p.amount;
+          });
+        } else {
+          totalExpenses += t.amount;
+          t.payments.forEach(p => {
+            if (p.mode === 'cash') cashOut += p.amount;
+            if (p.mode === 'upi') upiOut += p.amount;
+          });
+        }
       } else if (t.section === 'purchase') {
         if (t.type !== 'purchase_return') {
           totalPurchases += t.amount;
@@ -99,6 +113,24 @@ export function useTransactions(date: Date) {
             if (p.mode === 'upi') upiIn += p.amount;
           });
         }
+      } else if (t.section === 'exchange') {
+        // Exchange: customer gives (payments) = income in that mode, you give back = outgoing
+        t.payments.forEach(p => {
+          if (p.mode === 'cash') cashIn += p.amount;
+          if (p.mode === 'upi') upiIn += p.amount;
+        });
+        if (t.giveBack) {
+          t.giveBack.forEach(g => {
+            if (g.mode === 'cash') cashOut += g.amount;
+            if (g.mode === 'upi') upiOut += g.amount;
+          });
+        }
+      } else if (t.section === 'employee') {
+        totalExpenses += t.amount;
+        t.payments.forEach(p => {
+          if (p.mode === 'cash') cashOut += p.amount;
+          if (p.mode === 'upi') upiOut += p.amount;
+        });
       }
     });
 

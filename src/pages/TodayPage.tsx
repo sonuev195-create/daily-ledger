@@ -14,7 +14,7 @@ import { useDrawer } from '@/hooks/useDrawer';
 import { Transaction, TransactionSection, SECTIONS, TYPE_OPTIONS, Bill } from '@/types';
 import { getBillByTransactionId } from '@/lib/db';
 import { cn } from '@/lib/utils';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const sectionIcons: Record<TransactionSection, any> = {
   sale: Receipt,
@@ -27,6 +27,7 @@ const sectionIcons: Record<TransactionSection, any> = {
 
 export default function TodayPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(() => {
     if (location.state?.date) {
       return new Date(location.state.date);
@@ -91,6 +92,25 @@ export default function TodayPage() {
         setViewingBill(bill);
         setViewingTransaction(transaction);
       }
+    }
+  };
+
+  // Handle section shortcut - redirect to sidebar pages for certain sections
+  const handleSectionClick = (section: TransactionSection) => {
+    // Redirect to sidebar pages instead of opening panel for some sections
+    switch (section) {
+      case 'exchange':
+        navigate('/exchange');
+        return;
+      case 'employee':
+        navigate('/employees');
+        return;
+      case 'purchase':
+        navigate('/purchase');
+        return;
+      default:
+        // For sale, expenses, home - open the transaction sheet
+        handleAddTransaction(section, TYPE_OPTIONS[section][0].value);
     }
   };
 
@@ -314,7 +334,7 @@ export default function TodayPage() {
               return (
                 <button
                   key={section.id}
-                  onClick={() => handleAddTransaction(section.id, TYPE_OPTIONS[section.id][0].value)}
+                  onClick={() => handleSectionClick(section.id)}
                   className={cn(
                     "w-14 h-14 rounded-xl flex flex-col items-center justify-center gap-1 transition-all",
                     "bg-secondary/50 hover:bg-secondary border border-border hover:border-accent/50",

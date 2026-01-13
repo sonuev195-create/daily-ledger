@@ -37,7 +37,7 @@ function isOpeningBatchName(name?: string) {
 }
 
 function buildOpeningBatchName(qty: number, secQty: number, secUnit: string | undefined, rate: number) {
-  return `Opening Stock: ${qty}${secQty > 0 ? ` + ${secQty} ${secUnit || 'pcs'}` : ''}${rate > 0 ? ` @₹${rate}` : ''}`;
+  return `0/Opening/${qty}*${rate}`;
 }
 
 function buildAutoBatchName(qty: number, rate: number) {

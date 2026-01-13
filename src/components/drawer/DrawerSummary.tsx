@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Wallet, CreditCard, Building2, TrendingUp, TrendingDown, Edit2, Calculator } from 'lucide-react';
+import { ChevronDown, Wallet, CreditCard, Building2, TrendingUp, TrendingDown, Edit2, Calculator, Clock } from 'lucide-react';
 import { DailySummary, DrawerOpening, DrawerClosing } from '@/types';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -18,8 +18,16 @@ export function DrawerSummary({ date, summary, opening, closing, onEditOpening, 
   const [isExpanded, setIsExpanded] = useState(false);
 
   const openingCash = opening ? opening.coin + opening.cash + opening.homeAdvance : 0;
+  
+  // Current drawer = opening + today's transactions (before closing)
   const currentCash = openingCash + summary.cashIn - summary.cashOut;
   const currentUpi = (opening?.upiOpening || 0) + summary.upiIn - summary.upiOut;
+  const currentBank = opening?.bankOpening || 0;
+
+  // If drawer is closed, show closing values instead
+  const displayCash = closing ? (closing.manualCoin + closing.manualCash) : currentCash;
+  const displayUpi = closing ? closing.systemUpi : currentUpi;
+  const displayBank = closing ? closing.systemBank : currentBank;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -30,12 +38,22 @@ export function DrawerSummary({ date, summary, opening, closing, onEditOpening, 
     }).format(amount);
   };
 
+  const isDrawerOpen = !closing;
+
   return (
     <div className="drawer-summary-card animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Drawer Summary</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-foreground">Drawer Summary</h2>
+            {isDrawerOpen && (
+              <span className="px-2 py-0.5 text-xs bg-success/10 text-success rounded-full flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                Open
+              </span>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground">{format(date, 'EEEE, MMMM d, yyyy')}</p>
         </div>
         <button
@@ -51,6 +69,27 @@ export function DrawerSummary({ date, summary, opening, closing, onEditOpening, 
         </button>
       </div>
 
+      {/* Current Drawer Status */}
+      {isDrawerOpen && (
+        <div className="bg-accent/10 border border-accent/20 rounded-xl p-3 mb-4">
+          <p className="text-xs text-accent font-medium mb-1">Current Drawer (System Calculated)</p>
+          <div className="grid grid-cols-3 gap-2 text-sm">
+            <div>
+              <span className="text-muted-foreground">Cash:</span>
+              <span className="ml-1 font-semibold text-foreground">{formatCurrency(currentCash)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">UPI:</span>
+              <span className="ml-1 font-semibold text-foreground">{formatCurrency(currentUpi)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Bank:</span>
+              <span className="ml-1 font-semibold text-foreground">{formatCurrency(currentBank)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Quick Stats */}
       <div className="grid grid-cols-3 gap-4 mb-4">
         <div className="bg-secondary/50 rounded-xl p-4">
@@ -59,8 +98,8 @@ export function DrawerSummary({ date, summary, opening, closing, onEditOpening, 
               <Wallet className="w-4 h-4 text-success-foreground" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-foreground">{formatCurrency(currentCash)}</p>
-          <p className="text-xs text-muted-foreground">Cash</p>
+          <p className="text-2xl font-bold text-foreground">{formatCurrency(displayCash)}</p>
+          <p className="text-xs text-muted-foreground">{closing ? 'Closed Cash' : 'Cash'}</p>
         </div>
 
         <div className="bg-secondary/50 rounded-xl p-4">
@@ -69,7 +108,7 @@ export function DrawerSummary({ date, summary, opening, closing, onEditOpening, 
               <CreditCard className="w-4 h-4 text-info-foreground" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-foreground">{formatCurrency(currentUpi)}</p>
+          <p className="text-2xl font-bold text-foreground">{formatCurrency(displayUpi)}</p>
           <p className="text-xs text-muted-foreground">UPI</p>
         </div>
 
@@ -79,7 +118,7 @@ export function DrawerSummary({ date, summary, opening, closing, onEditOpening, 
               <Building2 className="w-4 h-4 text-primary-foreground" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-foreground">{formatCurrency(opening?.bankOpening || 0)}</p>
+          <p className="text-2xl font-bold text-foreground">{formatCurrency(displayBank)}</p>
           <p className="text-xs text-muted-foreground">Bank</p>
         </div>
       </div>

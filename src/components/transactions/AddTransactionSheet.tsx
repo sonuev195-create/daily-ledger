@@ -166,19 +166,22 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   };
 
   useEffect(() => {
-    if (editTransaction) {
-      setSection(editTransaction.section);
-      setType(editTransaction.type);
-      setAmount(editTransaction.amount.toString());
-      setBillNumber(editTransaction.billNumber || '');
-      setCustomerName(editTransaction.customerName || '');
-      setSupplierName(editTransaction.supplierName || '');
-      setReference(editTransaction.reference || '');
-      setBillType(editTransaction.billType || 'g_bill');
-      setPayments(editTransaction.payments.length > 0 ? editTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
-    } else {
-      resetForm();
-    }
+    const initializeForm = async () => {
+      if (editTransaction) {
+        setSection(editTransaction.section);
+        setType(editTransaction.type);
+        setAmount(editTransaction.amount.toString());
+        setBillNumber(editTransaction.billNumber || '');
+        setCustomerName(editTransaction.customerName || '');
+        setSupplierName(editTransaction.supplierName || '');
+        setReference(editTransaction.reference || '');
+        setBillType(editTransaction.billType || 'g_bill');
+        setPayments(editTransaction.payments.length > 0 ? editTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+      } else {
+        await resetForm();
+      }
+    };
+    initializeForm();
   }, [editTransaction, isOpen]);
 
   // Generate auto bill number based on section and type - series with sequential number
@@ -220,13 +223,15 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     return `${prefix}${nextNum.toString().padStart(4, '0')}`;
   };
 
-  const resetForm = () => {
+  const resetForm = async () => {
     const sec = initialSection || 'sale';
     const typ = initialType || typeOptions[sec]?.[0]?.value || 'sale';
     setSection(sec);
     setType(typ);
     setAmount('');
-    setBillNumber(generateBillNumber(sec, typ));
+    // Generate bill number asynchronously
+    const newBillNumber = await generateBillNumber(sec, typ);
+    setBillNumber(newBillNumber);
     setCustomerName('');
     setCustomerId(undefined);
     setCustomerAdvance(0);
@@ -244,11 +249,13 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
     setShowNewPurpose(false);
   };
 
-  const handleSectionChange = (newSection: TransactionSection) => {
+  const handleSectionChange = async (newSection: TransactionSection) => {
     setSection(newSection);
     const newType = typeOptions[newSection][0].value;
     setType(newType);
-    setBillNumber(generateBillNumber(newSection, newType));
+    // Generate bill number asynchronously
+    const newBillNumber = await generateBillNumber(newSection, newType);
+    setBillNumber(newBillNumber);
     setBillItems([createEmptyBillItem()]);
     setGiveBackEntries([]);
     setSelectedDueBill(null);
@@ -270,9 +277,11 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
   };
 
   // Update bill number when type changes
-  const handleTypeChange = (newType: string) => {
+  const handleTypeChange = async (newType: string) => {
     setType(newType);
-    setBillNumber(generateBillNumber(section, newType));
+    // Generate bill number asynchronously
+    const newBillNumber = await generateBillNumber(section, newType);
+    setBillNumber(newBillNumber);
   };
 
   // Calculate bill total and sync to amount

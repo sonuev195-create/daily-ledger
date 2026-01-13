@@ -69,6 +69,7 @@ export default function ExchangePage() {
     }
 
     try {
+      // Insert into exchanges table
       const { error } = await supabase
         .from('exchanges')
         .insert({
@@ -79,6 +80,30 @@ export default function ExchangePage() {
         });
       
       if (error) throw error;
+
+      // Also create a transaction record for daily tracking
+      // The exchange means: customer gives (income in that mode), you give (outgoing in return mode)
+      const billNumber = `XC${Date.now().toString().slice(-6)}`;
+      const { error: txError } = await supabase
+        .from('transactions')
+        .insert({
+          date: new Date().toISOString().split('T')[0],
+          section: 'exchange',
+          type: 'exchange',
+          amount: amountNum,
+          payments: [
+            { id: crypto.randomUUID(), mode: customerGivesMode, amount: amountNum }
+          ],
+          give_back: [
+            { id: crypto.randomUUID(), mode: youGiveMode, amount: amountNum }
+          ],
+          bill_number: billNumber,
+          reference: reference || `${customerGivesMode} → ${youGiveMode}`,
+        });
+
+      if (txError) {
+        console.error('Error saving exchange transaction:', txError);
+      }
       
       toast.success('Exchange recorded');
       setIsAddOpen(false);

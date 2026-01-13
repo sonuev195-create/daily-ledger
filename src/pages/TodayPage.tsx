@@ -47,10 +47,18 @@ export default function TodayPage() {
   
   const summary = getSummary();
 
-  // Update date from navigation state
+  // Update date from navigation state and handle transaction opening
   useEffect(() => {
     if (location.state?.date) {
       setSelectedDate(new Date(location.state.date));
+    }
+    // Handle opening transaction sheet from other pages
+    if (location.state?.openTransaction) {
+      setSelectedSection(location.state.section || null);
+      setSelectedType(location.state.type || null);
+      setIsAddOpen(true);
+      // Clear the state to prevent re-opening on re-render
+      window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 

@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface Customer {
   id: string;
@@ -35,6 +36,7 @@ interface AdvancePurpose {
 }
 
 export default function CustomerAdvancePage() {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -172,10 +174,19 @@ export default function CustomerAdvancePage() {
             <h1 className="text-2xl font-bold text-foreground">Customer Advance</h1>
             <p className="text-sm text-muted-foreground">{customers.length} customers with advance</p>
           </div>
-          <Button variant="outline" onClick={() => setIsServicesOpen(true)} className="gap-2">
-            <Wrench className="w-4 h-4" />
-            Services
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsServicesOpen(true)} className="gap-2">
+              <Wrench className="w-4 h-4" />
+              Services
+            </Button>
+            <Button 
+              onClick={() => navigate('/', { state: { openTransaction: true, section: 'sale', type: 'customer_advance' } })}
+              className="gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Advance
+            </Button>
+          </div>
         </div>
 
         {/* Summary Card */}

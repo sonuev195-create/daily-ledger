@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Search, Phone, Plus, Edit2, Wallet, Settings, Calendar, TrendingUp } from 'lucide-react';
+import { Users, Search, Phone, Plus, Edit2, Wallet, Settings, Calendar, TrendingUp, Banknote } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface Employee {
   id: string;
@@ -37,6 +38,7 @@ interface EmployeeTransaction {
 }
 
 export default function EmployeesPage() {
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -269,6 +271,14 @@ export default function EmployeesPage() {
             <Button onClick={() => setIsAddOpen(true)} className="gap-2">
               <Plus className="w-4 h-4" />
               Add
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => navigate('/', { state: { openTransaction: true, section: 'employee', type: 'salary' } })}
+              className="gap-2"
+            >
+              <Banknote className="w-4 h-4" />
+              Pay
             </Button>
           </div>
         </div>

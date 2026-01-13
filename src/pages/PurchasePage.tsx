@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Search, Package, Truck, Plus, Receipt, ArrowDownLeft, CreditCard } from 'lucide-react';
+import { ShoppingCart, Search, Package, Truck, Plus, Receipt, ArrowDownLeft, CreditCard, Wallet } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 interface PurchaseTransaction {
   id: string;
@@ -29,6 +31,7 @@ interface BillItem {
 }
 
 export default function PurchasePage() {
+  const navigate = useNavigate();
   const [purchases, setPurchases] = useState<PurchaseTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -142,6 +145,10 @@ export default function PurchasePage() {
     .filter(p => p.type === 'purchase_payment')
     .reduce((sum, p) => sum + p.amount, 0);
 
+  const handleAddPurchase = (type: string) => {
+    navigate('/', { state: { openTransaction: true, section: 'purchase', type } });
+  };
+
   return (
     <AppLayout title="Purchase">
       <div className="max-w-4xl mx-auto px-4 py-6 lg:py-8">
@@ -150,6 +157,16 @@ export default function PurchasePage() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Purchase</h1>
             <p className="text-sm text-muted-foreground">{purchases.length} transactions</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => handleAddPurchase('purchase_bill')} className="gap-2">
+              <Plus className="w-4 h-4" />
+              New Bill
+            </Button>
+            <Button variant="outline" onClick={() => handleAddPurchase('purchase_payment')} className="gap-2">
+              <Wallet className="w-4 h-4" />
+              Payment
+            </Button>
           </div>
         </div>
 

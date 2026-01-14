@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { EmployeePaymentSheet } from '@/components/employees/EmployeePaymentSheet';
 
 interface Employee {
   id: string;
@@ -38,7 +38,6 @@ interface EmployeeTransaction {
 }
 
 export default function EmployeesPage() {
-  const navigate = useNavigate();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,6 +45,7 @@ export default function EmployeesPage() {
   const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [categories, setCategories] = useState<SalaryCategory[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
@@ -274,7 +274,7 @@ export default function EmployeesPage() {
             </Button>
             <Button 
               variant="outline"
-              onClick={() => navigate('/', { state: { openTransaction: true, section: 'employee', type: 'salary' } })}
+              onClick={() => setIsPaymentOpen(true)}
               className="gap-2"
             >
               <Banknote className="w-4 h-4" />
@@ -573,6 +573,19 @@ export default function EmployeesPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Employee Payment Sheet */}
+      <EmployeePaymentSheet
+        isOpen={isPaymentOpen}
+        onClose={() => setIsPaymentOpen(false)}
+        onSuccess={() => {
+          fetchEmployees();
+          if (selectedEmployee) {
+            fetchEmployeeTransactions(selectedEmployee.id);
+          }
+        }}
+        selectedDate={new Date()}
+      />
     </AppLayout>
   );
 }

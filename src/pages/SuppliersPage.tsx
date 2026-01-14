@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Truck, Search, Phone, MapPin, Plus, Edit2, CreditCard, ArrowUpRight, ArrowDownLeft, Wallet } from 'lucide-react';
+import { Truck, Search, Phone, MapPin, Plus, Edit2, CreditCard, ArrowUpRight, ArrowDownLeft, Wallet, Package } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { SupplierPaymentSheet } from '@/components/suppliers/SupplierPaymentSheet';
 
 interface Supplier {
   id: string;
@@ -25,16 +25,17 @@ interface SupplierTransaction {
   amount: number;
   created_at: string;
   bill_number: string | null;
+  payments: any;
 }
 
 export default function SuppliersPage() {
-  const navigate = useNavigate();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [supplierTransactions, setSupplierTransactions] = useState<SupplierTransaction[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
@@ -64,7 +65,7 @@ export default function SuppliersPage() {
   const fetchSupplierTransactions = async (supplierName: string) => {
     const { data } = await supabase
       .from('transactions')
-      .select('id, type, amount, created_at, bill_number')
+      .select('id, type, amount, created_at, bill_number, payments')
       .eq('supplier_name', supplierName)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -152,7 +153,7 @@ export default function SuppliersPage() {
             </Button>
             <Button 
               variant="outline" 
-              onClick={() => navigate('/', { state: { openTransaction: true, section: 'purchase', type: 'purchase_payment' } })}
+              onClick={() => setIsPaymentOpen(true)}
               className="gap-2"
             >
               <Wallet className="w-4 h-4" />
@@ -363,6 +364,19 @@ export default function SuppliersPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Supplier Payment Sheet */}
+      <SupplierPaymentSheet
+        isOpen={isPaymentOpen}
+        onClose={() => setIsPaymentOpen(false)}
+        onSuccess={() => {
+          fetchSuppliers();
+          if (selectedSupplier) {
+            fetchSupplierTransactions(selectedSupplier.name);
+          }
+        }}
+        selectedDate={new Date()}
+      />
     </AppLayout>
   );
 }

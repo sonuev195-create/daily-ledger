@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { ShoppingCart, Search, Package, Truck, Plus, Receipt, ArrowDownLeft, CreditCard, Wallet } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ShoppingCart, Search, Package, Truck, Plus, Receipt, ArrowDownLeft, CreditCard, Wallet, ChevronDown, ChevronUp } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -30,14 +30,18 @@ interface BillItem {
   total_amount: number;
 }
 
+interface PurchaseWithItems extends PurchaseTransaction {
+  items: BillItem[];
+}
+
 export default function PurchasePage() {
   const navigate = useNavigate();
-  const [purchases, setPurchases] = useState<PurchaseTransaction[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseWithItems[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'bill' | 'payment' | 'return'>('all');
-  const [selectedPurchase, setSelectedPurchase] = useState<PurchaseTransaction | null>(null);
-  const [billItems, setBillItems] = useState<BillItem[]>([]);
+  const [selectedPurchase, setSelectedPurchase] = useState<PurchaseWithItems | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPurchases();
@@ -46,14 +50,41 @@ export default function PurchasePage() {
   const fetchPurchases = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: transactionData, error } = await supabase
         .from('transactions')
         .select('*')
         .eq('section', 'purchase')
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      setPurchases(data || []);
+      
+      // Fetch items for each purchase bill
+      const purchasesWithItems: PurchaseWithItems[] = await Promise.all(
+        (transactionData || []).map(async (purchase) => {
+          let items: BillItem[] = [];
+          
+          if (purchase.bill_number && (purchase.type === 'purchase_bill' || purchase.type === 'purchase_delivered')) {
+            const { data: billData } = await supabase
+              .from('bills')
+              .select('id')
+              .eq('bill_number', purchase.bill_number)
+              .maybeSingle();
+            
+            if (billData) {
+              const { data: itemsData } = await supabase
+                .from('bill_items')
+                .select('*')
+                .eq('bill_id', billData.id);
+              
+              items = itemsData || [];
+            }
+          }
+          
+          return { ...purchase, items };
+        })
+      );
+      
+      setPurchases(purchasesWithItems);
     } catch (error) {
       console.error('Error fetching purchases:', error);
     } finally {
@@ -61,40 +92,21 @@ export default function PurchasePage() {
     }
   };
 
-  const fetchBillItems = async (billNumber: string | null) => {
-    if (!billNumber) {
-      setBillItems([]);
-      return;
-    }
-    
-    const { data: billData } = await supabase
-      .from('bills')
-      .select('id')
-      .eq('bill_number', billNumber)
-      .maybeSingle();
-    
-    if (billData) {
-      const { data: items } = await supabase
-        .from('bill_items')
-        .select('*')
-        .eq('bill_id', billData.id);
-      
-      setBillItems(items || []);
-    } else {
-      setBillItems([]);
-    }
+  const handleSelectPurchase = (purchase: PurchaseWithItems) => {
+    setSelectedPurchase(purchase);
   };
 
-  const handleSelectPurchase = async (purchase: PurchaseTransaction) => {
-    setSelectedPurchase(purchase);
-    await fetchBillItems(purchase.bill_number);
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedId(expandedId === id ? null : id);
   };
 
   const filteredPurchases = purchases.filter(p => {
     const matchesSearch = 
       p.bill_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.reference?.toLowerCase().includes(searchQuery.toLowerCase());
+      p.reference?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.items.some(item => item.item_name.toLowerCase().includes(searchQuery.toLowerCase()));
     
     let matchesFilter = true;
     if (filterType === 'bill') {
@@ -188,7 +200,7 @@ export default function PurchasePage() {
           </div>
         </div>
 
-        {/* Search & Filter */}
+        {/* Search and Filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -196,7 +208,7 @@ export default function PurchasePage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by bill number, supplier..."
+              placeholder="Search by bill number, supplier, item..."
               className="w-full h-10 pl-10 pr-4 bg-secondary/50 border border-border rounded-xl text-sm focus:ring-2 focus:ring-accent"
             />
           </div>
@@ -218,9 +230,13 @@ export default function PurchasePage() {
           </div>
         </div>
 
-        {/* Purchase List */}
+        {/* Purchase List with Items */}
         {loading ? (
-          <div className="text-center py-12 text-muted-foreground">Loading...</div>
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-24 rounded-xl bg-secondary/50 animate-pulse" />
+            ))}
+          </div>
         ) : filteredPurchases.length === 0 ? (
           <div className="text-center py-12">
             <ShoppingCart className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
@@ -234,38 +250,105 @@ export default function PurchasePage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.03 }}
-                onClick={() => handleSelectPurchase(purchase)}
-                className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:shadow-md transition-all"
+                className="bg-card border border-border rounded-xl overflow-hidden"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", getTypeColor(purchase.type))}>
-                        {getTypeLabel(purchase.type)}
-                      </span>
-                      {purchase.bill_number && (
-                        <span className="text-sm font-medium text-foreground">{purchase.bill_number}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      {purchase.supplier_name && (
-                        <span className="flex items-center gap-1">
-                          <Truck className="w-3 h-3" />
-                          {purchase.supplier_name}
+                {/* Main Purchase Info */}
+                <div 
+                  onClick={() => handleSelectPurchase(purchase)}
+                  className="p-4 cursor-pointer hover:bg-secondary/30 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", getTypeColor(purchase.type))}>
+                          {getTypeLabel(purchase.type)}
                         </span>
-                      )}
-                      {purchase.reference && (
-                        <span className="text-xs">• {purchase.reference}</span>
+                        {purchase.bill_number && (
+                          <span className="text-sm font-medium text-foreground">{purchase.bill_number}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        {purchase.supplier_name && (
+                          <span className="flex items-center gap-1">
+                            <Truck className="w-3 h-3" />
+                            {purchase.supplier_name}
+                          </span>
+                        )}
+                        {purchase.reference && (
+                          <span className="text-xs">• {purchase.reference}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right flex items-center gap-3">
+                      <div>
+                        <p className="text-lg font-bold text-foreground">{formatCurrency(purchase.amount)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(purchase.created_at), 'dd MMM')}
+                        </p>
+                      </div>
+                      {purchase.items.length > 0 && (
+                        <button
+                          onClick={(e) => toggleExpand(purchase.id, e)}
+                          className="p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
+                        >
+                          {expandedId === purchase.id ? (
+                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </button>
                       )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-foreground">{formatCurrency(purchase.amount)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(new Date(purchase.created_at), 'dd MMM')}
-                    </p>
-                  </div>
+                  
+                  {/* Items Preview - Always show count */}
+                  {purchase.items.length > 0 && expandedId !== purchase.id && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Package className="w-3 h-3" />
+                      <span>{purchase.items.length} items</span>
+                      <span className="text-foreground/70">
+                        ({purchase.items.slice(0, 3).map(i => i.item_name).join(', ')}
+                        {purchase.items.length > 3 ? '...' : ''})
+                      </span>
+                    </div>
+                  )}
                 </div>
+
+                {/* Expanded Items List */}
+                <AnimatePresence>
+                  {expandedId === purchase.id && purchase.items.length > 0 && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="border-t border-border bg-secondary/20"
+                    >
+                      <div className="p-3">
+                        <div className="flex items-center gap-2 mb-2 text-xs font-medium text-muted-foreground">
+                          <Package className="w-3 h-3" />
+                          Items ({purchase.items.length})
+                        </div>
+                        <div className="space-y-2">
+                          {purchase.items.map((item) => (
+                            <div 
+                              key={item.id} 
+                              className="flex items-center justify-between py-2 px-3 bg-background rounded-lg"
+                            >
+                              <div className="flex-1">
+                                <p className="font-medium text-sm text-foreground">{item.item_name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {item.primary_quantity} pcs {item.secondary_quantity > 0 && `+ ${item.secondary_quantity}`} @ {formatCurrency(item.rate)}
+                                </p>
+                              </div>
+                              <p className="font-medium text-sm">{formatCurrency(item.total_amount)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             ))}
           </div>
@@ -305,19 +388,34 @@ export default function PurchasePage() {
                 </div>
               </div>
 
-              {/* Bill Items */}
-              {billItems.length > 0 && (
+              {/* Payment Info */}
+              {selectedPurchase.payments && Array.isArray(selectedPurchase.payments) && selectedPurchase.payments.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium text-foreground mb-3">Items</h4>
+                  <h4 className="text-sm font-medium text-foreground mb-3">Payments</h4>
                   <div className="bg-secondary/30 rounded-xl overflow-hidden">
-                    {billItems.map((item) => (
+                    {selectedPurchase.payments.map((payment: any, index: number) => (
+                      <div key={index} className="flex items-center justify-between p-3 border-b border-border/50 last:border-b-0">
+                        <span className="capitalize text-muted-foreground">{payment.mode}</span>
+                        <span className="font-medium">{formatCurrency(payment.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bill Items */}
+              {selectedPurchase.items.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-foreground mb-3">Items ({selectedPurchase.items.length})</h4>
+                  <div className="bg-secondary/30 rounded-xl overflow-hidden">
+                    {selectedPurchase.items.map((item) => (
                       <div key={item.id} className="flex items-center justify-between p-3 border-b border-border/50 last:border-b-0">
                         <div className="flex items-center gap-2">
                           <Package className="w-4 h-4 text-muted-foreground" />
                           <div>
                             <p className="font-medium text-foreground">{item.item_name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {item.primary_quantity} units @ {formatCurrency(item.rate)}
+                              {item.primary_quantity} pcs {item.secondary_quantity > 0 && `+ ${item.secondary_quantity}`} @ {formatCurrency(item.rate)}
                             </p>
                           </div>
                         </div>

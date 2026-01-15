@@ -382,6 +382,27 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_categories: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       items: {
         Row: {
           batch_preference: string
@@ -491,6 +512,7 @@ export type Database = {
           date: string
           due: number | null
           employee_id: string | null
+          expense_category_id: string | null
           give_back: Json | null
           id: string
           overpayment: number | null
@@ -516,6 +538,7 @@ export type Database = {
           date?: string
           due?: number | null
           employee_id?: string | null
+          expense_category_id?: string | null
           give_back?: Json | null
           id?: string
           overpayment?: number | null
@@ -541,6 +564,7 @@ export type Database = {
           date?: string
           due?: number | null
           employee_id?: string | null
+          expense_category_id?: string | null
           give_back?: Json | null
           id?: string
           overpayment?: number | null
@@ -573,6 +597,13 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_expense_category_id_fkey"
+            columns: ["expense_category_id"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
             referencedColumns: ["id"]
           },
           {

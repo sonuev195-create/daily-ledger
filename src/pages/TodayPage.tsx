@@ -1,7 +1,22 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Calendar, ChevronLeft, ChevronRight, Plus, Receipt, Banknote, ShoppingCart, Users, Home, ArrowLeftRight, Wallet, CreditCard, AlertTriangle } from 'lucide-react';
+import { 
+  Calendar, 
+  ChevronLeft, 
+  ChevronRight, 
+  Receipt, 
+  Banknote, 
+  ShoppingCart, 
+  Users, 
+  Home, 
+  ArrowLeftRight, 
+  Wallet, 
+  CreditCard, 
+  AlertTriangle,
+  UserPlus,
+  Store
+} from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { DrawerSummary } from '@/components/drawer/DrawerSummary';
 import { DrawerOpeningSheet } from '@/components/drawer/DrawerOpeningSheet';
@@ -25,6 +40,26 @@ const sectionIcons: Record<TransactionSection, any> = {
   exchange: ArrowLeftRight,
 };
 
+// Quick action categories for today page
+const quickActions = [
+  { 
+    id: 'sale', 
+    label: 'Sale', 
+    icon: Store,
+    subItems: [
+      { id: 'sale', label: 'New Sale', path: null, section: 'sale', type: 'sale' },
+      { id: 'sale_return', label: 'Sale Return', path: null, section: 'sale', type: 'sale_return' },
+      { id: 'balance_paid', label: 'Balance Paid', path: '/balance-paid' },
+      { id: 'customer_advance', label: 'Customer Advance', path: '/customer-advance' },
+    ]
+  },
+  { id: 'expenses', label: 'Expenses', icon: Banknote, path: '/expenses' },
+  { id: 'purchase', label: 'Purchase', icon: ShoppingCart, path: '/purchase' },
+  { id: 'home', label: 'Home', icon: Home, path: '/home' },
+  { id: 'exchange', label: 'Exchange', icon: ArrowLeftRight, path: '/exchange' },
+  { id: 'employee', label: 'Employee', icon: Users, path: '/employees' },
+];
+
 export default function TodayPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -42,6 +77,7 @@ export default function TodayPage() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [viewingBill, setViewingBill] = useState<Bill | null>(null);
   const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null);
+  const [expandedAction, setExpandedAction] = useState<string | null>(null);
   
   const { transactions, loading, add, update, remove, getSummary } = useTransactions(selectedDate);
   const { opening, closing, updateOpening, updateClosing } = useDrawer(selectedDate);
@@ -95,30 +131,22 @@ export default function TodayPage() {
     }
   };
 
-  // Handle section shortcut - redirect to sidebar pages for certain sections
-  const handleSectionClick = (section: TransactionSection) => {
-    // Redirect to sidebar pages instead of opening panel for some sections
-    switch (section) {
-      case 'exchange':
-        navigate('/exchange');
-        return;
-      case 'employee':
-        navigate('/employees');
-        return;
-      case 'purchase':
-        navigate('/purchase');
-        return;
-      default:
-        // For sale, expenses, home - open the transaction sheet
-        handleAddTransaction(section, TYPE_OPTIONS[section][0].value);
+  const handleQuickAction = (action: typeof quickActions[0], subItem?: { id: string; label: string; path?: string | null; section?: string; type?: string }) => {
+    if (subItem) {
+      if (subItem.path) {
+        navigate(subItem.path);
+      } else if (subItem.section && subItem.type) {
+        setSelectedSection(subItem.section as TransactionSection);
+        setSelectedType(subItem.type);
+        setEditingTransaction(null);
+        setIsAddOpen(true);
+      }
+      setExpandedAction(null);
+    } else if ('path' in action && action.path) {
+      navigate(action.path);
+    } else if ('subItems' in action) {
+      setExpandedAction(expandedAction === action.id ? null : action.id);
     }
-  };
-
-  const handleAddTransaction = (section: TransactionSection, type: string) => {
-    setSelectedSection(section);
-    setSelectedType(type);
-    setEditingTransaction(null);
-    setIsAddOpen(true);
   };
 
   const goToPreviousDay = () => {
@@ -148,23 +176,6 @@ export default function TodayPage() {
     }
     return `₹${amount}`;
   };
-
-  // Calculate totals by payment mode
-  const paymentTotals = transactions.reduce((acc, t) => {
-    if (t.section === 'sale' && (t.type === 'sale' || t.type === 'balance_paid' || t.type === 'customer_advance')) {
-      t.payments.forEach(p => {
-        if (p.mode === 'cash') acc.cashIn += p.amount;
-        if (p.mode === 'upi') acc.upiIn += p.amount;
-      });
-    }
-    if (t.section === 'expenses' || (t.section === 'purchase' && t.type !== 'purchase_return')) {
-      t.payments.forEach(p => {
-        if (p.mode === 'cash') acc.cashOut += p.amount;
-        if (p.mode === 'upi') acc.upiOut += p.amount;
-      });
-    }
-    return acc;
-  }, { cashIn: 0, upiIn: 0, cashOut: 0, upiOut: 0 });
 
   return (
     <AppLayout title="Today">
@@ -238,116 +249,138 @@ export default function TodayPage() {
           />
         </motion.div>
 
-        {/* Main Layout: Transactions List + Add Buttons */}
-        <div className="flex gap-4">
-          {/* Transactions List (Similar to AllDatesPage style) */}
-          <div className="flex-1 space-y-2">
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-16 rounded-xl bg-secondary/50 animate-pulse" />
-              ))
-            ) : sortedTransactions.length === 0 ? (
-              <div className="text-center py-12">
-                <Receipt className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground">No transactions today</p>
-                <p className="text-sm text-muted-foreground mt-1">Use the buttons on the right to add transactions</p>
-              </div>
-            ) : (
-              sortedTransactions.map((transaction, index) => {
-                const Icon = sectionIcons[transaction.section];
-                const totalPayment = transaction.payments.reduce((s, p) => s + p.amount, 0);
-                const cashAmount = transaction.payments.filter(p => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
-                const upiAmount = transaction.payments.filter(p => p.mode === 'upi').reduce((s, p) => s + p.amount, 0);
-                
-                return (
-                  <motion.div
-                    key={transaction.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.02 }}
-                    onClick={() => handleEdit(transaction)}
-                    className="transaction-card p-3 cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      {/* Icon */}
-                      <div className={cn(
-                        "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-                        transaction.section === 'sale' ? "bg-success/10 text-success" :
-                        transaction.section === 'expenses' ? "bg-destructive/10 text-destructive" :
-                        transaction.section === 'purchase' ? "bg-warning/10 text-warning" :
-                        transaction.section === 'employee' ? "bg-info/10 text-info" :
-                        transaction.section === 'home' ? "bg-primary/10 text-primary" :
-                        "bg-accent/10 text-accent"
-                      )}>
-                        <Icon className="w-5 h-5" />
-                      </div>
-
-                      {/* Details */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-foreground truncate">
-                            {transaction.customerName || transaction.supplierName || transaction.type.replace(/_/g, ' ')}
-                          </span>
-                          {transaction.billNumber && (
-                            <span className="text-xs text-muted-foreground">#{transaction.billNumber}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="capitalize">{transaction.section}</span>
-                          <span>•</span>
-                          <span>{format(new Date(transaction.createdAt), 'HH:mm')}</span>
-                        </div>
-                      </div>
-
-                      {/* Payment Modes Display */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {cashAmount > 0 && (
-                          <div className="flex items-center gap-1 text-xs">
-                            <Wallet className="w-3 h-3 text-success" />
-                            <span className="text-success">{formatCurrencyCompact(cashAmount)}</span>
-                          </div>
-                        )}
-                        {upiAmount > 0 && (
-                          <div className="flex items-center gap-1 text-xs">
-                            <CreditCard className="w-3 h-3 text-info" />
-                            <span className="text-info">{formatCurrencyCompact(upiAmount)}</span>
-                          </div>
-                        )}
-                        {transaction.due && transaction.due > 0 && (
-                          <div className="flex items-center gap-1 text-xs">
-                            <AlertTriangle className="w-3 h-3 text-warning" />
-                            <span className="text-warning">Due</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Vertical Add Buttons (Right Side) */}
-          <div className="w-14 shrink-0 space-y-2">
-            {SECTIONS.map((section) => {
-              const Icon = sectionIcons[section.id];
+        {/* Quick Action Section Navigation */}
+        <div className="mb-6">
+          <div className="flex flex-wrap gap-2">
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              const hasSubItems = 'subItems' in action;
+              const isExpanded = expandedAction === action.id;
+              
               return (
-                <button
-                  key={section.id}
-                  onClick={() => handleSectionClick(section.id)}
-                  className={cn(
-                    "w-14 h-14 rounded-xl flex flex-col items-center justify-center gap-1 transition-all",
-                    "bg-secondary/50 hover:bg-secondary border border-border hover:border-accent/50",
-                    "text-muted-foreground hover:text-accent"
+                <div key={action.id} className="relative">
+                  <button
+                    onClick={() => handleQuickAction(action)}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                      "bg-secondary/50 hover:bg-secondary border border-border hover:border-accent/50",
+                      isExpanded && "bg-accent text-accent-foreground border-accent"
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{action.label}</span>
+                  </button>
+                  
+                  {/* Sub-items dropdown for Sale */}
+                  {hasSubItems && isExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="absolute top-full left-0 mt-2 z-50 bg-card border border-border rounded-xl shadow-lg overflow-hidden min-w-[180px]"
+                    >
+                      {action.subItems?.map((subItem) => (
+                        <button
+                          key={subItem.id}
+                          onClick={() => handleQuickAction(action, subItem)}
+                          className="w-full px-4 py-3 text-left text-sm hover:bg-secondary/50 transition-colors border-b border-border last:border-b-0"
+                        >
+                          {subItem.label}
+                        </button>
+                      ))}
+                    </motion.div>
                   )}
-                  title={`Add ${section.label}`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="text-[9px] font-medium leading-none">{section.label.slice(0, 4)}</span>
-                </button>
+                </div>
               );
             })}
           </div>
+        </div>
+
+        {/* Transactions List */}
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold mb-3">Transactions</h2>
+          
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-16 rounded-xl bg-secondary/50 animate-pulse" />
+            ))
+          ) : sortedTransactions.length === 0 ? (
+            <div className="text-center py-12">
+              <Receipt className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+              <p className="text-muted-foreground">No transactions today</p>
+              <p className="text-sm text-muted-foreground mt-1">Use the quick actions above to add transactions</p>
+            </div>
+          ) : (
+            sortedTransactions.map((transaction, index) => {
+              const Icon = sectionIcons[transaction.section];
+              const cashAmount = transaction.payments.filter(p => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
+              const upiAmount = transaction.payments.filter(p => p.mode === 'upi').reduce((s, p) => s + p.amount, 0);
+              
+              return (
+                <motion.div
+                  key={transaction.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.02 }}
+                  onClick={() => handleEdit(transaction)}
+                  className="transaction-card p-3 cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Icon */}
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                      transaction.section === 'sale' ? "bg-success/10 text-success" :
+                      transaction.section === 'expenses' ? "bg-destructive/10 text-destructive" :
+                      transaction.section === 'purchase' ? "bg-warning/10 text-warning" :
+                      transaction.section === 'employee' ? "bg-info/10 text-info" :
+                      transaction.section === 'home' ? "bg-primary/10 text-primary" :
+                      "bg-accent/10 text-accent"
+                    )}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+
+                    {/* Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-foreground truncate">
+                          {transaction.customerName || transaction.supplierName || transaction.type.replace(/_/g, ' ')}
+                        </span>
+                        {transaction.billNumber && (
+                          <span className="text-xs text-muted-foreground">#{transaction.billNumber}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="capitalize">{transaction.section}</span>
+                        <span>•</span>
+                        <span>{format(new Date(transaction.createdAt), 'HH:mm')}</span>
+                      </div>
+                    </div>
+
+                    {/* Payment Modes Display */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {cashAmount > 0 && (
+                        <div className="flex items-center gap-1 text-xs">
+                          <Wallet className="w-3 h-3 text-success" />
+                          <span className="text-success">{formatCurrencyCompact(cashAmount)}</span>
+                        </div>
+                      )}
+                      {upiAmount > 0 && (
+                        <div className="flex items-center gap-1 text-xs">
+                          <CreditCard className="w-3 h-3 text-info" />
+                          <span className="text-info">{formatCurrencyCompact(upiAmount)}</span>
+                        </div>
+                      )}
+                      {transaction.due && transaction.due > 0 && (
+                        <div className="flex items-center gap-1 text-xs">
+                          <AlertTriangle className="w-3 h-3 text-warning" />
+                          <span className="text-warning">Due</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })
+          )}
         </div>
       </div>
 

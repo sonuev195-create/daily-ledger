@@ -15,7 +15,9 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
-  X
+  X,
+  CreditCard,
+  Home
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -37,6 +39,8 @@ const menuItems = [
   { id: 'items', label: 'Items & Inventory', icon: Package, path: '/items' },
   { id: 'supplier', label: 'Supplier', icon: Truck, path: '/suppliers' },
   { id: 'employee', label: 'Employee', icon: Users, path: '/employees' },
+  { id: 'expenses', label: 'Expenses', icon: CreditCard, path: '/expenses' },
+  { id: 'home', label: 'Home', icon: Home, path: '/home' },
   { id: 'commission', label: 'Commission', icon: Percent, path: '/commission' },
   { id: 'exchange', label: 'Exchange', icon: ArrowLeftRight, path: '/exchange' },
   { id: 'reports', label: 'Reports', icon: BarChart3, path: '/reports' },

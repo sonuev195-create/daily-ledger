@@ -17,7 +17,8 @@ import {
   ChevronRight,
   X,
   CreditCard,
-  Home
+  Home,
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -44,6 +45,7 @@ const menuItems = [
   { id: 'commission', label: 'Commission', icon: Percent, path: '/commission' },
   { id: 'exchange', label: 'Exchange', icon: ArrowLeftRight, path: '/exchange' },
   { id: 'reports', label: 'Reports', icon: BarChart3, path: '/reports' },
+  { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
 ];
 
 export function Sidebar({ isCollapsed, onToggle, isMobileOpen, onMobileClose }: SidebarProps) {

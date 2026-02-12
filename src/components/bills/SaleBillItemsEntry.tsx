@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Trash2, Plus, ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { Trash2, Plus, ChevronDown, ChevronUp, Package, Camera, Upload, Loader2 } from 'lucide-react';
 import { BillItem, Item, Batch, BatchPreference, Category } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { useItems, getBatchesForItem, getAllCategoriesAsync } from '@/hooks/useSupabaseData';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface BatchWithStock extends Batch {
   stockLabel: string; // e.g., "10*50" (qty*rate)
@@ -20,6 +22,9 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [batchesMap, setBatchesMap] = useState<Record<string, BatchWithStock[]>>({});
   const [categoriesMap, setCategoriesMap] = useState<Record<string, Category>>({});
+  const [isExtracting, setIsExtracting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Load categories for batch preference resolution
   useEffect(() => {
@@ -222,8 +227,119 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
     }
   }, [billItems.length > 0 && billItems[billItems.length - 1]?.itemId, billItems[billItems.length - 1]?.primaryQuantity]);
 
+  // OCR: Extract items from bill image
+  const handleImageExtract = async (file: File) => {
+    setIsExtracting(true);
+    try {
+      // Convert to base64
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+
+      const itemNames = allItems.map(i => i.name);
+
+      const { data, error } = await supabase.functions.invoke('extract-bill-items', {
+        body: { imageBase64: base64, itemNames },
+      });
+
+      if (error) throw error;
+
+      const extracted = data?.items || [];
+      if (extracted.length === 0) {
+        toast.error('No items found in image');
+        return;
+      }
+
+      // Convert extracted items to BillItems, matching against item master
+      const newBillItems: BillItem[] = extracted.map((ext: any) => {
+        const matchName = ext.matchedName || ext.extractedName;
+        const masterItem = allItems.find(i => 
+          i.name.toLowerCase() === matchName?.toLowerCase()
+        );
+
+        return {
+          id: uuidv4(),
+          itemId: masterItem?.id,
+          batchId: undefined,
+          itemName: masterItem?.name || ext.extractedName,
+          primaryQuantity: ext.quantity || 0,
+          secondaryQuantity: 0,
+          secondaryUnit: masterItem?.secondaryUnit,
+          conversionRate: masterItem?.conversionRate,
+          rate: masterItem ? (ext.amount && ext.quantity ? ext.amount / ext.quantity : masterItem.sellingPrice) : (ext.amount && ext.quantity ? ext.amount / ext.quantity : 0),
+          totalAmount: ext.amount || 0,
+        };
+      });
+
+      // Load batches for matched items and auto-select
+      for (const bi of newBillItems) {
+        if (bi.itemId) {
+          const batches = await getBatchesForItem(bi.itemId);
+          const masterItem = allItems.find(i => i.id === bi.itemId);
+          if (masterItem && batches.length > 0) {
+            const pref = masterItem.batchPreference === 'category' ? 'latest' : masterItem.batchPreference;
+            const withStock = batches.filter(b => b.primaryQuantity > 0);
+            if (withStock.length > 0) {
+              const sorted = pref === 'oldest'
+                ? withStock.sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime())
+                : withStock.sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
+              bi.batchId = sorted[0].id;
+            }
+          }
+        }
+      }
+
+      // Add empty row at the end
+      newBillItems.push(createEmptyBillItem());
+      setBillItems(newBillItems);
+      toast.success(`${extracted.length} items extracted from bill`);
+    } catch (err: any) {
+      console.error('OCR extraction error:', err);
+      toast.error('Failed to extract items from image');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleImageExtract(file);
+    e.target.value = '';
+  };
+
   return (
     <div className="space-y-2">
+      {/* OCR Buttons */}
+      <div className="flex gap-2 mb-2">
+        <button
+          onClick={() => cameraInputRef.current?.click()}
+          disabled={isExtracting}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent/10 text-accent text-xs font-medium hover:bg-accent/20 transition-colors disabled:opacity-50"
+        >
+          {isExtracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+          Capture Bill
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isExtracting}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent/10 text-accent text-xs font-medium hover:bg-accent/20 transition-colors disabled:opacity-50"
+        >
+          {isExtracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+          Upload Bill
+        </button>
+        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
+        <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} />
+      </div>
+
+      {isExtracting && (
+        <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground bg-secondary/30 rounded-lg">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Extracting items from bill image...
+        </div>
+      )}
+
       {billItems.map((item, index) => {
         const itemBatches = item.itemId ? batchesMap[item.itemId] || [] : [];
         const selectedBatch = itemBatches.find(b => b.id === item.batchId);

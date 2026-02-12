@@ -1,12 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Trash2, Plus, ChevronDown, ChevronUp, Package, Camera, Upload, Loader2 } from 'lucide-react';
+import { Trash2, Plus, ChevronDown, ChevronUp, Package, Camera, Upload, Loader2, CheckCircle2, AlertCircle, XCircle, Edit2 } from 'lucide-react';
 import { BillItem, Item, Batch, BatchPreference, Category } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { useItems, getBatchesForItem, getAllCategoriesAsync } from '@/hooks/useSupabaseData';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+interface ExtractedOcrItem {
+  extractedName: string;
+  matchedName: string | null;
+  quantity: number;
+  amount: number;
+  confidence: 'high' | 'medium' | 'low';
+  selectedItemId: string | null; // user-corrected item
+}
 
 interface BatchWithStock extends Batch {
   stockLabel: string; // e.g., "10*50" (qty*rate)
@@ -23,6 +32,7 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
   const [batchesMap, setBatchesMap] = useState<Record<string, BatchWithStock[]>>({});
   const [categoriesMap, setCategoriesMap] = useState<Record<string, Category>>({});
   const [isExtracting, setIsExtracting] = useState(false);
+  const [ocrReviewItems, setOcrReviewItems] = useState<ExtractedOcrItem[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -227,11 +237,11 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
     }
   }, [billItems.length > 0 && billItems[billItems.length - 1]?.itemId, billItems[billItems.length - 1]?.primaryQuantity]);
 
-  // OCR: Extract items from bill image
+  // OCR: Extract items from bill image - now shows review step
   const handleImageExtract = async (file: File) => {
     setIsExtracting(true);
+    setOcrReviewItems(null);
     try {
-      // Convert to base64
       const base64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
@@ -252,55 +262,90 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
         return;
       }
 
-      // Convert extracted items to BillItems, matching against item master
-      const newBillItems: BillItem[] = extracted.map((ext: any) => {
+      // Populate review items with auto-matched item IDs
+      const reviewItems: ExtractedOcrItem[] = extracted.map((ext: any) => {
         const matchName = ext.matchedName || ext.extractedName;
-        const masterItem = allItems.find(i => 
-          i.name.toLowerCase() === matchName?.toLowerCase()
-        );
-
+        const masterItem = allItems.find(i => i.name.toLowerCase() === matchName?.toLowerCase());
         return {
-          id: uuidv4(),
-          itemId: masterItem?.id,
-          batchId: undefined,
-          itemName: masterItem?.name || ext.extractedName,
-          primaryQuantity: ext.quantity || 0,
-          secondaryQuantity: 0,
-          secondaryUnit: masterItem?.secondaryUnit,
-          conversionRate: masterItem?.conversionRate,
-          rate: masterItem ? (ext.amount && ext.quantity ? ext.amount / ext.quantity : masterItem.sellingPrice) : (ext.amount && ext.quantity ? ext.amount / ext.quantity : 0),
-          totalAmount: ext.amount || 0,
+          extractedName: ext.extractedName,
+          matchedName: ext.matchedName,
+          quantity: ext.quantity || 0,
+          amount: ext.amount || 0,
+          confidence: ext.confidence || 'low',
+          selectedItemId: masterItem?.id || null,
         };
       });
 
-      // Load batches for matched items and auto-select
-      for (const bi of newBillItems) {
-        if (bi.itemId) {
-          const batches = await getBatchesForItem(bi.itemId);
-          const masterItem = allItems.find(i => i.id === bi.itemId);
-          if (masterItem && batches.length > 0) {
-            const pref = masterItem.batchPreference === 'category' ? 'latest' : masterItem.batchPreference;
-            const withStock = batches.filter(b => b.primaryQuantity > 0);
-            if (withStock.length > 0) {
-              const sorted = pref === 'oldest'
-                ? withStock.sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime())
-                : withStock.sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
-              bi.batchId = sorted[0].id;
-            }
-          }
-        }
-      }
-
-      // Add empty row at the end
-      newBillItems.push(createEmptyBillItem());
-      setBillItems(newBillItems);
-      toast.success(`${extracted.length} items extracted from bill`);
+      setOcrReviewItems(reviewItems);
+      toast.info(`${extracted.length} items extracted — review matches before saving`);
     } catch (err: any) {
       console.error('OCR extraction error:', err);
       toast.error('Failed to extract items from image');
     } finally {
       setIsExtracting(false);
     }
+  };
+
+  // Confirm OCR review and populate bill items
+  const confirmOcrItems = async () => {
+    if (!ocrReviewItems) return;
+
+    const newBillItems: BillItem[] = ocrReviewItems.map((ext) => {
+      const masterItem = ext.selectedItemId ? allItems.find(i => i.id === ext.selectedItemId) : null;
+      return {
+        id: uuidv4(),
+        itemId: masterItem?.id,
+        batchId: undefined,
+        itemName: masterItem?.name || ext.extractedName,
+        primaryQuantity: ext.quantity || 0,
+        secondaryQuantity: 0,
+        secondaryUnit: masterItem?.secondaryUnit,
+        conversionRate: masterItem?.conversionRate,
+        rate: masterItem ? (ext.amount && ext.quantity ? ext.amount / ext.quantity : masterItem.sellingPrice) : (ext.amount && ext.quantity ? ext.amount / ext.quantity : 0),
+        totalAmount: ext.amount || 0,
+      };
+    });
+
+    // Load batches and auto-select for matched items
+    for (const bi of newBillItems) {
+      if (bi.itemId) {
+        const batches = await getBatchesForItem(bi.itemId);
+        const masterItem = allItems.find(i => i.id === bi.itemId);
+        if (masterItem && batches.length > 0) {
+          const pref = masterItem.batchPreference === 'category' ? 'latest' : masterItem.batchPreference;
+          const withStock = batches.filter(b => b.primaryQuantity > 0);
+          if (withStock.length > 0) {
+            const sorted = pref === 'oldest'
+              ? withStock.sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime())
+              : withStock.sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
+            bi.batchId = sorted[0].id;
+          }
+        }
+      }
+    }
+
+    newBillItems.push(createEmptyBillItem());
+    setBillItems(newBillItems);
+    setOcrReviewItems(null);
+    toast.success(`${ocrReviewItems.length} items added to bill`);
+  };
+
+  const updateOcrItemMatch = (index: number, itemId: string) => {
+    if (!ocrReviewItems) return;
+    const updated = [...ocrReviewItems];
+    const masterItem = allItems.find(i => i.id === itemId);
+    updated[index] = {
+      ...updated[index],
+      selectedItemId: itemId || null,
+      matchedName: masterItem?.name || null,
+      confidence: itemId ? 'high' : 'low',
+    };
+    setOcrReviewItems(updated);
+  };
+
+  const removeOcrItem = (index: number) => {
+    if (!ocrReviewItems) return;
+    setOcrReviewItems(ocrReviewItems.filter((_, i) => i !== index));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -338,6 +383,104 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
           <Loader2 className="w-4 h-4 animate-spin" />
           Extracting items from bill image...
         </div>
+      )}
+
+      {/* OCR Review Step */}
+      {ocrReviewItems && ocrReviewItems.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-secondary/30 rounded-xl p-3 space-y-2 border border-accent/20"
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold text-foreground">
+              Review Extracted Items ({ocrReviewItems.length})
+            </h3>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setOcrReviewItems(null)}
+                className="px-2.5 py-1 text-[10px] font-medium rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmOcrItems}
+                className="px-2.5 py-1 text-[10px] font-medium rounded-md bg-accent text-accent-foreground hover:bg-accent/90 transition-colors"
+              >
+                Confirm All
+              </button>
+            </div>
+          </div>
+
+          {/* Header */}
+          <div className="grid grid-cols-12 gap-1 text-[10px] font-medium text-muted-foreground px-1">
+            <div className="col-span-1"></div>
+            <div className="col-span-3">Paper Name</div>
+            <div className="col-span-4">Match To</div>
+            <div className="col-span-1 text-center">Qty</div>
+            <div className="col-span-2 text-right">Amt</div>
+            <div className="col-span-1"></div>
+          </div>
+
+          {ocrReviewItems.map((item, idx) => (
+            <div key={idx} className={cn(
+              "grid grid-cols-12 gap-1 px-1 py-1.5 rounded-lg text-xs items-center",
+              item.confidence === 'low' ? 'bg-destructive/5' : item.confidence === 'medium' ? 'bg-warning/5' : 'bg-success/5'
+            )}>
+              {/* Confidence icon */}
+              <div className="col-span-1 flex justify-center">
+                {item.confidence === 'high' ? <CheckCircle2 className="w-3.5 h-3.5 text-success" /> :
+                 item.confidence === 'medium' ? <AlertCircle className="w-3.5 h-3.5 text-warning" /> :
+                 <XCircle className="w-3.5 h-3.5 text-destructive" />}
+              </div>
+
+              {/* Extracted name */}
+              <div className="col-span-3 truncate text-muted-foreground" title={item.extractedName}>
+                {item.extractedName}
+              </div>
+
+              {/* Item master select */}
+              <div className="col-span-4">
+                <select
+                  value={item.selectedItemId || ''}
+                  onChange={(e) => updateOcrItemMatch(idx, e.target.value)}
+                  className={cn(
+                    "w-full h-7 px-1 text-[11px] bg-background/50 border rounded focus:ring-1 focus:ring-accent truncate",
+                    !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground"
+                  )}
+                >
+                  <option value="">No match</option>
+                  {allItems.map(i => (
+                    <option key={i.id} value={i.id}>{i.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Qty */}
+              <div className="col-span-1 text-center text-muted-foreground">{item.quantity}</div>
+
+              {/* Amount */}
+              <div className="col-span-2 text-right font-medium text-foreground">₹{item.amount.toLocaleString('en-IN')}</div>
+
+              {/* Remove */}
+              <div className="col-span-1 flex justify-center">
+                <button onClick={() => removeOcrItem(idx)} className="text-destructive/60 hover:text-destructive">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Total */}
+          <div className="flex justify-between items-center pt-1 border-t border-border/50">
+            <span className="text-[10px] text-muted-foreground">
+              {ocrReviewItems.filter(i => i.selectedItemId).length}/{ocrReviewItems.length} matched
+            </span>
+            <span className="text-xs font-bold text-accent">
+              ₹{ocrReviewItems.reduce((s, i) => s + i.amount, 0).toLocaleString('en-IN')}
+            </span>
+          </div>
+        </motion.div>
       )}
 
       {billItems.map((item, index) => {

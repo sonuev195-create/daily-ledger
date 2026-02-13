@@ -178,8 +178,30 @@ export default function SettingsPage() {
                         <span className="text-destructive">No match</span>
                       )}
                     </div>
-                    <div className="col-span-2 text-center text-muted-foreground">{item.quantity}</div>
-                    <div className="col-span-3 text-right font-medium text-foreground">{formatCurrency(item.amount)}</div>
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        value={item.quantity || ''}
+                        onChange={(e) => {
+                          const updated = [...extractedItems];
+                          updated[idx] = { ...updated[idx], quantity: parseFloat(e.target.value) || 0 };
+                          setExtractedItems(updated);
+                        }}
+                        className="w-full h-6 px-1 text-xs text-center bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <input
+                        type="number"
+                        value={item.amount || ''}
+                        onChange={(e) => {
+                          const updated = [...extractedItems];
+                          updated[idx] = { ...updated[idx], amount: parseFloat(e.target.value) || 0 };
+                          setExtractedItems(updated);
+                        }}
+                        className="w-full h-6 px-1 text-xs text-right bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                      />
+                    </div>
                   </div>
                 ))}
               </div>

@@ -348,6 +348,13 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
     setOcrReviewItems(ocrReviewItems.filter((_, i) => i !== index));
   };
 
+  const updateOcrItemField = (index: number, field: 'quantity' | 'amount', value: number) => {
+    if (!ocrReviewItems) return;
+    const updated = [...ocrReviewItems];
+    updated[index] = { ...updated[index], [field]: value };
+    setOcrReviewItems(updated);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleImageExtract(file);
@@ -434,9 +441,20 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
                  <XCircle className="w-3.5 h-3.5 text-destructive" />}
               </div>
 
-              {/* Extracted name */}
-              <div className="col-span-3 truncate text-muted-foreground" title={item.extractedName}>
-                {item.extractedName}
+              {/* Extracted name - editable */}
+              <div className="col-span-3">
+                <input
+                  type="text"
+                  value={item.extractedName}
+                  onChange={(e) => {
+                    if (!ocrReviewItems) return;
+                    const updated = [...ocrReviewItems];
+                    updated[idx] = { ...updated[idx], extractedName: e.target.value };
+                    setOcrReviewItems(updated);
+                  }}
+                  className="w-full h-6 px-1 text-[11px] bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent truncate"
+                  title={item.extractedName}
+                />
               </div>
 
               {/* Item master select */}
@@ -456,11 +474,25 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
                 </select>
               </div>
 
-              {/* Qty */}
-              <div className="col-span-1 text-center text-muted-foreground">{item.quantity}</div>
+              {/* Qty - editable */}
+              <div className="col-span-1">
+                <input
+                  type="number"
+                  value={item.quantity || ''}
+                  onChange={(e) => updateOcrItemField(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                  className="w-full h-6 px-1 text-[11px] text-center bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                />
+              </div>
 
-              {/* Amount */}
-              <div className="col-span-2 text-right font-medium text-foreground">₹{item.amount.toLocaleString('en-IN')}</div>
+              {/* Amount - editable */}
+              <div className="col-span-2">
+                <input
+                  type="number"
+                  value={item.amount || ''}
+                  onChange={(e) => updateOcrItemField(idx, 'amount', parseFloat(e.target.value) || 0)}
+                  className="w-full h-6 px-1 text-[11px] text-right bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
+                />
+              </div>
 
               {/* Remove */}
               <div className="col-span-1 flex justify-center">

@@ -86,8 +86,11 @@ export default function ItemsPage() {
 
   const handleDelete = async (item: Item) => {
     if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
+      // Delete from both IndexedDB and Supabase
       await deleteItem(item.id);
+      await supabase.from('items').delete().eq('id', item.id);
       await loadItems();
+      window.dispatchEvent(new Event('items:changed'));
       toast.success('Item deleted');
     }
   };

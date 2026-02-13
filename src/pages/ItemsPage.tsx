@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Item, Category } from '@/types';
-import { getAllItems, addItem, updateItem, deleteItem, bulkAddItems, getAllCategories } from '@/lib/db';
+import { useItems, useCategories } from '@/hooks/useSupabaseData';
 import { supabase } from '@/integrations/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -14,8 +14,11 @@ import { CategorySheet } from '@/components/items/CategorySheet';
 import { BatchList } from '@/components/items/BatchList';
 
 export default function ItemsPage() {
+  const { items: supabaseItems, loading: itemsLoading, addItem: addSupabaseItem, updateItem: updateSupabaseItem, deleteItem: deleteSupabaseItem, refetch: refetchItems } = useItems();
+  const { categories, loading: categoriesLoading } = useCategories();
+  
+  // Enrich items with batch-computed fields (qty, rate, value)
   const [items, setItems] = useState<Item[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -35,24 +38,46 @@ export default function ItemsPage() {
   const [sellingPrice, setSellingPrice] = useState('');
   const [batchPreference, setBatchPreference] = useState<'latest' | 'oldest' | 'custom' | 'category'>('category');
 
-  useEffect(() => {
-    loadData();
+  // Enrich items with batch data for display
+  const enrichItemsWithBatches = useCallback(async (rawItems: Item[]) => {
+    if (rawItems.length === 0) { setItems([]); setLoading(false); return; }
+    
+    const { data: batches } = await supabase.from('batches').select('item_id, primary_quantity, secondary_quantity, purchase_rate');
+    
+    const batchMap: Record<string, { totalPrimary: number; totalSecondary: number; totalValue: number; avgRate: number }> = {};
+    (batches || []).forEach(b => {
+      if (!batchMap[b.item_id]) batchMap[b.item_id] = { totalPrimary: 0, totalSecondary: 0, totalValue: 0, avgRate: 0 };
+      const qty = Number(b.primary_quantity);
+      const rate = Number(b.purchase_rate);
+      batchMap[b.item_id].totalPrimary += qty;
+      batchMap[b.item_id].totalSecondary += Number(b.secondary_quantity);
+      batchMap[b.item_id].totalValue += qty * rate;
+    });
+    
+    Object.values(batchMap).forEach(v => {
+      v.avgRate = v.totalPrimary > 0 ? v.totalValue / v.totalPrimary : 0;
+    });
+
+    const enriched = rawItems.map(item => ({
+      ...item,
+      primaryQuantity: batchMap[item.id]?.totalPrimary || 0,
+      secondaryQuantity: batchMap[item.id]?.totalSecondary || 0,
+      purchaseRate: batchMap[item.id]?.avgRate || 0,
+      inventoryValue: batchMap[item.id]?.totalValue || 0,
+    }));
+    
+    setItems(enriched);
+    setLoading(false);
   }, []);
 
-  const loadData = async () => {
-    setLoading(true);
-    const [itemData, categoryData] = await Promise.all([
-      getAllItems(),
-      getAllCategories()
-    ]);
-    setItems(itemData);
-    setCategories(categoryData);
-    setLoading(false);
-  };
+  useEffect(() => {
+    if (!itemsLoading) {
+      enrichItemsWithBatches(supabaseItems);
+    }
+  }, [supabaseItems, itemsLoading, enrichItemsWithBatches]);
 
   const loadItems = async () => {
-    const data = await getAllItems();
-    setItems(data);
+    await refetchItems();
   };
 
   const resetForm = () => {
@@ -86,10 +111,7 @@ export default function ItemsPage() {
 
   const handleDelete = async (item: Item) => {
     if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
-      // Delete from both IndexedDB and Supabase
-      await deleteItem(item.id);
-      await supabase.from('items').delete().eq('id', item.id);
-      await loadItems();
+      await deleteSupabaseItem(item.id);
       window.dispatchEvent(new Event('items:changed'));
       toast.success('Item deleted');
     }
@@ -100,54 +122,33 @@ export default function ItemsPage() {
     const purchaseRateNum = parseFloat(purchaseRate) || 0;
     const secondaryQtyNum = parseFloat(secondaryQty) || 0;
 
-    const itemData: Item = {
-      id: editingItem?.id || uuidv4(),
-      name,
-      categoryId: categoryId || undefined,
-      batchPreference: batchPreference,
-      secondaryUnit: secondaryUnit || undefined,
-      conversionRate: parseFloat(conversionRate) || undefined,
-      primaryQuantity: primaryQtyNum,
-      secondaryQuantity: secondaryQtyNum,
-      purchaseRate: purchaseRateNum,
-      sellingPrice: parseFloat(sellingPrice) || 0,
-      inventoryValue: primaryQtyNum * purchaseRateNum,
-      createdAt: editingItem?.createdAt || new Date(),
-      updatedAt: new Date(),
-    };
-
-    // Keep local storage in sync (offline), AND mirror to backend (for sales/bills screens)
     if (editingItem) {
-      await updateItem(itemData);
-      await supabase.from('items').upsert({
-        id: itemData.id,
-        name: itemData.name,
-        category_id: itemData.categoryId || null,
-        batch_preference: itemData.batchPreference,
-        selling_price: itemData.sellingPrice,
-        secondary_unit: itemData.secondaryUnit || null,
-        conversion_rate: itemData.conversionRate || null,
+      await updateSupabaseItem(editingItem.id, {
+        name,
+        categoryId: categoryId || undefined,
+        batchPreference: batchPreference,
+        sellingPrice: parseFloat(sellingPrice) || 0,
+        secondaryUnit: secondaryUnit || undefined,
+        conversionRate: parseFloat(conversionRate) || undefined,
       });
       toast.success('Item updated');
     } else {
-      await addItem(itemData);
-      await supabase.from('items').upsert({
-        id: itemData.id,
-        name: itemData.name,
-        category_id: itemData.categoryId || null,
-        batch_preference: itemData.batchPreference,
-        selling_price: itemData.sellingPrice,
-        secondary_unit: itemData.secondaryUnit || null,
-        conversion_rate: itemData.conversionRate || null,
+      const newId = await addSupabaseItem({
+        name,
+        categoryId: categoryId || undefined,
+        batchPreference: batchPreference,
+        sellingPrice: parseFloat(sellingPrice) || 0,
+        secondaryUnit: secondaryUnit || undefined,
+        conversionRate: parseFloat(conversionRate) || undefined,
       });
 
-      // ALWAYS create opening batch if any quantity is provided (even without rate)
-      if (primaryQtyNum > 0 || secondaryQtyNum > 0) {
+      // Create opening batch if any quantity is provided
+      if (newId && (primaryQtyNum > 0 || secondaryQtyNum > 0)) {
         const rate = purchaseRateNum || 0;
         const batchName = `Opening Stock: ${primaryQtyNum}${secondaryQtyNum > 0 ? ` + ${secondaryQtyNum} ${secondaryUnit || 'pcs'}` : ''}${rate > 0 ? ` @₹${rate}` : ''}`;
 
         const { error } = await supabase.from('batches').insert({
-          item_id: itemData.id,
+          item_id: newId,
           batch_number: batchName,
           purchase_date: new Date().toISOString().split('T')[0],
           purchase_rate: rate,
@@ -166,7 +167,6 @@ export default function ItemsPage() {
       }
     }
 
-    await loadItems();
     window.dispatchEvent(new Event('items:changed'));
     window.dispatchEvent(new Event('batches:changed'));
     setIsAddOpen(false);
@@ -175,14 +175,13 @@ export default function ItemsPage() {
 
   const parseBulkData = (data: string): Partial<Item>[] => {
     const lines = data.trim().split('\n');
-    const items: Partial<Item>[] = [];
+    const parsedItems: Partial<Item>[] = [];
 
-    lines.forEach((line, index) => {
-      // Split by tab (Excel/Sheets copy) or comma (CSV)
+    lines.forEach((line) => {
       const parts = line.includes('\t') ? line.split('\t') : line.split(',');
       
       if (parts.length >= 1 && parts[0].trim()) {
-        items.push({
+        parsedItems.push({
           name: parts[0]?.trim() || '',
           primaryQuantity: parseFloat(parts[1]?.trim()) || 0,
           secondaryQuantity: parseFloat(parts[2]?.trim()) || 0,
@@ -192,7 +191,7 @@ export default function ItemsPage() {
       }
     });
 
-    return items;
+    return parsedItems;
   };
 
   const handleBulkImport = async () => {
@@ -203,24 +202,50 @@ export default function ItemsPage() {
       return;
     }
 
-    const newItems: Item[] = parsedItems.map(item => ({
+    // Insert items into Supabase
+    const itemRows = parsedItems.map(item => ({
       id: uuidv4(),
       name: item.name || '',
-      batchPreference: 'latest' as const,
-      primaryQuantity: item.primaryQuantity || 0,
-      secondaryQuantity: item.secondaryQuantity || 0,
-      purchaseRate: item.purchaseRate || 0,
-      sellingPrice: item.sellingPrice || 0,
-      inventoryValue: (item.primaryQuantity || 0) * (item.purchaseRate || 0),
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      batch_preference: 'latest',
+      selling_price: item.sellingPrice || 0,
     }));
 
-    await bulkAddItems(newItems);
-    await loadItems();
+    const { error } = await supabase.from('items').insert(itemRows);
+    if (error) {
+      toast.error('Failed to import items');
+      console.error(error);
+      return;
+    }
+
+    // Create opening batches for items with quantities
+    const batchRows = parsedItems
+      .map((item, i) => {
+        const qty = item.primaryQuantity || 0;
+        const secQty = item.secondaryQuantity || 0;
+        const rate = item.purchaseRate || 0;
+        if (qty > 0 || secQty > 0) {
+          return {
+            item_id: itemRows[i].id,
+            batch_number: `Opening Stock`,
+            purchase_date: new Date().toISOString().split('T')[0],
+            purchase_rate: rate,
+            primary_quantity: qty,
+            secondary_quantity: secQty,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    if (batchRows.length > 0) {
+      await supabase.from('batches').insert(batchRows);
+    }
+
+    await refetchItems();
+    window.dispatchEvent(new Event('items:changed'));
     setIsAddOpen(false);
     resetForm();
-    toast.success(`${newItems.length} items imported successfully`);
+    toast.success(`${parsedItems.length} items imported successfully`);
   };
 
   const filteredItems = items.filter((item) =>
@@ -236,7 +261,7 @@ export default function ItemsPage() {
     }).format(amount);
   };
 
-  const totalInventoryValue = items.reduce((sum, item) => sum + item.inventoryValue, 0);
+  const totalInventoryValue = items.reduce((sum, item) => sum + (item.inventoryValue || 0), 0);
 
   return (
     <AppLayout title="Items & Inventory">

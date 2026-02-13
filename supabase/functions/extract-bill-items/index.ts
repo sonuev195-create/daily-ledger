@@ -7,6 +7,158 @@ const corsHeaders = {
 
 const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
+// Normalize text for fuzzy matching
+function normalizeText(text: string): string {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[_\s]+/g, " ")
+    .replace(/[^\w\s½¼¾⅓⅔×x]/gi, "")
+    .trim();
+}
+
+// Parse fractional quantities like ½, ¼, 1½, etc.
+function parseFractionalQuantity(val: any): number {
+  if (typeof val === "number") return val;
+  if (!val) return 0;
+  const str = String(val).trim();
+
+  const fractionMap: Record<string, number> = {
+    "¼": 0.25, "½": 0.5, "¾": 0.75,
+    "⅓": 0.333, "⅔": 0.667,
+    "⅕": 0.2, "⅖": 0.4, "⅗": 0.6, "⅘": 0.8,
+    "⅙": 0.167, "⅚": 0.833,
+    "⅛": 0.125, "⅜": 0.375, "⅝": 0.625, "⅞": 0.875,
+  };
+
+  // Direct fraction character
+  if (fractionMap[str]) return fractionMap[str];
+
+  // Mixed: "1½", "2¼" etc
+  for (const [frac, dec] of Object.entries(fractionMap)) {
+    if (str.includes(frac)) {
+      const whole = parseInt(str.replace(frac, "").trim() || "0", 10);
+      return whole + dec;
+    }
+  }
+
+  // Slash fractions: "1/2", "3/4"
+  const slashMatch = str.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (slashMatch) {
+    const num = parseInt(slashMatch[1], 10);
+    const den = parseInt(slashMatch[2], 10);
+    return den !== 0 ? num / den : 0;
+  }
+
+  // Mixed slash: "1 1/2"
+  const mixedSlash = str.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+  if (mixedSlash) {
+    const whole = parseInt(mixedSlash[1], 10);
+    const num = parseInt(mixedSlash[2], 10);
+    const den = parseInt(mixedSlash[3], 10);
+    return den !== 0 ? whole + num / den : whole;
+  }
+
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}
+
+// Levenshtein distance
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+// Check if extracted name is a substring/abbreviation of master name
+function isAbbreviationMatch(extracted: string, master: string): boolean {
+  const extParts = extracted.split(/\s+/);
+  const masterParts = master.split(/\s+/);
+  
+  // Check if each extracted part starts-with or matches some master part
+  let matchedParts = 0;
+  for (const ep of extParts) {
+    if (ep.length < 1) continue;
+    for (const mp of masterParts) {
+      if (mp.startsWith(ep) || ep.startsWith(mp) || mp === ep) {
+        matchedParts++;
+        break;
+      }
+    }
+  }
+  
+  return extParts.length > 0 && matchedParts >= Math.ceil(extParts.length * 0.5);
+}
+
+// Find best match from item master using multiple strategies
+function findBestMatch(
+  extractedName: string,
+  itemNames: string[]
+): { matchedName: string | null; confidence: "high" | "medium" | "low" } {
+  if (!extractedName || itemNames.length === 0) return { matchedName: null, confidence: "low" };
+
+  const normExtracted = normalizeText(extractedName);
+  
+  let bestName: string | null = null;
+  let bestScore = 0;
+
+  for (const masterName of itemNames) {
+    const normMaster = normalizeText(masterName);
+    
+    // Strategy 1: Exact normalized match
+    if (normExtracted === normMaster) {
+      return { matchedName: masterName, confidence: "high" };
+    }
+
+    // Strategy 2: Contains check (extracted in master or vice versa)
+    if (normMaster.includes(normExtracted) || normExtracted.includes(normMaster)) {
+      const score = 0.9;
+      if (score > bestScore) {
+        bestScore = score;
+        bestName = masterName;
+      }
+      continue;
+    }
+
+    // Strategy 3: Abbreviation matching (e.g., "wel 10g" matches "welding rod 10g")
+    if (isAbbreviationMatch(normExtracted, normMaster)) {
+      const score = 0.8;
+      if (score > bestScore) {
+        bestScore = score;
+        bestName = masterName;
+      }
+      continue;
+    }
+
+    // Strategy 4: Levenshtein similarity
+    const maxLen = Math.max(normExtracted.length, normMaster.length);
+    if (maxLen > 0) {
+      const dist = levenshtein(normExtracted, normMaster);
+      const similarity = 1 - dist / maxLen;
+      if (similarity > bestScore) {
+        bestScore = similarity;
+        bestName = masterName;
+      }
+    }
+  }
+
+  if (bestScore >= 0.75) return { matchedName: bestName, confidence: "high" };
+  if (bestScore >= 0.5) return { matchedName: bestName, confidence: "medium" };
+  if (bestScore >= 0.3) return { matchedName: bestName, confidence: "low" };
+  return { matchedName: null, confidence: "low" };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -24,31 +176,29 @@ serve(async (req) => {
       throw new Error("No image provided");
     }
 
-    // Build the prompt with item master names for matching
     const itemNamesStr = itemNames && itemNames.length > 0
-      ? `\n\nHere is the item master list. Match extracted item names to the CLOSEST item from this list (items on paper may be abbreviated or partially written):\n${itemNames.join("\n")}`
+      ? `\n\nHere is the item master list for reference:\n${itemNames.join("\n")}`
       : "";
 
     const prompt = `You are an OCR bill reader. Extract ONLY these 3 columns from each row in this bill/invoice image:
-1. Item Name (as written on the paper)
-2. Quantity (numeric, the quantity/count column - NOT rate)  
+1. Item Name (as written on the paper, exactly as it appears including abbreviations)
+2. Quantity (numeric, the quantity/count column - NOT rate. Handle fractions like ½, ¼, ¾, ⅓)  
 3. Amount/Total (numeric, the total amount for that row - NOT rate per unit)
 
 IMPORTANT: 
 - Extract quantity and amount columns only. Do NOT extract rate/price per unit.
 - Each row in the bill represents one item.
-- Item names on paper may be abbreviated or partially written.
+- Item names on paper may be abbreviated or partially written - extract EXACTLY as written.
+- For quantities with fractions like ½, ¼ etc, convert to decimal (0.5, 0.25 etc).
 - Return ONLY valid JSON array, no other text.
 ${itemNamesStr}
 
 Return JSON array format:
 [
   {
-    "extractedName": "name as written on paper",
-    "matchedName": "best matching name from item master or null if no master list",
+    "extractedName": "name exactly as written on paper",
     "quantity": number,
-    "amount": number,
-    "confidence": "high" | "medium" | "low"
+    "amount": number
   }
 ]
 
@@ -91,15 +241,32 @@ If you cannot read the image or no items found, return an empty array [].`;
     const aiResult = await response.json();
     const content = aiResult.choices?.[0]?.message?.content || "[]";
 
-    // Parse JSON from response (handle markdown code blocks)
-    let items = [];
+    let rawItems = [];
     try {
       const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      items = JSON.parse(jsonStr);
+      rawItems = JSON.parse(jsonStr);
     } catch {
       console.error("Failed to parse AI response:", content);
-      items = [];
+      rawItems = [];
     }
+
+    // Post-process: do server-side fuzzy matching with item master
+    const masterNames = itemNames || [];
+    const items = rawItems.map((raw: any) => {
+      const quantity = parseFractionalQuantity(raw.quantity);
+      const amount = typeof raw.amount === "number" ? raw.amount : parseFloat(raw.amount) || 0;
+      
+      // Use our fuzzy matching instead of AI's matching
+      const match = findBestMatch(raw.extractedName || "", masterNames);
+      
+      return {
+        extractedName: raw.extractedName || "",
+        matchedName: match.matchedName,
+        quantity,
+        amount,
+        confidence: match.confidence,
+      };
+    });
 
     return new Response(JSON.stringify({ items }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

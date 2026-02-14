@@ -411,6 +411,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          paper_bill_name: string | null
           secondary_unit: string | null
           selling_price: number
           updated_at: string
@@ -422,6 +423,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          paper_bill_name?: string | null
           secondary_unit?: string | null
           selling_price?: number
           updated_at?: string
@@ -433,6 +435,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          paper_bill_name?: string | null
           secondary_unit?: string | null
           selling_price?: number
           updated_at?: string

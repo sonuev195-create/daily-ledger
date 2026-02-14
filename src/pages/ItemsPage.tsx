@@ -29,6 +29,7 @@ export default function ItemsPage() {
 
   // Form state
   const [name, setName] = useState('');
+  const [paperBillName, setPaperBillName] = useState('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [secondaryUnit, setSecondaryUnit] = useState('');
   const [conversionRate, setConversionRate] = useState('');
@@ -82,6 +83,7 @@ export default function ItemsPage() {
 
   const resetForm = () => {
     setName('');
+    setPaperBillName('');
     setCategoryId('');
     setSecondaryUnit('');
     setConversionRate('');
@@ -97,6 +99,7 @@ export default function ItemsPage() {
   const handleEdit = (item: Item) => {
     setEditingItem(item);
     setName(item.name);
+    setPaperBillName(item.paperBillName || '');
     setCategoryId(item.categoryId || '');
     setSecondaryUnit(item.secondaryUnit || '');
     setConversionRate(item.conversionRate?.toString() || '');
@@ -125,6 +128,7 @@ export default function ItemsPage() {
     if (editingItem) {
       await updateSupabaseItem(editingItem.id, {
         name,
+        paperBillName: paperBillName || undefined,
         categoryId: categoryId || undefined,
         batchPreference: batchPreference,
         sellingPrice: parseFloat(sellingPrice) || 0,
@@ -135,6 +139,7 @@ export default function ItemsPage() {
     } else {
       const newId = await addSupabaseItem({
         name,
+        paperBillName: paperBillName || undefined,
         categoryId: categoryId || undefined,
         batchPreference: batchPreference,
         sellingPrice: parseFloat(sellingPrice) || 0,
@@ -411,6 +416,20 @@ export default function ItemsPage() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Enter item name"
+                      className="input-field"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                      Paper Bill Name
+                      <span className="text-xs text-muted-foreground/70 ml-1">(how it's usually written on bills)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={paperBillName}
+                      onChange={(e) => setPaperBillName(e.target.value)}
+                      placeholder="e.g., wel 10g, 1x1½ 16g"
                       className="input-field"
                     />
                   </div>

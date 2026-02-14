@@ -67,6 +67,7 @@ export function useItems() {
       setItems(data.map(i => ({
         id: i.id,
         name: i.name,
+        paperBillName: (i as any).paper_bill_name || undefined,
         categoryId: i.category_id || undefined,
         batchPreference: i.batch_preference as BatchPreference,
         sellingPrice: Number(i.selling_price),
@@ -91,12 +92,13 @@ export function useItems() {
   const addItem = async (item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>) => {
     const { data, error } = await supabase.from('items').insert({
       name: item.name,
+      paper_bill_name: item.paperBillName || null,
       category_id: item.categoryId || null,
       batch_preference: item.batchPreference,
       selling_price: item.sellingPrice,
       secondary_unit: item.secondaryUnit || null,
       conversion_rate: item.conversionRate || null,
-    }).select().single();
+    } as any).select().single();
     if (!error && data) { await fetchItems(); return data.id; }
     return null;
   };
@@ -104,13 +106,14 @@ export function useItems() {
   const updateItem = async (id: string, updates: Partial<Item>) => {
     await supabase.from('items').update({
       name: updates.name,
+      paper_bill_name: updates.paperBillName || null,
       category_id: updates.categoryId || null,
       batch_preference: updates.batchPreference,
       selling_price: updates.sellingPrice,
       secondary_unit: updates.secondaryUnit || null,
       conversion_rate: updates.conversionRate || null,
       updated_at: new Date().toISOString(),
-    }).eq('id', id);
+    } as any).eq('id', id);
     await fetchItems();
   };
 

@@ -135,6 +135,7 @@ export interface Employee {
 export interface Item {
   id: string;
   name: string;
+  paperBillName?: string; // How item is commonly written on paper bills
   categoryId?: string;
   batchPreference: BatchPreference; // 'latest' | 'oldest' | 'custom' | 'category'
   sellingPrice: number;

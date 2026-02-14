@@ -101,10 +101,11 @@ function isAbbreviationMatch(extracted: string, master: string): boolean {
   return extParts.length > 0 && matchedParts >= Math.ceil(extParts.length * 0.5);
 }
 
-// Find best match from item master using multiple strategies
+// Find best match from item master using multiple strategies (including paper bill names)
 function findBestMatch(
   extractedName: string,
-  itemNames: string[]
+  itemNames: string[],
+  paperBillNames: Record<string, string> = {}
 ): { matchedName: string | null; confidence: "high" | "medium" | "low" } {
   if (!extractedName || itemNames.length === 0) return { matchedName: null, confidence: "low" };
 
@@ -115,29 +116,39 @@ function findBestMatch(
 
   for (const masterName of itemNames) {
     const normMaster = normalizeText(masterName);
+    const paperName = paperBillNames[masterName];
+    const normPaper = paperName ? normalizeText(paperName) : null;
     
+    // Strategy 0: Match against paper bill name (exact or fuzzy)
+    if (normPaper) {
+      if (normExtracted === normPaper) {
+        return { matchedName: masterName, confidence: "high" };
+      }
+      if (normPaper.includes(normExtracted) || normExtracted.includes(normPaper)) {
+        return { matchedName: masterName, confidence: "high" };
+      }
+      if (isAbbreviationMatch(normExtracted, normPaper)) {
+        const score = 0.92;
+        if (score > bestScore) { bestScore = score; bestName = masterName; }
+      }
+    }
+
     // Strategy 1: Exact normalized match
     if (normExtracted === normMaster) {
       return { matchedName: masterName, confidence: "high" };
     }
 
-    // Strategy 2: Contains check (extracted in master or vice versa)
+    // Strategy 2: Contains check
     if (normMaster.includes(normExtracted) || normExtracted.includes(normMaster)) {
       const score = 0.9;
-      if (score > bestScore) {
-        bestScore = score;
-        bestName = masterName;
-      }
+      if (score > bestScore) { bestScore = score; bestName = masterName; }
       continue;
     }
 
-    // Strategy 3: Abbreviation matching (e.g., "wel 10g" matches "welding rod 10g")
+    // Strategy 3: Abbreviation matching
     if (isAbbreviationMatch(normExtracted, normMaster)) {
       const score = 0.8;
-      if (score > bestScore) {
-        bestScore = score;
-        bestName = masterName;
-      }
+      if (score > bestScore) { bestScore = score; bestName = masterName; }
       continue;
     }
 
@@ -146,9 +157,16 @@ function findBestMatch(
     if (maxLen > 0) {
       const dist = levenshtein(normExtracted, normMaster);
       const similarity = 1 - dist / maxLen;
-      if (similarity > bestScore) {
-        bestScore = similarity;
-        bestName = masterName;
+      if (similarity > bestScore) { bestScore = similarity; bestName = masterName; }
+    }
+    
+    // Also try Levenshtein against paper name
+    if (normPaper) {
+      const maxLen2 = Math.max(normExtracted.length, normPaper.length);
+      if (maxLen2 > 0) {
+        const dist2 = levenshtein(normExtracted, normPaper);
+        const sim2 = 1 - dist2 / maxLen2;
+        if (sim2 > bestScore) { bestScore = sim2; bestName = masterName; }
       }
     }
   }
@@ -170,7 +188,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const { imageBase64, itemNames } = await req.json();
+    const { imageBase64, itemNames, paperBillNames } = await req.json();
 
     if (!imageBase64) {
       throw new Error("No image provided");
@@ -252,12 +270,13 @@ If you cannot read the image or no items found, return an empty array [].`;
 
     // Post-process: do server-side fuzzy matching with item master
     const masterNames = itemNames || [];
+    const paperNames = paperBillNames || {};
     const items = rawItems.map((raw: any) => {
       const quantity = parseFractionalQuantity(raw.quantity);
       const amount = typeof raw.amount === "number" ? raw.amount : parseFloat(raw.amount) || 0;
       
-      // Use our fuzzy matching instead of AI's matching
-      const match = findBestMatch(raw.extractedName || "", masterNames);
+      // Use our fuzzy matching including paper bill names
+      const match = findBestMatch(raw.extractedName || "", masterNames, paperNames);
       
       return {
         extractedName: raw.extractedName || "",

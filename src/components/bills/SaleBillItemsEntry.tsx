@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Trash2, Plus, ChevronDown, ChevronUp, Package, Camera, Upload, Loader2, CheckCircle2, AlertCircle, XCircle, Edit2 } from 'lucide-react';
+import { Trash2, Plus, ChevronDown, ChevronUp, Package, Camera, Upload, Loader2, CheckCircle2, AlertCircle, XCircle, Edit2, Check } from 'lucide-react';
 import { BillItem, Item, Batch, BatchPreference, Category } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
@@ -15,6 +15,7 @@ interface ExtractedOcrItem {
   amount: number;
   confidence: 'high' | 'medium' | 'low';
   selectedItemId: string | null; // user-corrected item
+  confirmed: boolean; // user confirmed match is correct
 }
 
 interface BatchWithStock extends Batch {
@@ -249,9 +250,13 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
       });
 
       const itemNames = allItems.map(i => i.name);
+      const paperBillNames = allItems.reduce((acc: Record<string, string>, i) => {
+        if (i.paperBillName) acc[i.name] = i.paperBillName;
+        return acc;
+      }, {});
 
       const { data, error } = await supabase.functions.invoke('extract-bill-items', {
-        body: { imageBase64: base64, itemNames },
+        body: { imageBase64: base64, itemNames, paperBillNames },
       });
 
       if (error) throw error;
@@ -266,6 +271,7 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
       const reviewItems: ExtractedOcrItem[] = extracted.map((ext: any) => {
         const matchName = ext.matchedName || ext.extractedName;
         const masterItem = allItems.find(i => i.name.toLowerCase() === matchName?.toLowerCase());
+        const isHighConfidence = ext.confidence === 'high' && !!masterItem;
         return {
           extractedName: ext.extractedName,
           matchedName: ext.matchedName,
@@ -273,6 +279,7 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
           amount: ext.amount || 0,
           confidence: ext.confidence || 'low',
           selectedItemId: masterItem?.id || null,
+          confirmed: isHighConfidence, // auto-confirm high confidence matches
         };
       });
 
@@ -421,7 +428,7 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
 
           {/* Header */}
           <div className="grid grid-cols-12 gap-1 text-[10px] font-medium text-muted-foreground px-1">
-            <div className="col-span-1"></div>
+            <div className="col-span-1">✓</div>
             <div className="col-span-3">Paper Name</div>
             <div className="col-span-4">Match To</div>
             <div className="col-span-1 text-center">Qty</div>
@@ -434,11 +441,24 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
               "grid grid-cols-12 gap-1 px-1 py-1.5 rounded-lg text-xs items-center",
               item.confidence === 'low' ? 'bg-destructive/5' : item.confidence === 'medium' ? 'bg-warning/5' : 'bg-success/5'
             )}>
-              {/* Confidence icon */}
+              {/* Confirmed tick */}
               <div className="col-span-1 flex justify-center">
-                {item.confidence === 'high' ? <CheckCircle2 className="w-3.5 h-3.5 text-success" /> :
-                 item.confidence === 'medium' ? <AlertCircle className="w-3.5 h-3.5 text-warning" /> :
-                 <XCircle className="w-3.5 h-3.5 text-destructive" />}
+                <button
+                  onClick={() => {
+                    if (!ocrReviewItems) return;
+                    const updated = [...ocrReviewItems];
+                    updated[idx] = { ...updated[idx], confirmed: !updated[idx].confirmed };
+                    setOcrReviewItems(updated);
+                  }}
+                  className={cn(
+                    "w-5 h-5 rounded border flex items-center justify-center transition-colors",
+                    item.confirmed 
+                      ? "bg-green-500 border-green-500 text-white" 
+                      : "border-border hover:border-muted-foreground"
+                  )}
+                >
+                  {item.confirmed && <Check className="w-3 h-3" />}
+                </button>
               </div>
 
               {/* Extracted name - editable */}

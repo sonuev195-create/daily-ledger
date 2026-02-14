@@ -1,0 +1,1 @@
+ALTER TABLE public.items ADD COLUMN paper_bill_name text;

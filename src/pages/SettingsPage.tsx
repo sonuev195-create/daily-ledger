@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Camera, Upload, Loader2, Check, Trash2 } from 'lucide-react';
+import { Settings, Camera, Upload, Loader2, Check, Trash2, Save, TableProperties } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useItems } from '@/hooks/useSupabaseData';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +17,27 @@ interface ExtractedItem {
   confirmed: boolean;
 }
 
+interface BillFormatConfig {
+  id?: string;
+  config_name: string;
+  bill_type: string;
+  total_columns: number;
+  item_name_column: number;
+  quantity_column: number;
+  quantity_type: string;
+  rate_column: number | null;
+  amount_column: number;
+  has_rate: boolean;
+  has_amount: boolean;
+}
+
+const COLUMN_FIELDS = [
+  { key: 'item_name_column', label: 'Item Name', icon: '📝' },
+  { key: 'quantity_column', label: 'Quantity', icon: '🔢' },
+  { key: 'rate_column', label: 'Rate/Price', icon: '💰' },
+  { key: 'amount_column', label: 'Amount/Total', icon: '💵' },
+];
+
 export default function SettingsPage() {
   const { items: allItems } = useItems();
   const [isExtracting, setIsExtracting] = useState(false);
@@ -24,6 +45,86 @@ export default function SettingsPage() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Bill format config state
+  const [formatConfig, setFormatConfig] = useState<BillFormatConfig>({
+    config_name: 'default',
+    bill_type: 'both',
+    total_columns: 4,
+    item_name_column: 1,
+    quantity_column: 2,
+    quantity_type: 'primary',
+    rate_column: 3,
+    amount_column: 4,
+    has_rate: true,
+    has_amount: true,
+  });
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(false);
+
+  // Load existing config
+  useEffect(() => {
+    loadFormatConfig();
+  }, []);
+
+  const loadFormatConfig = async () => {
+    const { data } = await supabase
+      .from('bill_format_config')
+      .select('*')
+      .eq('config_name', 'default')
+      .maybeSingle();
+
+    if (data) {
+      setFormatConfig(data as BillFormatConfig);
+    }
+    setConfigLoaded(true);
+  };
+
+  const saveFormatConfig = async () => {
+    setSavingConfig(true);
+    try {
+      if (formatConfig.id) {
+        await supabase
+          .from('bill_format_config')
+          .update({
+            bill_type: formatConfig.bill_type,
+            total_columns: formatConfig.total_columns,
+            item_name_column: formatConfig.item_name_column,
+            quantity_column: formatConfig.quantity_column,
+            quantity_type: formatConfig.quantity_type,
+            rate_column: formatConfig.has_rate ? formatConfig.rate_column : null,
+            amount_column: formatConfig.amount_column,
+            has_rate: formatConfig.has_rate,
+            has_amount: formatConfig.has_amount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', formatConfig.id);
+      } else {
+        const { data } = await supabase
+          .from('bill_format_config')
+          .insert({
+            config_name: 'default',
+            bill_type: formatConfig.bill_type,
+            total_columns: formatConfig.total_columns,
+            item_name_column: formatConfig.item_name_column,
+            quantity_column: formatConfig.quantity_column,
+            quantity_type: formatConfig.quantity_type,
+            rate_column: formatConfig.has_rate ? formatConfig.rate_column : null,
+            amount_column: formatConfig.amount_column,
+            has_rate: formatConfig.has_rate,
+            has_amount: formatConfig.has_amount,
+          })
+          .select()
+          .single();
+        if (data) setFormatConfig(prev => ({ ...prev, id: data.id }));
+      }
+      toast.success('Bill format configuration saved! The app is now trained for your paper bills.');
+    } catch (err) {
+      toast.error('Failed to save configuration');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   const handleTest = async (file: File) => {
     setIsExtracting(true);
@@ -43,8 +144,20 @@ export default function SettingsPage() {
         return acc;
       }, {});
 
+      // Pass column mapping config
+      const columnMapping = {
+        totalColumns: formatConfig.total_columns,
+        itemNameColumn: formatConfig.item_name_column,
+        quantityColumn: formatConfig.quantity_column,
+        quantityType: formatConfig.quantity_type,
+        rateColumn: formatConfig.has_rate ? formatConfig.rate_column : null,
+        amountColumn: formatConfig.amount_column,
+        hasRate: formatConfig.has_rate,
+        hasAmount: formatConfig.has_amount,
+      };
+
       const { data, error } = await supabase.functions.invoke('extract-bill-items', {
-        body: { imageBase64: base64, itemNames, paperBillNames },
+        body: { imageBase64: base64, itemNames, paperBillNames, columnMapping },
       });
 
       if (error) throw error;
@@ -101,18 +214,245 @@ export default function SettingsPage() {
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(amount);
 
+  const columnNumbers = Array.from({ length: formatConfig.total_columns }, (_, i) => i + 1);
+
   return (
     <AppLayout title="Settings">
-      <div className="max-w-3xl mx-auto px-4 py-6 pb-24 lg:py-8">
+      <div className="max-w-3xl mx-auto px-4 py-6 pb-24 lg:py-8 space-y-6">
         <div className="hidden lg:block mb-8">
           <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-          <p className="text-muted-foreground">Application settings and tools</p>
+          <p className="text-muted-foreground">Application settings and training</p>
         </div>
 
-        {/* OCR Matching Test Section */}
+        {/* ========== Bill Format Training Section ========== */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          className="bg-secondary/30 rounded-2xl p-5 space-y-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <TableProperties className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-foreground">Paper Bill Column Training</h2>
+              <p className="text-xs text-muted-foreground">
+                Define the layout of your paper bills so the app knows which column is item name, quantity, rate, and amount.
+              </p>
+            </div>
+          </div>
+
+          {/* Bill type selection */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Apply to</label>
+            <div className="flex gap-2">
+              {(['both', 'sale', 'purchase'] as const).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setFormatConfig(prev => ({ ...prev, bill_type: type }))}
+                  className={cn(
+                    "px-3 py-2 rounded-xl text-sm font-medium transition-all",
+                    formatConfig.bill_type === type
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+                  )}
+                >
+                  {type === 'both' ? 'Sale & Purchase' : type.charAt(0).toUpperCase() + type.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Total columns */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              How many columns does your paper bill have?
+            </label>
+            <div className="flex gap-2">
+              {[3, 4, 5, 6].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setFormatConfig(prev => ({ ...prev, total_columns: n }))}
+                  className={cn(
+                    "w-10 h-10 rounded-xl text-sm font-bold transition-all",
+                    formatConfig.total_columns === n
+                      ? "bg-accent text-accent-foreground"
+                      : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Column Mapping - Visual */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-2 block">
+              Assign each column number to a field (tick the ones present in your bill)
+            </label>
+
+            {/* Visual column preview */}
+            <div className="mb-3 bg-background rounded-xl p-3 border border-border">
+              <div className="text-[10px] text-muted-foreground mb-2">Paper Bill Column Preview:</div>
+              <div className="flex gap-1">
+                {columnNumbers.map(col => {
+                  let label = `Col ${col}`;
+                  let bgClass = 'bg-secondary/50';
+                  if (col === formatConfig.item_name_column) { label = '📝 Item'; bgClass = 'bg-primary/15'; }
+                  else if (col === formatConfig.quantity_column) { label = '🔢 Qty'; bgClass = 'bg-info/15'; }
+                  else if (formatConfig.has_rate && col === formatConfig.rate_column) { label = '💰 Rate'; bgClass = 'bg-warning/15'; }
+                  else if (col === formatConfig.amount_column) { label = '💵 Amt'; bgClass = 'bg-success/15'; }
+                  return (
+                    <div key={col} className={cn("flex-1 text-center py-2 px-1 rounded-lg text-[11px] font-medium", bgClass)}>
+                      {label}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {/* Item Name Column */}
+              <div className="flex items-center justify-between bg-background rounded-lg p-3 border border-border">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">📝</span>
+                  <span className="text-xs font-medium">Item Name</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">Column #</span>
+                  <select
+                    value={formatConfig.item_name_column}
+                    onChange={(e) => setFormatConfig(prev => ({ ...prev, item_name_column: parseInt(e.target.value) }))}
+                    className="w-14 h-8 text-center text-xs bg-secondary/50 border border-border rounded-lg"
+                  >
+                    {columnNumbers.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Quantity Column */}
+              <div className="flex items-center justify-between bg-background rounded-lg p-3 border border-border">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">🔢</span>
+                  <div>
+                    <span className="text-xs font-medium">Quantity</span>
+                    <div className="flex gap-1 mt-1">
+                      {(['primary', 'secondary'] as const).map(qt => (
+                        <button
+                          key={qt}
+                          onClick={() => setFormatConfig(prev => ({ ...prev, quantity_type: qt }))}
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[10px] transition-all",
+                            formatConfig.quantity_type === qt
+                              ? "bg-info text-white"
+                              : "bg-secondary/50 text-muted-foreground"
+                          )}
+                        >
+                          {qt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">Column #</span>
+                  <select
+                    value={formatConfig.quantity_column}
+                    onChange={(e) => setFormatConfig(prev => ({ ...prev, quantity_column: parseInt(e.target.value) }))}
+                    className="w-14 h-8 text-center text-xs bg-secondary/50 border border-border rounded-lg"
+                  >
+                    {columnNumbers.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Rate Column (optional) */}
+              <div className={cn(
+                "flex items-center justify-between bg-background rounded-lg p-3 border transition-all",
+                formatConfig.has_rate ? "border-border" : "border-border/50 opacity-60"
+              )}>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setFormatConfig(prev => ({ ...prev, has_rate: !prev.has_rate }))}
+                    className={cn(
+                      "w-5 h-5 rounded border flex items-center justify-center transition-colors",
+                      formatConfig.has_rate
+                        ? "bg-warning border-warning text-white"
+                        : "border-border hover:border-muted-foreground"
+                    )}
+                  >
+                    {formatConfig.has_rate && <Check className="w-3 h-3" />}
+                  </button>
+                  <span className="text-sm">💰</span>
+                  <span className="text-xs font-medium">Rate/Price per unit</span>
+                </div>
+                {formatConfig.has_rate && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground">Column #</span>
+                    <select
+                      value={formatConfig.rate_column || ''}
+                      onChange={(e) => setFormatConfig(prev => ({ ...prev, rate_column: parseInt(e.target.value) }))}
+                      className="w-14 h-8 text-center text-xs bg-secondary/50 border border-border rounded-lg"
+                    >
+                      {columnNumbers.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Amount Column */}
+              <div className={cn(
+                "flex items-center justify-between bg-background rounded-lg p-3 border transition-all",
+                formatConfig.has_amount ? "border-border" : "border-border/50 opacity-60"
+              )}>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setFormatConfig(prev => ({ ...prev, has_amount: !prev.has_amount }))}
+                    className={cn(
+                      "w-5 h-5 rounded border flex items-center justify-center transition-colors",
+                      formatConfig.has_amount
+                        ? "bg-green-500 border-green-500 text-white"
+                        : "border-border hover:border-muted-foreground"
+                    )}
+                  >
+                    {formatConfig.has_amount && <Check className="w-3 h-3" />}
+                  </button>
+                  <span className="text-sm">💵</span>
+                  <span className="text-xs font-medium">Amount/Total</span>
+                </div>
+                {formatConfig.has_amount && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground">Column #</span>
+                    <select
+                      value={formatConfig.amount_column}
+                      onChange={(e) => setFormatConfig(prev => ({ ...prev, amount_column: parseInt(e.target.value) }))}
+                      className="w-14 h-8 text-center text-xs bg-secondary/50 border border-border rounded-lg"
+                    >
+                      {columnNumbers.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Save Config */}
+          <button
+            onClick={saveFormatConfig}
+            disabled={savingConfig}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save Training Config
+          </button>
+        </motion.div>
+
+        {/* ========== OCR Matching Test Section ========== */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
           className="bg-secondary/30 rounded-2xl p-5 space-y-4"
         >
           <div className="flex items-center gap-3">
@@ -122,7 +462,7 @@ export default function SettingsPage() {
             <div>
               <h2 className="font-semibold text-foreground">OCR Bill Matching Test</h2>
               <p className="text-xs text-muted-foreground">
-                Upload or capture a bill image to test item extraction & matching against your item master ({allItems.length} items registered)
+                Upload or capture a bill image to test extraction using the column config above ({allItems.length} items registered)
               </p>
             </div>
           </div>
@@ -168,7 +508,6 @@ export default function SettingsPage() {
                 Extraction Results ({extractedItems.length} items)
               </h3>
 
-              {/* Summary */}
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-green-500/10 rounded-lg p-2">
                   <p className="text-lg font-bold text-green-600">{extractedItems.filter(i => i.confirmed).length}</p>
@@ -184,7 +523,6 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Item Details */}
               <div className="bg-background rounded-xl overflow-hidden border border-border">
                 <div className="grid grid-cols-12 gap-1 p-2 bg-secondary/50 text-[10px] font-medium text-muted-foreground">
                   <div className="col-span-1">✓</div>
@@ -196,7 +534,6 @@ export default function SettingsPage() {
                 </div>
                 {extractedItems.map((item, idx) => (
                   <div key={idx} className="grid grid-cols-12 gap-1 p-2 border-t border-border/50 text-xs items-center">
-                    {/* Confirmed tick */}
                     <div className="col-span-1">
                       <button
                         onClick={() => {
@@ -214,8 +551,6 @@ export default function SettingsPage() {
                         {item.confirmed && <Check className="w-3 h-3" />}
                       </button>
                     </div>
-
-                    {/* Extracted name - editable */}
                     <div className="col-span-3">
                       <input
                         type="text"
@@ -226,11 +561,8 @@ export default function SettingsPage() {
                           setExtractedItems(updated);
                         }}
                         className="w-full h-6 px-1 text-[11px] bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent truncate"
-                        title={item.extractedName}
                       />
                     </div>
-
-                    {/* Item master select dropdown */}
                     <div className="col-span-3">
                       <select
                         value={item.selectedItemId || ''}
@@ -246,8 +578,6 @@ export default function SettingsPage() {
                         ))}
                       </select>
                     </div>
-
-                    {/* Qty - editable */}
                     <div className="col-span-2">
                       <input
                         type="number"
@@ -260,8 +590,6 @@ export default function SettingsPage() {
                         className="w-full h-6 px-1 text-xs text-center bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
                       />
                     </div>
-
-                    {/* Amount - editable */}
                     <div className="col-span-2">
                       <input
                         type="number"
@@ -274,8 +602,6 @@ export default function SettingsPage() {
                         className="w-full h-6 px-1 text-xs text-right bg-background/50 border border-border rounded focus:ring-1 focus:ring-accent"
                       />
                     </div>
-
-                    {/* Remove */}
                     <div className="col-span-1 flex justify-center">
                       <button
                         onClick={() => setExtractedItems(extractedItems.filter((_, i) => i !== idx))}
@@ -288,7 +614,6 @@ export default function SettingsPage() {
                 ))}
               </div>
 
-              {/* Total */}
               <div className="flex justify-between items-center p-3 bg-accent/10 rounded-xl">
                 <span className="text-sm font-medium text-muted-foreground">
                   {extractedItems.filter(i => i.confirmed).length}/{extractedItems.length} confirmed

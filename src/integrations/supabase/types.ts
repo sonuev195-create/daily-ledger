@@ -76,6 +76,54 @@ export type Database = {
           },
         ]
       }
+      bill_format_config: {
+        Row: {
+          amount_column: number
+          bill_type: string
+          config_name: string
+          created_at: string
+          has_amount: boolean
+          has_rate: boolean
+          id: string
+          item_name_column: number
+          quantity_column: number
+          quantity_type: string
+          rate_column: number | null
+          total_columns: number
+          updated_at: string
+        }
+        Insert: {
+          amount_column?: number
+          bill_type?: string
+          config_name?: string
+          created_at?: string
+          has_amount?: boolean
+          has_rate?: boolean
+          id?: string
+          item_name_column?: number
+          quantity_column?: number
+          quantity_type?: string
+          rate_column?: number | null
+          total_columns?: number
+          updated_at?: string
+        }
+        Update: {
+          amount_column?: number
+          bill_type?: string
+          config_name?: string
+          created_at?: string
+          has_amount?: boolean
+          has_rate?: boolean
+          id?: string
+          item_name_column?: number
+          quantity_column?: number
+          quantity_type?: string
+          rate_column?: number | null
+          total_columns?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bill_items: {
         Row: {
           batch_id: string | null

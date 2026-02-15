@@ -33,10 +33,8 @@ function parseFractionalQuantity(val: any): number {
     "⅛": 0.125, "⅜": 0.375, "⅝": 0.625, "⅞": 0.875,
   };
 
-  // Direct fraction character
   if (fractionMap[str]) return fractionMap[str];
 
-  // Mixed: "1½", "2¼" etc
   for (const [frac, dec] of Object.entries(fractionMap)) {
     if (str.includes(frac)) {
       const whole = parseInt(str.replace(frac, "").trim() || "0", 10);
@@ -44,7 +42,6 @@ function parseFractionalQuantity(val: any): number {
     }
   }
 
-  // Slash fractions: "1/2", "3/4"
   const slashMatch = str.match(/^(\d+)\s*\/\s*(\d+)$/);
   if (slashMatch) {
     const num = parseInt(slashMatch[1], 10);
@@ -52,7 +49,6 @@ function parseFractionalQuantity(val: any): number {
     return den !== 0 ? num / den : 0;
   }
 
-  // Mixed slash: "1 1/2"
   const mixedSlash = str.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
   if (mixedSlash) {
     const whole = parseInt(mixedSlash[1], 10);
@@ -81,12 +77,9 @@ function levenshtein(a: string, b: string): number {
   return dp[m][n];
 }
 
-// Check if extracted name is a substring/abbreviation of master name
 function isAbbreviationMatch(extracted: string, master: string): boolean {
   const extParts = extracted.split(/\s+/);
   const masterParts = master.split(/\s+/);
-  
-  // Check if each extracted part starts-with or matches some master part
   let matchedParts = 0;
   for (const ep of extParts) {
     if (ep.length < 1) continue;
@@ -97,11 +90,9 @@ function isAbbreviationMatch(extracted: string, master: string): boolean {
       }
     }
   }
-  
   return extParts.length > 0 && matchedParts >= Math.ceil(extParts.length * 0.5);
 }
 
-// Find best match from item master using multiple strategies (including paper bill names)
 function findBestMatch(
   extractedName: string,
   itemNames: string[],
@@ -110,7 +101,6 @@ function findBestMatch(
   if (!extractedName || itemNames.length === 0) return { matchedName: null, confidence: "low" };
 
   const normExtracted = normalizeText(extractedName);
-  
   let bestName: string | null = null;
   let bestScore = 0;
 
@@ -118,49 +108,37 @@ function findBestMatch(
     const normMaster = normalizeText(masterName);
     const paperName = paperBillNames[masterName];
     const normPaper = paperName ? normalizeText(paperName) : null;
-    
-    // Strategy 0: Match against paper bill name (exact or fuzzy)
+
     if (normPaper) {
-      if (normExtracted === normPaper) {
-        return { matchedName: masterName, confidence: "high" };
-      }
-      if (normPaper.includes(normExtracted) || normExtracted.includes(normPaper)) {
-        return { matchedName: masterName, confidence: "high" };
-      }
+      if (normExtracted === normPaper) return { matchedName: masterName, confidence: "high" };
+      if (normPaper.includes(normExtracted) || normExtracted.includes(normPaper)) return { matchedName: masterName, confidence: "high" };
       if (isAbbreviationMatch(normExtracted, normPaper)) {
         const score = 0.92;
         if (score > bestScore) { bestScore = score; bestName = masterName; }
       }
     }
 
-    // Strategy 1: Exact normalized match
-    if (normExtracted === normMaster) {
-      return { matchedName: masterName, confidence: "high" };
-    }
+    if (normExtracted === normMaster) return { matchedName: masterName, confidence: "high" };
 
-    // Strategy 2: Contains check
     if (normMaster.includes(normExtracted) || normExtracted.includes(normMaster)) {
       const score = 0.9;
       if (score > bestScore) { bestScore = score; bestName = masterName; }
       continue;
     }
 
-    // Strategy 3: Abbreviation matching
     if (isAbbreviationMatch(normExtracted, normMaster)) {
       const score = 0.8;
       if (score > bestScore) { bestScore = score; bestName = masterName; }
       continue;
     }
 
-    // Strategy 4: Levenshtein similarity
     const maxLen = Math.max(normExtracted.length, normMaster.length);
     if (maxLen > 0) {
       const dist = levenshtein(normExtracted, normMaster);
       const similarity = 1 - dist / maxLen;
       if (similarity > bestScore) { bestScore = similarity; bestName = masterName; }
     }
-    
-    // Also try Levenshtein against paper name
+
     if (normPaper) {
       const maxLen2 = Math.max(normExtracted.length, normPaper.length);
       if (maxLen2 > 0) {
@@ -177,28 +155,62 @@ function findBestMatch(
   return { matchedName: null, confidence: "low" };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+// Build dynamic prompt based on column mapping config
+function buildExtractionPrompt(
+  itemNamesStr: string,
+  columnMapping?: {
+    totalColumns?: number;
+    itemNameColumn?: number;
+    quantityColumn?: number;
+    quantityType?: string;
+    rateColumn?: number | null;
+    amountColumn?: number;
+    hasRate?: boolean;
+    hasAmount?: boolean;
+  }
+): string {
+  if (columnMapping && columnMapping.totalColumns) {
+    const cols = columnMapping.totalColumns;
+    const parts: string[] = [];
+    parts.push(`This paper bill has ${cols} columns.`);
+    parts.push(`Column ${columnMapping.itemNameColumn} = Item Name`);
+    parts.push(`Column ${columnMapping.quantityColumn} = Quantity (${columnMapping.quantityType || 'primary'})`);
+    if (columnMapping.hasRate && columnMapping.rateColumn) {
+      parts.push(`Column ${columnMapping.rateColumn} = Rate/Price per unit`);
+    }
+    if (columnMapping.hasAmount) {
+      parts.push(`Column ${columnMapping.amountColumn} = Amount/Total`);
+    }
+
+    const extractFields: string[] = ["extractedName (from Item Name column)"];
+    extractFields.push("quantity (from Quantity column)");
+    if (columnMapping.hasRate && columnMapping.rateColumn) extractFields.push("rate (from Rate column)");
+    if (columnMapping.hasAmount) extractFields.push("amount (from Amount column)");
+
+    return `You are an OCR bill reader. The paper bill has a specific column layout:
+${parts.join("\n")}
+
+Extract each row from the bill image according to this column mapping.
+
+IMPORTANT:
+- Item names on paper may be abbreviated - extract EXACTLY as written.
+- For quantities with fractions like ½, ¼ etc, convert to decimal.
+- Return ONLY valid JSON array, no other text.
+${itemNamesStr}
+
+Return JSON array format:
+[
+  {
+    "extractedName": "name exactly as written on paper",
+    "quantity": number${columnMapping.hasRate && columnMapping.rateColumn ? ',\n    "rate": number' : ''}${columnMapping.hasAmount ? ',\n    "amount": number' : ''}
+  }
+]
+
+If you cannot read the image or no items found, return an empty array [].`;
   }
 
-  try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
-    const { imageBase64, itemNames, paperBillNames } = await req.json();
-
-    if (!imageBase64) {
-      throw new Error("No image provided");
-    }
-
-    const itemNamesStr = itemNames && itemNames.length > 0
-      ? `\n\nHere is the item master list for reference:\n${itemNames.join("\n")}`
-      : "";
-
-    const prompt = `You are an OCR bill reader. Extract ONLY these 3 columns from each row in this bill/invoice image:
+  // Default prompt (no column mapping)
+  return `You are an OCR bill reader. Extract ONLY these 3 columns from each row in this bill/invoice image:
 1. Item Name (as written on the paper, exactly as it appears including abbreviations)
 2. Quantity (numeric, the quantity/count column - NOT rate. Handle fractions like ½, ¼, ¾, ⅓)  
 3. Amount/Total (numeric, the total amount for that row - NOT rate per unit)
@@ -221,6 +233,30 @@ Return JSON array format:
 ]
 
 If you cannot read the image or no items found, return an empty array [].`;
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
+    }
+
+    const { imageBase64, itemNames, paperBillNames, columnMapping } = await req.json();
+
+    if (!imageBase64) {
+      throw new Error("No image provided");
+    }
+
+    const itemNamesStr = itemNames && itemNames.length > 0
+      ? `\n\nHere is the item master list for reference:\n${itemNames.join("\n")}`
+      : "";
+
+    const prompt = buildExtractionPrompt(itemNamesStr, columnMapping);
 
     const response = await fetch(AI_GATEWAY_URL, {
       method: "POST",
@@ -268,20 +304,30 @@ If you cannot read the image or no items found, return an empty array [].`;
       rawItems = [];
     }
 
-    // Post-process: do server-side fuzzy matching with item master
     const masterNames = itemNames || [];
     const paperNames = paperBillNames || {};
+    const hasRate = columnMapping?.hasRate && columnMapping?.rateColumn;
+    const hasAmount = columnMapping?.hasAmount !== false;
+
     const items = rawItems.map((raw: any) => {
       const quantity = parseFractionalQuantity(raw.quantity);
-      const amount = typeof raw.amount === "number" ? raw.amount : parseFloat(raw.amount) || 0;
+      const rate = hasRate ? (typeof raw.rate === "number" ? raw.rate : parseFloat(raw.rate) || 0) : 0;
+      let amount = hasAmount ? (typeof raw.amount === "number" ? raw.amount : parseFloat(raw.amount) || 0) : 0;
       
-      // Use our fuzzy matching including paper bill names
+      // If we have rate but no amount, calculate it
+      if (hasRate && !hasAmount && rate > 0 && quantity > 0) {
+        amount = quantity * rate;
+      }
+      // If we have both rate and amount, use amount as-is
+      // If we have neither, amount stays 0
+
       const match = findBestMatch(raw.extractedName || "", masterNames, paperNames);
-      
+
       return {
         extractedName: raw.extractedName || "",
         matchedName: match.matchedName,
         quantity,
+        rate,
         amount,
         confidence: match.confidence,
       };

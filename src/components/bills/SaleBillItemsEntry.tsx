@@ -238,6 +238,17 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
     }
   }, [billItems.length > 0 && billItems[billItems.length - 1]?.itemId, billItems[billItems.length - 1]?.primaryQuantity]);
 
+  // Load bill format config for OCR
+  const loadBillFormatConfig = async () => {
+    const { data } = await supabase
+      .from('bill_format_config')
+      .select('*')
+      .in('bill_type', ['sale', 'both'])
+      .limit(1)
+      .maybeSingle();
+    return data;
+  };
+
   // OCR: Extract items from bill image - now shows review step
   const handleImageExtract = async (file: File) => {
     setIsExtracting(true);
@@ -255,8 +266,21 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
         return acc;
       }, {});
 
+      // Load column config
+      const formatConfig = await loadBillFormatConfig();
+      const columnMapping = formatConfig ? {
+        totalColumns: formatConfig.total_columns,
+        itemNameColumn: formatConfig.item_name_column,
+        quantityColumn: formatConfig.quantity_column,
+        quantityType: formatConfig.quantity_type,
+        rateColumn: formatConfig.rate_column,
+        amountColumn: formatConfig.amount_column,
+        hasRate: formatConfig.has_rate,
+        hasAmount: formatConfig.has_amount,
+      } : undefined;
+
       const { data, error } = await supabase.functions.invoke('extract-bill-items', {
-        body: { imageBase64: base64, itemNames, paperBillNames },
+        body: { imageBase64: base64, itemNames, paperBillNames, columnMapping },
       });
 
       if (error) throw error;

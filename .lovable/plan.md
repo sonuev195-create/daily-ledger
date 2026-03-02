@@ -1,11 +1,12 @@
 
 
+
 ## Plan: Redesign Customer Section with Inline Spreadsheet-Style Entry
 
 ### Overview
 Replace the current subcategory filter chips + popup sheet approach in the Customer accordion with an inline, spreadsheet-like entry system. Each row has a type dropdown as the first column, and subsequent columns change dynamically based on the selected type.
 
-### Phase 1: New Component — `CustomerInlineEntry`
+### Phase 1: New Component — `CustomerInlineEntry` ✅ DONE
 
 Create `src/components/today/CustomerInlineEntry.tsx` that replaces `CategoryTransactionList` for the customer category.
 
@@ -31,20 +32,20 @@ Create `src/components/today/CustomerInlineEntry.tsx` that replaces `CategoryTra
 - When advance is available and customer is selected in Sale, show advance amount and auto-add to payment total
 - Due amount auto-saves to customer ledger and creates due bill record
 
-### Phase 2: Modify `CategoryTransactionList` & `TodayPage`
+### Phase 2: Modify `CategoryTransactionList` & `TodayPage` ✅ DONE
 
 - In `TodayPage.tsx`, when `categoryId === 'customer'`, render `CustomerInlineEntry` instead of `CategoryTransactionList`
 - Pass `transactions`, `selectedDate`, and handlers for add/edit/delete
 - Remove the subcategory chip filter for customer (no longer needed)
 
-### Phase 3: Balance Payment — Multi-Bill Selection
+### Phase 3: Balance Payment — Multi-Bill Selection ✅ DONE
 
 - When "Balance Payment" is selected and customer is searched, fetch all due bills for that customer
 - Display as a checkbox list showing bill number, date, due amount
 - Allow ticking multiple bills — payment fills first bill's due, overflow carries to next
 - Payment mode selector with multi-mode support (cash + upi split)
 
-### Phase 4: Transaction Display as Spreadsheet Rows
+### Phase 4: Transaction Display as Spreadsheet Rows ✅ DONE
 
 - Existing customer transactions for the day shown as compact horizontal rows matching the column structure
 - Each row has an edit icon (pencil) and delete icon (trash) on the right
@@ -67,4 +68,3 @@ Create `src/components/today/CustomerInlineEntry.tsx` that replaces `CategoryTra
 - `getDueBillsForCustomer` for balance payment bill selection
 
 **No database changes needed** — all required tables and columns already exist.
-

@@ -5,6 +5,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { CategoryAccordion, CategoryId } from '@/components/today/CategoryAccordion';
 import { DrawerAccordionContent } from '@/components/today/DrawerAccordionContent';
 import { CategoryTransactionList } from '@/components/today/CategoryTransactionList';
+import { CustomerInlineEntry } from '@/components/today/CustomerInlineEntry';
 import { AddTransactionSheet } from '@/components/transactions/AddTransactionSheet';
 import { BillDetailsSheet } from '@/components/bills/BillDetailsSheet';
 import { useTransactions } from '@/hooks/useTransactions';
@@ -101,6 +102,17 @@ export default function TodayPage() {
           summary={summary}
           onSaveOpening={updateOpening}
           onSaveClosing={updateClosing}
+        />
+      );
+    }
+    if (categoryId === 'customer') {
+      return (
+        <CustomerInlineEntry
+          transactions={transactions}
+          selectedDate={selectedDate}
+          onSave={handleSave}
+          onEditTransaction={handleEdit}
+          onDeleteTransaction={handleDelete}
         />
       );
     }

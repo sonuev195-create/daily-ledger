@@ -34,6 +34,7 @@ const menuItems = [
   { id: 'today', label: 'Today', icon: Calendar, path: '/' },
   { id: 'all-date', label: 'All Date', icon: CalendarDays, path: '/all-dates' },
   { id: 'bill', label: 'Bill', icon: Receipt, path: '/bills' },
+  { id: 'customers', label: 'Customers', icon: Users, path: '/customers' },
   { id: 'customer-advance', label: 'Customer Advance', icon: UserPlus, path: '/customer-advance' },
   { id: 'balance-paid', label: 'Balance Paid', icon: Wallet, path: '/balance-paid' },
   { id: 'purchase', label: 'Purchase', icon: ShoppingCart, path: '/purchase' },

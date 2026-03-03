@@ -6,12 +6,13 @@ import { CategoryAccordion, CategoryId } from '@/components/today/CategoryAccord
 import { DrawerAccordionContent } from '@/components/today/DrawerAccordionContent';
 import { CategoryTransactionList } from '@/components/today/CategoryTransactionList';
 import { CustomerInlineEntry } from '@/components/today/CustomerInlineEntry';
+import { PurchaseInlineEntry } from '@/components/today/PurchaseInlineEntry';
+import { EmployeeInlineEntry } from '@/components/today/EmployeeInlineEntry';
 import { AddTransactionSheet } from '@/components/transactions/AddTransactionSheet';
 import { BillDetailsSheet } from '@/components/bills/BillDetailsSheet';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useDrawer } from '@/hooks/useDrawer';
 import { Transaction, TransactionSection, Bill } from '@/types';
-import { getBillByTransactionId } from '@/lib/db';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 export default function TodayPage() {
@@ -64,9 +65,7 @@ export default function TodayPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this transaction?')) {
-      await remove(id);
-    }
+    if (confirm('Delete this transaction?')) await remove(id);
   };
 
   const handleAddTransaction = (section: TransactionSection, type: string) => {
@@ -80,134 +79,69 @@ export default function TodayPage() {
     setExpandedCategory(expandedCategory === id ? null : id);
   };
 
-  const goToPreviousDay = () => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() - 1);
-    setSelectedDate(d);
-  };
-  const goToNextDay = () => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + 1);
-    setSelectedDate(d);
-  };
+  const goToPreviousDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d); };
+  const goToNextDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d); };
 
   const isToday = format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
 
   const renderCategoryContent = (categoryId: CategoryId) => {
     if (categoryId === 'drawer') {
-      return (
-        <DrawerAccordionContent
-          opening={opening}
-          closing={closing}
-          summary={summary}
-          onSaveOpening={updateOpening}
-          onSaveClosing={updateClosing}
-        />
-      );
+      return <DrawerAccordionContent opening={opening} closing={closing} summary={summary} onSaveOpening={updateOpening} onSaveClosing={updateClosing} />;
     }
     if (categoryId === 'customer') {
-      return (
-        <CustomerInlineEntry
-          transactions={transactions}
-          selectedDate={selectedDate}
-          onSave={handleSave}
-          onEditTransaction={handleEdit}
-          onDeleteTransaction={handleDelete}
-        />
-      );
+      return <CustomerInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />;
+    }
+    if (categoryId === 'purchase') {
+      return <PurchaseInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />;
+    }
+    if (categoryId === 'employee') {
+      return <EmployeeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />;
     }
     return (
-      <CategoryTransactionList
-        categoryId={categoryId}
-        transactions={transactions}
-        onAddTransaction={handleAddTransaction}
-        onEditTransaction={handleEdit}
-        onDeleteTransaction={handleDelete}
-      />
+      <CategoryTransactionList categoryId={categoryId as any} transactions={transactions}
+        onAddTransaction={handleAddTransaction} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />
     );
   };
 
   return (
     <AppLayout title="Today">
       <div className="max-w-3xl mx-auto px-4 py-6 pb-24 lg:py-8">
-        {/* Desktop Header */}
         <div className="hidden lg:flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">
-              {isToday ? 'Today' : format(selectedDate, 'EEEE')}
-            </h1>
+            <h1 className="text-2xl font-bold text-foreground">{isToday ? 'Today' : format(selectedDate, 'EEEE')}</h1>
             <p className="text-muted-foreground">{format(selectedDate, 'MMMM d, yyyy')}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={goToPreviousDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors">
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <button onClick={() => setSelectedDate(new Date())} className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors text-sm font-medium">
-              Today
-            </button>
-            <button onClick={goToNextDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors">
-              <ChevronRight className="w-5 h-5" />
-            </button>
+            <button onClick={goToPreviousDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronLeft className="w-5 h-5" /></button>
+            <button onClick={() => setSelectedDate(new Date())} className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors text-sm font-medium">Today</button>
+            <button onClick={goToNextDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronRight className="w-5 h-5" /></button>
           </div>
         </div>
 
-        {/* Mobile Date Navigator */}
         <div className="flex items-center justify-between mb-4 lg:hidden">
-          <button onClick={goToPreviousDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
+          <button onClick={goToPreviousDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronLeft className="w-5 h-5" /></button>
           <button onClick={() => setSelectedDate(new Date())} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary">
-            <Calendar className="w-4 h-4" />
-            <span className="text-sm font-medium">{format(selectedDate, 'MMM d')}</span>
+            <Calendar className="w-4 h-4" /><span className="text-sm font-medium">{format(selectedDate, 'MMM d')}</span>
           </button>
-          <button onClick={goToNextDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors">
-            <ChevronRight className="w-5 h-5" />
-          </button>
+          <button onClick={goToNextDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronRight className="w-5 h-5" /></button>
         </div>
 
-        {/* Category Accordion Banners */}
         {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 7 }).map((_, i) => (
-              <div key={i} className="h-14 rounded-xl bg-secondary/50 animate-pulse" />
-            ))}
-          </div>
+          <div className="space-y-2">{Array.from({ length: 7 }).map((_, i) => (<div key={i} className="h-14 rounded-xl bg-secondary/50 animate-pulse" />))}</div>
         ) : (
-          <CategoryAccordion
-            transactions={transactions}
-            summary={summary}
-            expandedCategory={expandedCategory}
-            onToggle={handleToggleCategory}
-            renderContent={renderCategoryContent}
+          <CategoryAccordion transactions={transactions} summary={summary} expandedCategory={expandedCategory}
+            onToggle={handleToggleCategory} renderContent={renderCategoryContent}
             drawerCash={closing ? (closing.manualCoin + closing.manualCash) : currentCash}
-            drawerUpi={closing ? closing.systemUpi : currentUpi}
-          />
+            drawerUpi={closing ? closing.systemUpi : currentUpi} />
         )}
       </div>
 
-      {/* Add/Edit Sheet */}
-      <AddTransactionSheet
-        isOpen={isAddOpen}
-        onClose={() => {
-          setIsAddOpen(false);
-          setEditingTransaction(null);
-          setSelectedSection(null);
-          setSelectedType(null);
-        }}
-        onSave={handleSave}
-        editTransaction={editingTransaction}
-        selectedDate={selectedDate}
-        initialSection={selectedSection}
-        initialType={selectedType}
-      />
+      <AddTransactionSheet isOpen={isAddOpen} onClose={() => { setIsAddOpen(false); setEditingTransaction(null); setSelectedSection(null); setSelectedType(null); }}
+        onSave={handleSave} editTransaction={editingTransaction} selectedDate={selectedDate}
+        initialSection={selectedSection} initialType={selectedType} />
 
-      {/* Bill Details Sheet */}
-      <BillDetailsSheet
-        isOpen={!!viewingBill}
-        onClose={() => { setViewingBill(null); setViewingTransaction(null); }}
-        bill={viewingBill}
-        transaction={viewingTransaction}
-      />
+      <BillDetailsSheet isOpen={!!viewingBill} onClose={() => { setViewingBill(null); setViewingTransaction(null); }}
+        bill={viewingBill} transaction={viewingTransaction} />
     </AppLayout>
   );
 }

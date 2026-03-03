@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronDown, Wallet, CreditCard, ShoppingCart, Users, Home, ArrowLeftRight, Banknote,
-  TrendingUp, TrendingDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatINR } from '@/lib/format';
 import { DailySummary, Transaction } from '@/types';
 
 export type CategoryId = 'drawer' | 'customer' | 'purchase' | 'employee' | 'expense' | 'exchange' | 'home';
@@ -33,7 +33,7 @@ interface CategorySummaryData {
   count: number;
 }
 
-function getCategorySummary(categoryId: CategoryId, transactions: Transaction[], summary: DailySummary): CategorySummaryData {
+function getCategorySummary(categoryId: CategoryId, transactions: Transaction[]): CategorySummaryData {
   let totalCash = 0, totalUpi = 0, count = 0;
 
   const sectionMap: Record<CategoryId, string[]> = {
@@ -60,13 +60,6 @@ function getCategorySummary(categoryId: CategoryId, transactions: Transaction[],
   return { totalCash, totalUpi, count };
 }
 
-const formatCompact = (amount: number) => {
-  if (amount === 0) return '₹0';
-  if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`;
-  if (amount >= 1000) return `₹${(amount / 1000).toFixed(1)}k`;
-  return `₹${amount}`;
-};
-
 interface CategoryAccordionProps {
   transactions: Transaction[];
   summary: DailySummary;
@@ -86,12 +79,11 @@ export function CategoryAccordion({
         const isExpanded = expandedCategory === cat.id;
         const catSummary = cat.id === 'drawer' 
           ? { totalCash: drawerCash, totalUpi: drawerUpi, count: 0 }
-          : getCategorySummary(cat.id, transactions, summary);
+          : getCategorySummary(cat.id, transactions);
         const Icon = cat.icon;
 
         return (
           <div key={cat.id} className="rounded-xl border border-border overflow-hidden bg-card">
-            {/* Banner Strip */}
             <button
               onClick={() => onToggle(cat.id)}
               className={cn(
@@ -105,7 +97,6 @@ export function CategoryAccordion({
               <div className="flex-1 text-left">
                 <span className="text-sm font-semibold text-foreground">{cat.label}</span>
               </div>
-              {/* Summary chips */}
               <div className="flex items-center gap-2 text-xs shrink-0">
                 {cat.id !== 'drawer' && catSummary.count > 0 && (
                   <span className="text-muted-foreground">{catSummary.count}</span>
@@ -113,13 +104,13 @@ export function CategoryAccordion({
                 {catSummary.totalCash !== 0 && (
                   <span className="flex items-center gap-0.5 text-success font-medium">
                     <Wallet className="w-3 h-3" />
-                    {formatCompact(catSummary.totalCash)}
+                    {formatINR(catSummary.totalCash)}
                   </span>
                 )}
                 {catSummary.totalUpi !== 0 && (
                   <span className="flex items-center gap-0.5 text-info font-medium">
                     <CreditCard className="w-3 h-3" />
-                    {formatCompact(catSummary.totalUpi)}
+                    {formatINR(catSummary.totalUpi)}
                   </span>
                 )}
               </div>
@@ -131,7 +122,6 @@ export function CategoryAccordion({
               </motion.div>
             </button>
 
-            {/* Expanded Content */}
             <AnimatePresence>
               {isExpanded && (
                 <motion.div

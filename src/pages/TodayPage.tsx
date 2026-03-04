@@ -44,9 +44,9 @@ export default function TodayPage() {
     }
   }, [location.state]);
 
-  const openingCash = opening ? opening.coin + opening.cash + opening.homeAdvance : 0;
+  const openingCash = opening ? opening.coin + opening.cash : 0;
   const currentCash = openingCash + summary.cashIn - summary.cashOut;
-  const currentUpi = (opening?.upiOpening || 0) + summary.upiIn - summary.upiOut;
+  const currentUpi = summary.upiIn - summary.upiOut;
 
   const handleSave = async (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (editingTransaction) {
@@ -99,7 +99,8 @@ export default function TodayPage() {
     }
     return (
       <CategoryTransactionList categoryId={categoryId as any} transactions={transactions}
-        onAddTransaction={handleAddTransaction} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />
+        onAddTransaction={handleAddTransaction} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete}
+        selectedDate={selectedDate} onSave={handleSave} />
     );
   };
 

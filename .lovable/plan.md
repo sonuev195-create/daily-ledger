@@ -1,70 +1,101 @@
 
 
+## Plan: Major Restructuring of Drawer, Home, Exchange, Purchase, Expense + Sidebar Cleanup
 
-## Plan: Redesign Customer Section with Inline Spreadsheet-Style Entry
+This is a large change touching 8+ files. Here's the breakdown:
 
-### Overview
-Replace the current subcategory filter chips + popup sheet approach in the Customer accordion with an inline, spreadsheet-like entry system. Each row has a type dropdown as the first column, and subsequent columns change dynamically based on the selected type.
+---
 
-### Phase 1: New Component — `CustomerInlineEntry` ✅ DONE
+### 1. Drawer Redesign (`DrawerAccordionContent.tsx`)
 
-Create `src/components/today/CustomerInlineEntry.tsx` that replaces `CategoryTransactionList` for the customer category.
+**New structure — show 5 rows:**
+- **Cash**: Opening (Coin + Note, editable, auto-filled from prev day closing), Closing (manual Coin + Note count), System Cash, Error highlight
+- **UPI**: Opening = 0 always, system-calculated balance
+- **Customer Advance**: Live total from `customers.advance_balance` sum
+- **Customer Due**: Live total from `customers.due_balance` sum  
+- **Supplier Due**: Live total from `suppliers.balance` sum
 
-**Layout:**
-- Top-right corner: "+ Add Customer" button (opens the existing customer add from sidebar)
-- Below: List of existing transactions displayed as compact rows (like an Excel sheet) with edit/delete
-- Bottom: New entry row with dynamic columns
+Opening: Coin and Note (rename "cash" to "Note" for Indian banknotes). Remove "From Home" from opening (that moves to Home section). Cash = Coin + Note.
 
-**Dynamic Column Logic per Type:**
+Closing: Manual count of Coin + Note. Compare (Coin + Note) vs system cash. If equal → green "0 Error". If not → red highlight with difference.
 
-| Type | Col 2 | Col 3 | Col 4 | Col 5 | Col 6 | Col 7 |
-|------|-------|-------|-------|-------|-------|-------|
-| **Sale** | Bill # (auto, editable) | Customer search | Amount | Payment modes (multi) | From Advance | Due |
-| **Sales Return** | Bill search (by #/name/phone) | Amount | Payment/Adjust mode | Add bill items btn | — | — |
-| **Balance Payment** | Search bill by #/name/phone → show due bills with tick select | Payment modes | Balance | — | — | — |
-| **Customer Advance** | Customer search | Amount | Payment modes | — | — | — |
+Remove Bank from drawer entirely. Remove homeAdvance from opening.
 
-**Key behaviors:**
-- Tab key moves to next column; Enter saves the row and auto-creates a new empty row
-- Mobile keyboard shows "Next" button via `enterkeyhint="next"` and `inputMode`
-- Sale & Sales Return rows include an "Add Bill" button that expands the existing `SaleBillItemsEntry` inline below the row
-- Customer name/phone is mandatory when advance is used, balance is paid, or due exists
-- When advance is available and customer is selected in Sale, show advance amount and auto-add to payment total
-- Due amount auto-saves to customer ledger and creates due bill record
+### 2. Home Section Redesign (`CategoryTransactionList.tsx` or new component)
 
-### Phase 2: Modify `CategoryTransactionList` & `TodayPage` ✅ DONE
+Replace credit/debit with:
+- **Dropdown 1**: "To Owner" / "From Owner" (cash only)
+- **Dropdown 2**: Category (with "+ Add Category" button) — e.g., Advance, Closing, Bank, Chitty, Other
+- **Column**: Details (text)
+- **Column**: Amount (cash only, no UPI)
 
-- In `TodayPage.tsx`, when `categoryId === 'customer'`, render `CustomerInlineEntry` instead of `CategoryTransactionList`
-- Pass `transactions`, `selectedDate`, and handlers for add/edit/delete
-- Remove the subcategory chip filter for customer (no longer needed)
+Home transactions affect cash in drawer: "From Owner" adds cash, "To Owner" subtracts cash.
 
-### Phase 3: Balance Payment — Multi-Bill Selection ✅ DONE
+Need a new table or reuse existing for home categories. Will create `home_categories` table.
 
-- When "Balance Payment" is selected and customer is searched, fetch all due bills for that customer
-- Display as a checkbox list showing bill number, date, due amount
-- Allow ticking multiple bills — payment fills first bill's due, overflow carries to next
-- Payment mode selector with multi-mode support (cash + upi split)
+### 3. Exchange Section Redesign
 
-### Phase 4: Transaction Display as Spreadsheet Rows ✅ DONE
+Simple two options only:
+- Dropdown: "UPI to Cash" or "Cash to UPI"
+- Amount column
+- UPI to Cash: increase cash, decrease UPI
+- Cash to UPI: decrease cash, increase UPI
 
-- Existing customer transactions for the day shown as compact horizontal rows matching the column structure
-- Each row has an edit icon (pencil) and delete icon (trash) on the right
-- Clicking edit makes the row editable inline
+### 4. Purchase Section Changes (`PurchaseInlineEntry.tsx`)
 
-### Technical Details
+- **Bill A/B/C**: Amount only (no payment modes). Bills are credit purchases — they only add to supplier due.
+- **Return A/B**: Amount only. Subtract from supplier due.
+- **Bill C (N/G)**: Does NOT affect supplier due. Reports only.
+- **Payment**: Has payment modes (cash/UPI). Reduces supplier due.
+- **Delivered**: Select bill number for which bill was delivered. Link delivery date to bill.
+- **Expenses**: Amount + details + payment modes (cash/UPI).
 
-**Files to create:**
-- `src/components/today/CustomerInlineEntry.tsx` — main new component
+### 5. Expense Section
 
-**Files to modify:**
-- `src/pages/TodayPage.tsx` — route customer category to new component
-- `src/components/today/CategoryAccordion.tsx` — add customer summary details (total sale, return, balance paid, advance)
+- "+ Add Category" button in corner
+- Selection: category dropdown (from `expense_categories` table)
+- Details text field
+- Payment modes (cash + UPI)
 
-**Reused existing code:**
-- `CustomerSearchInput` for customer name/phone search
-- `SaleBillItemsEntry` for bill item entry (manual + OCR capture/upload)
-- `generateBillNumber` logic from `AddTransactionSheet`
-- `saveBillToSupabase`, `updateCustomerBalance`, `deductFromBatch` from `useSupabaseData`
-- `getDueBillsForCustomer` for balance payment bill selection
+### 6. Sale Overpayment Give-Back
 
-**No database changes needed** — all required tables and columns already exist.
+In `CustomerInlineEntry.tsx`, when customer overpays, add give-back option with multiple payment modes.
+
+### 7. Sidebar Cleanup
+
+Remove these items from sidebar: Exchange, Customer, Customer Advance, Balance Paid, Employee, Supplier, Purchase.
+
+Keep: Today, All Date, Bill, Items & Inventory, Commission, Reports, Settings, Home (remove if merged), Expenses (remove if merged), Customers (keep for master data).
+
+**Final sidebar**: Today, All Date, Bill, Customers, Items & Inventory, Reports, Commission, Settings.
+
+### 8. Summary Calculation Updates (`useTransactions.ts`)
+
+- Home: only affects cash (not UPI)
+- Purchase bills: no cash/UPI effect (amount only, adds to supplier due)
+- Purchase payment/expenses: affects cash/UPI
+- Exchange: simple cash↔UPI swap
+
+---
+
+### Files to Create:
+- None (reuse existing components)
+
+### Files to Modify:
+1. `src/components/today/DrawerAccordionContent.tsx` — complete rewrite
+2. `src/components/today/CategoryTransactionList.tsx` — for home/exchange/expense inline entry
+3. `src/components/today/PurchaseInlineEntry.tsx` — remove payment from bills, add delivered logic
+4. `src/components/today/CustomerInlineEntry.tsx` — add overpayment give-back
+5. `src/components/today/EmployeeInlineEntry.tsx` — minor (add category button)
+6. `src/components/today/CategoryAccordion.tsx` — update drawer summary display
+7. `src/pages/TodayPage.tsx` — wire new home/exchange/expense inline components
+8. `src/components/layout/Sidebar.tsx` — remove 7 menu items
+9. `src/hooks/useTransactions.ts` — fix summary calculations (home=cash only, purchase bills=no payment)
+10. `src/types/index.ts` — update HomeType, add home categories
+11. `src/App.tsx` — remove unused routes
+
+### Database Migration:
+- Create `home_categories` table (id, name, created_at)
+- Add `home_category_id` column to transactions table
+- Add `delivered_date` column to bills table
+

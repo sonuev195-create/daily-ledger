@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface EmployeeResult {
   id: string;
@@ -57,6 +58,12 @@ export function EmployeeInlineEntry({
   const [showDropdown, setShowDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
   const [categoryBalances, setCategoryBalances] = useState<Record<string, number>>({});
+  const [addCatOpen, setAddCatOpen] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [addEmpOpen, setAddEmpOpen] = useState(false);
+  const [newEmpName, setNewEmpName] = useState('');
+  const [newEmpPhone, setNewEmpPhone] = useState('');
+  const [newEmpSalary, setNewEmpSalary] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -66,7 +73,6 @@ export function EmployeeInlineEntry({
     supabase.from('salary_categories').select('*').order('name').then(({ data }) => setCategories(data || []));
   }, []);
 
-  // Employee search
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (entry.employeeQuery.length >= 1) {
@@ -82,7 +88,6 @@ export function EmployeeInlineEntry({
     return () => clearTimeout(timer);
   }, [entry.employeeQuery]);
 
-  // Load category-wise balances for selected employee
   useEffect(() => {
     if (entry.employeeId) {
       (async () => {
@@ -145,14 +150,12 @@ export function EmployeeInlineEntry({
         billNumber: `EM${Date.now().toString().slice(-6)}`,
       };
 
-      // Add salary_category_id via reference
       if (entry.categoryId) {
-        (transaction as any).reference = entry.categoryId; // Will be stored
+        (transaction as any).reference = entry.categoryId;
       }
 
       await onSave(transaction);
 
-      // Update employee advance
       const { data: emp } = await supabase.from('employees').select('advance_balance').eq('id', entry.employeeId).single();
       if (emp) {
         await supabase.from('employees').update({
@@ -170,19 +173,52 @@ export function EmployeeInlineEntry({
     }
   };
 
+  const addCategory = async () => {
+    if (!newCatName.trim()) return;
+    const { data } = await supabase.from('salary_categories').insert({ name: newCatName.trim() }).select().single();
+    if (data) setCategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+    setNewCatName('');
+    setAddCatOpen(false);
+  };
+
+  const addEmployee = async () => {
+    if (!newEmpName.trim()) return;
+    const { data } = await supabase.from('employees').insert({
+      name: newEmpName.trim(),
+      phone: newEmpPhone || null,
+      salary: parseFloat(newEmpSalary) || 0,
+    }).select().single();
+    if (data) {
+      setEntry(prev => ({
+        ...prev,
+        employeeQuery: data.name,
+        employeeId: data.id,
+        employeeAdvance: 0,
+        salary: data.salary.toString(),
+      }));
+    }
+    setNewEmpName('');
+    setNewEmpPhone('');
+    setNewEmpSalary('');
+    setAddEmpOpen(false);
+  };
+
   const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || 'Unknown';
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Employee Transactions</span>
-        <Button variant="outline" size="sm" className="h-7 text-xs gap-1"
-          onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: '/employees' }))}>
-          <Plus className="w-3 h-3" /> Add Employee
-        </Button>
+        <div className="flex gap-1">
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setAddCatOpen(true)}>
+            <Plus className="w-3 h-3" /> Category
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setAddEmpOpen(true)}>
+            <Plus className="w-3 h-3" /> Employee
+          </Button>
+        </div>
       </div>
 
-      {/* Existing transactions */}
       {employeeTransactions.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden divide-y divide-border/50">
           {employeeTransactions.map(txn => (
@@ -198,13 +234,11 @@ export function EmployeeInlineEntry({
         </div>
       )}
 
-      {/* New Entry */}
       <div className="border border-accent/30 rounded-lg p-3 bg-accent/5 space-y-2">
         <div className="flex items-center gap-1.5 text-xs font-medium text-accent">
           <Plus className="w-3.5 h-3.5" /> New Entry
         </div>
 
-        {/* Employee + Category */}
         <div className="grid grid-cols-2 gap-2">
           <div className="relative">
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Employee</label>
@@ -243,7 +277,6 @@ export function EmployeeInlineEntry({
           </div>
         </div>
 
-        {/* Category-wise balance */}
         {entry.employeeId && Object.keys(categoryBalances).length > 0 && (
           <div className="flex flex-wrap gap-1">
             {Object.entries(categoryBalances).map(([catId, total]) => (
@@ -254,7 +287,6 @@ export function EmployeeInlineEntry({
           </div>
         )}
 
-        {/* Salary + Payment */}
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Salary</label>
@@ -271,7 +303,6 @@ export function EmployeeInlineEntry({
                     <SelectContent>
                       <SelectItem value="cash" className="text-xs">Cash</SelectItem>
                       <SelectItem value="upi" className="text-xs">UPI</SelectItem>
-                      <SelectItem value="bank" className="text-xs">Bank</SelectItem>
                     </SelectContent>
                   </Select>
                   <Input type="number" inputMode="numeric" value={p.amount || ''}
@@ -290,6 +321,32 @@ export function EmployeeInlineEntry({
           <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save & Next'}
         </Button>
       </div>
+
+      {/* Add Category Dialog */}
+      <Dialog open={addCatOpen} onOpenChange={setAddCatOpen}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader><DialogTitle className="text-sm">Add Salary Category</DialogTitle></DialogHeader>
+          <Input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Category name" className="h-9" />
+          <DialogFooter>
+            <Button size="sm" onClick={addCategory}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Employee Dialog */}
+      <Dialog open={addEmpOpen} onOpenChange={setAddEmpOpen}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader><DialogTitle className="text-sm">Add Employee</DialogTitle></DialogHeader>
+          <div className="space-y-2">
+            <Input value={newEmpName} onChange={e => setNewEmpName(e.target.value)} placeholder="Name" className="h-9" />
+            <Input value={newEmpPhone} onChange={e => setNewEmpPhone(e.target.value)} placeholder="Phone (optional)" className="h-9" />
+            <Input type="number" value={newEmpSalary} onChange={e => setNewEmpSalary(e.target.value)} placeholder="Salary" className="h-9" />
+          </div>
+          <DialogFooter>
+            <Button size="sm" onClick={addEmployee}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

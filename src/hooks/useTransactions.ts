@@ -86,35 +86,34 @@ export function useTransactions(date: Date) {
           if (p.mode === 'upi') upiOut += p.amount;
         });
       } else if (t.section === 'home') {
-        // Home transactions - credit is money in, debit is money out
+        // Home: cash only. From Owner = cash in, To Owner = cash out
         if (t.type === 'home_credit') {
           t.payments.forEach(p => {
             if (p.mode === 'cash') cashIn += p.amount;
-            if (p.mode === 'upi') upiIn += p.amount;
           });
         } else {
-          totalExpenses += t.amount;
           t.payments.forEach(p => {
             if (p.mode === 'cash') cashOut += p.amount;
-            if (p.mode === 'upi') upiOut += p.amount;
           });
         }
       } else if (t.section === 'purchase') {
-        if (t.type !== 'purchase_return') {
+        // Bills (purchase_bill): amount only, no cash/UPI effect
+        // Payment & expenses: affects cash/UPI
+        if (t.type === 'purchase_payment' || t.type === 'purchase_expenses') {
           totalPurchases += t.amount;
           t.payments.forEach(p => {
             if (p.mode === 'cash') cashOut += p.amount;
             if (p.mode === 'upi') upiOut += p.amount;
           });
-        } else {
+        } else if (t.type === 'purchase_return') {
+          // Returns: amount only, no cash effect
           totalPurchases -= t.amount;
-          t.payments.forEach(p => {
-            if (p.mode === 'cash') cashIn += p.amount;
-            if (p.mode === 'upi') upiIn += p.amount;
-          });
+        } else {
+          // purchase_bill, purchase_delivered: amount only
+          totalPurchases += t.amount;
         }
       } else if (t.section === 'exchange') {
-        // Exchange: customer gives (payments) = income in that mode, you give back = outgoing
+        // Exchange: payments = what customer gives (income), giveBack = what you give
         t.payments.forEach(p => {
           if (p.mode === 'cash') cashIn += p.amount;
           if (p.mode === 'upi') upiIn += p.amount;

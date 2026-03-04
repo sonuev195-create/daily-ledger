@@ -188,6 +188,7 @@ export type Database = {
           bill_type: string | null
           created_at: string
           customer_name: string | null
+          delivered_date: string | null
           id: string
           image_url: string | null
           supplier_name: string | null
@@ -199,6 +200,7 @@ export type Database = {
           bill_type?: string | null
           created_at?: string
           customer_name?: string | null
+          delivered_date?: string | null
           id?: string
           image_url?: string | null
           supplier_name?: string | null
@@ -210,6 +212,7 @@ export type Database = {
           bill_type?: string | null
           created_at?: string
           customer_name?: string | null
+          delivered_date?: string | null
           id?: string
           image_url?: string | null
           supplier_name?: string | null
@@ -451,6 +454,24 @@ export type Database = {
         }
         Relationships: []
       }
+      home_categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       items: {
         Row: {
           batch_preference: string
@@ -565,6 +586,7 @@ export type Database = {
           employee_id: string | null
           expense_category_id: string | null
           give_back: Json | null
+          home_category_id: string | null
           id: string
           overpayment: number | null
           payments: Json
@@ -591,6 +613,7 @@ export type Database = {
           employee_id?: string | null
           expense_category_id?: string | null
           give_back?: Json | null
+          home_category_id?: string | null
           id?: string
           overpayment?: number | null
           payments?: Json
@@ -617,6 +640,7 @@ export type Database = {
           employee_id?: string | null
           expense_category_id?: string | null
           give_back?: Json | null
+          home_category_id?: string | null
           id?: string
           overpayment?: number | null
           payments?: Json
@@ -655,6 +679,13 @@ export type Database = {
             columns: ["expense_category_id"]
             isOneToOne: false
             referencedRelation: "expense_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_home_category_id_fkey"
+            columns: ["home_category_id"]
+            isOneToOne: false
+            referencedRelation: "home_categories"
             referencedColumns: ["id"]
           },
           {

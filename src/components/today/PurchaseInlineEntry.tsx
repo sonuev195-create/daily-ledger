@@ -195,7 +195,7 @@ export function PurchaseInlineEntry({
         section: 'purchase' as TransactionSection,
         type: dbType,
         amount: entry.type === 'purchase_payment' ? totalPayments : amountNum,
-        payments: entry.payments.filter(p => p.amount > 0),
+        payments: (isPayment || isExpenses) ? entry.payments.filter(p => p.amount > 0) : [],
         billNumber: entry.billNumber || undefined,
         supplierId: entry.supplierId,
         supplierName: entry.supplierQuery || undefined,
@@ -379,7 +379,8 @@ export function PurchaseInlineEntry({
           </div>
         )}
 
-        {/* Payment modes */}
+        {/* Payment modes - only for payment and expenses */}
+        {(isPayment || isExpenses) && (
         <div>
           <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
           <div className="space-y-1">
@@ -390,7 +391,6 @@ export function PurchaseInlineEntry({
                   <SelectContent>
                     <SelectItem value="cash" className="text-xs">Cash</SelectItem>
                     <SelectItem value="upi" className="text-xs">UPI</SelectItem>
-                    <SelectItem value="bank" className="text-xs">Bank</SelectItem>
                   </SelectContent>
                 </Select>
                 <Input type="number" inputMode="numeric" value={p.amount || ''}
@@ -404,6 +404,7 @@ export function PurchaseInlineEntry({
             <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add payment mode</button>
           </div>
         </div>
+        )}
 
         <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
           <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save & Next'}

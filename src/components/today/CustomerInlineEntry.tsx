@@ -181,8 +181,22 @@ export function CustomerInlineEntry({
     const amountNum = parseFloat(entry.amount) || 0;
     const totalPayments = entry.payments.reduce((s, p) => s + p.amount, 0);
     const advanceUsed = parseFloat(entry.useAdvance) || 0;
-    return Math.max(0, amountNum - totalPayments - advanceUsed);
+    const diff = amountNum - totalPayments - advanceUsed;
+    return diff; // positive = due, negative = overpayment
   };
+
+  const [giveBackPayments, setGiveBackPayments] = useState<PaymentEntry[]>([]);
+
+  const addGiveBack = () => setGiveBackPayments(prev => [...prev, { id: uuidv4(), mode: 'cash' as PaymentMode, amount: 0 }]);
+  const updateGiveBack = (i: number, field: 'mode' | 'amount', value: string) => {
+    setGiveBackPayments(prev => {
+      const updated = [...prev];
+      if (field === 'amount') updated[i] = { ...updated[i], amount: parseFloat(value) || 0 };
+      else updated[i] = { ...updated[i], mode: value as PaymentMode };
+      return updated;
+    });
+  };
+  const removeGiveBack = (i: number) => setGiveBackPayments(prev => prev.filter((_, idx) => idx !== i));
 
   const handleSave = async () => {
     const totalPayments = entry.payments.reduce((s, p) => s + p.amount, 0);
@@ -212,16 +226,20 @@ export function CustomerInlineEntry({
       const advancePayments: PaymentEntry[] = advanceUsed > 0
         ? [{ id: uuidv4(), mode: 'advance' as PaymentMode, amount: advanceUsed }] : [];
 
+      const giveBack = giveBackPayments.filter(g => g.amount > 0);
+
       const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
         date: selectedDate,
         section: 'sale' as TransactionSection,
         type: entry.type,
         amount: entry.type === 'customer_advance' ? totalPayments : (entry.type === 'balance_paid' ? totalPayments : amountNum),
         payments: [...entry.payments.filter(p => p.amount > 0), ...advancePayments],
+        giveBack: giveBack.length > 0 ? giveBack : undefined,
         billNumber: entry.billNumber || undefined,
         customerId: finalCustomerId,
         customerName: entry.customerQuery || undefined,
         due: due > 0 ? due : undefined,
+        overpayment: due < 0 ? Math.abs(due) : undefined,
       };
 
       await onSave(transaction);
@@ -400,23 +418,54 @@ export function CustomerInlineEntry({
 
         {/* Row 3: Advance + Due */}
         {entry.type === 'sale' && (
-          <div className="flex items-center gap-2">
-            {entry.customerAdvance > 0 && (
-              <div className="flex-1">
-                <label className="text-[10px] text-muted-foreground mb-0.5 block">
-                  From Advance <span className="text-success">({formatINR(entry.customerAdvance)})</span>
-                </label>
-                <Input type="number" inputMode="numeric" value={entry.useAdvance}
-                  onChange={e => {
-                    const val = parseFloat(e.target.value) || 0;
-                    setEntry(prev => ({ ...prev, useAdvance: val <= prev.customerAdvance ? e.target.value : prev.customerAdvance.toString() }));
-                  }} placeholder="₹0" className="h-8 text-xs" />
-              </div>
-            )}
-            {computeDue() > 0 && (
-              <div className="flex items-center gap-1.5 px-2 py-1.5 bg-warning/10 rounded-lg text-xs shrink-0">
-                <AlertTriangle className="w-3.5 h-3.5 text-warning" />
-                <span className="text-warning font-medium">Due: {formatINR(computeDue())}</span>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              {entry.customerAdvance > 0 && (
+                <div className="flex-1">
+                  <label className="text-[10px] text-muted-foreground mb-0.5 block">
+                    From Advance <span className="text-success">({formatINR(entry.customerAdvance)})</span>
+                  </label>
+                  <Input type="number" inputMode="numeric" value={entry.useAdvance}
+                    onChange={e => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setEntry(prev => ({ ...prev, useAdvance: val <= prev.customerAdvance ? e.target.value : prev.customerAdvance.toString() }));
+                    }} placeholder="₹0" className="h-8 text-xs" />
+                </div>
+              )}
+              {computeDue() > 0 && (
+                <div className="flex items-center gap-1.5 px-2 py-1.5 bg-warning/10 rounded-lg text-xs shrink-0">
+                  <AlertTriangle className="w-3.5 h-3.5 text-warning" />
+                  <span className="text-warning font-medium">Due: {formatINR(computeDue())}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Overpayment give-back */}
+            {computeDue() < 0 && (
+              <div className="border border-success/30 rounded-lg p-2 bg-success/5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-medium text-success">Overpayment: {formatINR(Math.abs(computeDue()))}</span>
+                  {giveBackPayments.length === 0 && (
+                    <button onClick={addGiveBack} className="text-[10px] text-accent hover:underline">+ Give Back</button>
+                  )}
+                </div>
+                {giveBackPayments.map((g, i) => (
+                  <div key={g.id} className="flex gap-1">
+                    <Select value={g.mode} onValueChange={v => updateGiveBack(i, 'mode', v)}>
+                      <SelectTrigger className="h-7 text-[10px] w-20"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash" className="text-xs">Cash</SelectItem>
+                        <SelectItem value="upi" className="text-xs">UPI</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" inputMode="numeric" value={g.amount || ''}
+                      onChange={e => updateGiveBack(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+                    <button onClick={() => removeGiveBack(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                  </div>
+                ))}
+                {giveBackPayments.length > 0 && (
+                  <button onClick={addGiveBack} className="text-[10px] text-accent hover:underline">+ Add mode</button>
+                )}
               </div>
             )}
           </div>

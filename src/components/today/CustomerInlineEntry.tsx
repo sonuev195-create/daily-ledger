@@ -43,6 +43,12 @@ interface EntryRow {
   useAdvance: string;
   selectedBills: string[];
   dueBills: DueBill[];
+  welderId?: string;
+}
+
+interface WelderOption {
+  id: string;
+  name: string;
 }
 
 const createEmptyRow = (): EntryRow => ({
@@ -56,6 +62,7 @@ const createEmptyRow = (): EntryRow => ({
   useAdvance: '',
   selectedBills: [],
   dueBills: [],
+  welderId: undefined,
 });
 
 const SUB_TYPES: { value: CustomerSubType; label: string }[] = [
@@ -83,10 +90,14 @@ export function CustomerInlineEntry({
   const [saving, setSaving] = useState(false);
   const customerInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [welders, setWelders] = useState<WelderOption[]>([]);
 
   const customerTransactions = transactions.filter(t => t.section === 'sale');
 
   useEffect(() => { generateBillNumber(entry.type); }, [entry.type]);
+  useEffect(() => {
+    supabase.from('welders').select('id, name').order('name').then(({ data }) => setWelders(data || []));
+  }, []);
 
   const generateBillNumber = async (type: CustomerSubType) => {
     const prefixMap: Record<CustomerSubType, string> = {
@@ -240,6 +251,7 @@ export function CustomerInlineEntry({
         customerName: entry.customerQuery || undefined,
         due: due > 0 ? due : undefined,
         overpayment: due < 0 ? Math.abs(due) : undefined,
+        welderId: entry.welderId || undefined,
       };
 
       await onSave(transaction);
@@ -337,12 +349,12 @@ export function CustomerInlineEntry({
 
         {/* Desktop: single line | Mobile: 2-3 rows */}
         {/* Row 1: Type + Bill# + Customer */}
-        <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-7">
           <div>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Type</label>
             <Select value={entry.type} onValueChange={(v: string) => {
               const newType = v as CustomerSubType;
-              setEntry(prev => ({ ...prev, type: newType, selectedBills: [], dueBills: [], customerQuery: '', customerId: undefined, customerAdvance: 0, amount: '' }));
+              setEntry(prev => ({ ...prev, type: newType, selectedBills: [], dueBills: [], customerQuery: '', customerId: undefined, customerAdvance: 0, amount: '', welderId: undefined }));
             }}>
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -362,6 +374,19 @@ export function CustomerInlineEntry({
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Customer</label>
             {renderCustomerSearch()}
           </div>
+
+          {entry.type === 'sale' && welders.length > 0 && (
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Welder</label>
+              <Select value={entry.welderId || 'none'} onValueChange={v => setEntry(prev => ({ ...prev, welderId: v === 'none' ? undefined : v }))}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-xs">None</SelectItem>
+                  {welders.map(w => <SelectItem key={w.id} value={w.id} className="text-xs">{w.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Balance paid: due bills */}

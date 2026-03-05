@@ -88,6 +88,7 @@ export interface Transaction {
   supplierId?: string;
   supplierName?: string;
   employeeId?: string;
+  welderId?: string;
   employeeName?: string;
   reference?: string;
   billType?: BillType;

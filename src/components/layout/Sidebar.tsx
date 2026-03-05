@@ -29,9 +29,11 @@ const menuItems = [
   { id: 'all-date', label: 'All Date', icon: CalendarDays, path: '/all-dates' },
   { id: 'bill', label: 'Bill', icon: Receipt, path: '/bills' },
   { id: 'customers', label: 'Customers', icon: Users, path: '/customers' },
+  { id: 'suppliers', label: 'Suppliers', icon: Wallet, path: '/suppliers' },
+  { id: 'employees', label: 'Employees', icon: Users, path: '/employees' },
+  { id: 'welders', label: 'Welders', icon: Percent, path: '/welders' },
   { id: 'items', label: 'Items & Inventory', icon: Package, path: '/items' },
   { id: 'reports', label: 'Reports', icon: BarChart3, path: '/reports' },
-  { id: 'commission', label: 'Commission', icon: Percent, path: '/commission' },
   { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
 ];
 

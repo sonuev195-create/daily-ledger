@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Search, Phone, Plus, Edit2, Wallet, Settings, Calendar, TrendingUp, Banknote } from 'lucide-react';
+import { Users, Search, Phone, Plus, Edit2, Trash2, Wallet, Settings, Calendar, TrendingUp, Banknote } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
@@ -153,6 +153,13 @@ export default function EmployeesPage() {
     setFormRole(employee.role || '');
     setFormSalary(employee.salary.toString());
     setIsAddOpen(true);
+  };
+
+  const handleDeleteEmployee = async (id: string) => {
+    if (!confirm('Delete this employee?')) return;
+    const { error } = await supabase.from('employees').delete().eq('id', id);
+    if (error) toast.error('Failed to delete');
+    else { toast.success('Deleted'); fetchEmployees(); setSelectedEmployee(null); }
   };
 
   const closeForm = () => {
@@ -379,6 +386,13 @@ export default function EmployeesPage() {
                       onClick={() => handleEditEmployee(employee)}
                     >
                       <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteEmployee(employee.id)}
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
                 </div>

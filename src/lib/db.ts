@@ -12,6 +12,8 @@ import {
   Category,
   Batch
 } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import { format } from 'date-fns';
 
 const DB_NAME = 'cash-management-db';
 const DB_VERSION = 2;
@@ -157,6 +159,32 @@ export async function getDB(): Promise<CashManagementDB> {
 export async function addTransaction(transaction: Transaction): Promise<void> {
   const db = await getDB();
   await db.put('transactions', transaction);
+  
+  // Also sync to Supabase
+  try {
+    await supabase.from('transactions').upsert({
+      id: transaction.id,
+      date: typeof transaction.date === 'string' ? transaction.date : format(transaction.date, 'yyyy-MM-dd'),
+      section: transaction.section,
+      type: transaction.type,
+      amount: transaction.amount,
+      payments: transaction.payments as any,
+      give_back: transaction.giveBack as any || [],
+      bill_number: transaction.billNumber || null,
+      customer_id: transaction.customerId || null,
+      customer_name: transaction.customerName || null,
+      supplier_id: transaction.supplierId || null,
+      supplier_name: transaction.supplierName || null,
+      employee_id: transaction.employeeId || null,
+      welder_id: transaction.welderId || null,
+      due: transaction.due || null,
+      overpayment: transaction.overpayment || null,
+      adjusted_from_sales: transaction.adjustedFromSales || 0,
+      reference: transaction.reference || null,
+    });
+  } catch (err) {
+    console.error('Supabase sync error:', err);
+  }
 }
 
 export async function getAllTransactions(): Promise<Transaction[]> {

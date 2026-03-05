@@ -13,7 +13,7 @@ import BalancePaidPage from "./pages/BalancePaidPage";
 import PurchasePage from "./pages/PurchasePage";
 import SuppliersPage from "./pages/SuppliersPage";
 import EmployeesPage from "./pages/EmployeesPage";
-import CommissionPage from "./pages/CommissionPage";
+import WeldersPage from "./pages/WeldersPage";
 import ExchangePage from "./pages/ExchangePage";
 import ExpensesPage from "./pages/ExpensesPage";
 import HomePage from "./pages/HomePage";
@@ -39,7 +39,7 @@ const App = () => (
           <Route path="/items" element={<ItemsPage />} />
           <Route path="/suppliers" element={<SuppliersPage />} />
           <Route path="/employees" element={<EmployeesPage />} />
-          <Route path="/commission" element={<CommissionPage />} />
+          <Route path="/welders" element={<WeldersPage />} />
           <Route path="/exchange" element={<ExchangePage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/home" element={<HomePage />} />

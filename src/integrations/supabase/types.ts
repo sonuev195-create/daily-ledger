@@ -597,6 +597,7 @@ export type Database = {
           supplier_name: string | null
           type: string
           updated_at: string
+          welder_id: string | null
         }
         Insert: {
           adjusted_from_sales?: number | null
@@ -624,6 +625,7 @@ export type Database = {
           supplier_name?: string | null
           type: string
           updated_at?: string
+          welder_id?: string | null
         }
         Update: {
           adjusted_from_sales?: number | null
@@ -651,6 +653,7 @@ export type Database = {
           supplier_name?: string | null
           type?: string
           updated_at?: string
+          welder_id?: string | null
         }
         Relationships: [
           {
@@ -702,7 +705,38 @@ export type Database = {
             referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "transactions_welder_id_fkey"
+            columns: ["welder_id"]
+            isOneToOne: false
+            referencedRelation: "welders"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      welders: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {

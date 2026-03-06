@@ -813,7 +813,7 @@ export function AddTransactionSheet({ isOpen, onClose, onSave, editTransaction, 
                       <SelectContent className="bg-popover border-border">
                         <SelectItem value="cash">Cash</SelectItem>
                         <SelectItem value="upi">UPI</SelectItem>
-                        <SelectItem value="bank">Bank</SelectItem>
+                        <SelectItem value="cheque">Cheque</SelectItem>
                         <SelectItem value="advance">Advance</SelectItem>
                         <SelectItem value="adjust">Adjust</SelectItem>
                       </SelectContent>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ChevronDown, Wallet, CreditCard, ShoppingCart, Users, Home, ArrowLeftRight, Banknote,
+  ChevronDown, Wallet, CreditCard, ShoppingCart, Users, Home, ArrowLeftRight, Banknote, TrendingUp, TrendingDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatINR } from '@/lib/format';
@@ -27,14 +27,20 @@ export const CATEGORIES: CategoryConfig[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'text-muted-foreground', bgClass: 'bg-secondary' },
 ];
 
-interface CategorySummaryData {
-  totalCash: number;
-  totalUpi: number;
+interface SectionFlowData {
+  cashIn: number;
+  cashOut: number;
+  upiIn: number;
+  upiOut: number;
+  adjustIn: number;
+  adjustOut: number;
+  chequeIn: number;
+  chequeOut: number;
   count: number;
 }
 
-function getCategorySummary(categoryId: CategoryId, transactions: Transaction[]): CategorySummaryData {
-  let totalCash = 0, totalUpi = 0, count = 0;
+function getSectionFlow(categoryId: CategoryId, transactions: Transaction[]): SectionFlowData {
+  let cashIn = 0, cashOut = 0, upiIn = 0, upiOut = 0, adjustIn = 0, adjustOut = 0, chequeIn = 0, chequeOut = 0, count = 0;
 
   const sectionMap: Record<CategoryId, string[]> = {
     drawer: [],
@@ -46,18 +52,71 @@ function getCategorySummary(categoryId: CategoryId, transactions: Transaction[])
     home: ['home'],
   };
 
+  const addIn = (payments: any[]) => {
+    payments.forEach(p => {
+      if (p.mode === 'cash') cashIn += p.amount;
+      if (p.mode === 'upi') upiIn += p.amount;
+      if (p.mode === 'cheque') chequeIn += p.amount;
+      if (p.mode === 'adjust') adjustIn += p.amount;
+    });
+  };
+
+  const addOut = (payments: any[]) => {
+    payments.forEach(p => {
+      if (p.mode === 'cash') cashOut += p.amount;
+      if (p.mode === 'upi') upiOut += p.amount;
+      if (p.mode === 'cheque') chequeOut += p.amount;
+      if (p.mode === 'adjust') adjustOut += p.amount;
+    });
+  };
+
   const sections = sectionMap[categoryId];
   transactions.forEach(t => {
-    if (sections.includes(t.section)) {
-      count++;
-      t.payments.forEach(p => {
-        if (p.mode === 'cash') totalCash += p.amount;
-        if (p.mode === 'upi') totalUpi += p.amount;
-      });
+    if (!sections.includes(t.section)) return;
+    count++;
+
+    if (t.section === 'sale') {
+      if (t.type === 'sales_return') {
+        addOut(t.payments);
+      } else {
+        addIn(t.payments);
+        if (t.giveBack) addOut(t.giveBack);
+      }
+    } else if (t.section === 'home') {
+      if (t.type === 'home_credit') {
+        addIn(t.payments);
+      } else {
+        addOut(t.payments);
+      }
+    } else if (t.section === 'exchange') {
+      addIn(t.payments);
+      if (t.giveBack) addOut(t.giveBack);
+    } else {
+      // purchase payment/expenses, employee, expenses → all out
+      addOut(t.payments);
     }
   });
 
-  return { totalCash, totalUpi, count };
+  return { cashIn, cashOut, upiIn, upiOut, adjustIn, adjustOut, chequeIn, chequeOut, count };
+}
+
+interface FlowBadgeProps {
+  icon: any;
+  inAmount: number;
+  outAmount: number;
+  inColor: string;
+  outColor: string;
+}
+
+function FlowBadge({ icon: Icon, inAmount, outAmount, inColor, outColor }: FlowBadgeProps) {
+  if (inAmount === 0 && outAmount === 0) return null;
+  return (
+    <div className="flex items-center gap-1 text-[10px]">
+      <Icon className="w-3 h-3 text-muted-foreground" />
+      {inAmount > 0 && <span className={cn("font-medium", inColor)}>+{formatINR(inAmount)}</span>}
+      {outAmount > 0 && <span className={cn("font-medium", outColor)}>-{formatINR(outAmount)}</span>}
+    </div>
+  );
 }
 
 interface CategoryAccordionProps {
@@ -77,9 +136,7 @@ export function CategoryAccordion({
     <div className="space-y-2">
       {CATEGORIES.map((cat) => {
         const isExpanded = expandedCategory === cat.id;
-        const catSummary = cat.id === 'drawer' 
-          ? { totalCash: drawerCash, totalUpi: drawerUpi, count: 0 }
-          : getCategorySummary(cat.id, transactions);
+        const flow = cat.id === 'drawer' ? null : getSectionFlow(cat.id, transactions);
         const Icon = cat.icon;
 
         return (
@@ -94,32 +151,36 @@ export function CategoryAccordion({
               <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", cat.bgClass)}>
                 <Icon className={cn("w-5 h-5", cat.colorClass)} />
               </div>
-              <div className="flex-1 text-left">
+              <div className="flex-1 text-left min-w-0">
                 <span className="text-sm font-semibold text-foreground">{cat.label}</span>
+                {/* Per-section flow summary */}
+                {flow && flow.count > 0 && (
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                    <FlowBadge icon={Wallet} inAmount={flow.cashIn} outAmount={flow.cashOut} inColor="text-success" outColor="text-destructive" />
+                    <FlowBadge icon={CreditCard} inAmount={flow.upiIn} outAmount={flow.upiOut} inColor="text-info" outColor="text-destructive" />
+                    {(flow.chequeIn > 0 || flow.chequeOut > 0) && (
+                      <FlowBadge icon={Wallet} inAmount={flow.chequeIn} outAmount={flow.chequeOut} inColor="text-warning" outColor="text-destructive" />
+                    )}
+                    {(flow.adjustIn > 0 || flow.adjustOut > 0) && (
+                      <FlowBadge icon={ArrowLeftRight} inAmount={flow.adjustIn} outAmount={flow.adjustOut} inColor="text-primary" outColor="text-destructive" />
+                    )}
+                  </div>
+                )}
+                {cat.id === 'drawer' && (
+                  <div className="flex gap-2 mt-0.5 text-[10px]">
+                    <span className="text-success font-medium">💵 {formatINR(drawerCash)}</span>
+                    <span className="text-info font-medium">📱 {formatINR(drawerUpi)}</span>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-2 text-xs shrink-0">
-                {cat.id !== 'drawer' && catSummary.count > 0 && (
-                  <span className="text-muted-foreground">{catSummary.count}</span>
+              <div className="flex items-center gap-1 shrink-0">
+                {flow && flow.count > 0 && (
+                  <span className="text-xs text-muted-foreground bg-secondary rounded-full px-1.5 py-0.5">{flow.count}</span>
                 )}
-                {catSummary.totalCash !== 0 && (
-                  <span className="flex items-center gap-0.5 text-success font-medium">
-                    <Wallet className="w-3 h-3" />
-                    {formatINR(catSummary.totalCash)}
-                  </span>
-                )}
-                {catSummary.totalUpi !== 0 && (
-                  <span className="flex items-center gap-0.5 text-info font-medium">
-                    <CreditCard className="w-3 h-3" />
-                    {formatINR(catSummary.totalUpi)}
-                  </span>
-                )}
+                <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                </motion.div>
               </div>
-              <motion.div
-                animate={{ rotate: isExpanded ? 180 : 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <ChevronDown className="w-4 h-4 text-muted-foreground" />
-              </motion.div>
             </button>
 
             <AnimatePresence>

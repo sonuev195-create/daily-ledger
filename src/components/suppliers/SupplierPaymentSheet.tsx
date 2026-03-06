@@ -37,7 +37,7 @@ interface SupplierPaymentSheetProps {
 const paymentModes: { value: PaymentMode; label: string }[] = [
   { value: 'cash', label: 'Cash' },
   { value: 'upi', label: 'UPI' },
-  { value: 'bank', label: 'Bank' },
+  { value: 'cheque', label: 'Cheque' },
 ];
 
 export function SupplierPaymentSheet({ isOpen, onClose, onSuccess, selectedDate }: SupplierPaymentSheetProps) {

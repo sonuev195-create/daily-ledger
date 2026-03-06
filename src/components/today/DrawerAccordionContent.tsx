@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Edit2, Calculator, Check, AlertCircle, Wallet, CreditCard, Users, Truck } from 'lucide-react';
+import { Edit2, Check, AlertCircle, Wallet, CreditCard, Users, Truck, Scale } from 'lucide-react';
 import { DrawerOpening, DrawerClosing, DailySummary } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,20 +11,22 @@ import { supabase } from '@/integrations/supabase/client';
 interface DrawerAccordionContentProps {
   opening: DrawerOpening | null;
   closing: DrawerClosing | null;
+  previousClosing: DrawerClosing | null;
   summary: DailySummary;
   onSaveOpening: (data: Partial<DrawerOpening>) => Promise<DrawerOpening>;
   onSaveClosing: (data: Partial<DrawerClosing>) => Promise<DrawerClosing>;
 }
 
-export function DrawerAccordionContent({ opening, closing, summary, onSaveOpening, onSaveClosing }: DrawerAccordionContentProps) {
+export function DrawerAccordionContent({ opening, closing, previousClosing, summary, onSaveOpening, onSaveClosing }: DrawerAccordionContentProps) {
+  // Auto-fill from previous closing if no opening saved
+  const defaultCoin = opening?.coin ?? previousClosing?.manualCoin ?? 0;
+  const defaultNote = opening?.cash ?? previousClosing?.manualCash ?? 0;
+
   const [editingOpening, setEditingOpening] = useState(false);
-  const [editingClosing, setEditingClosing] = useState(false);
+  const [coin, setCoin] = useState(defaultCoin.toString());
+  const [note, setNote] = useState(defaultNote.toString());
 
-  // Opening state - Coin and Note (Indian banknotes)
-  const [coin, setCoin] = useState(opening?.coin?.toString() || '0');
-  const [note, setNote] = useState(opening?.cash?.toString() || '0');
-
-  // Closing state
+  // Closing - always visible fields
   const [manualCoin, setManualCoin] = useState(closing?.manualCoin?.toString() || '0');
   const [manualNote, setManualNote] = useState(closing?.manualCash?.toString() || '0');
 
@@ -32,10 +34,8 @@ export function DrawerAccordionContent({ opening, closing, summary, onSaveOpenin
   const [customerAdvanceTotal, setCustomerAdvanceTotal] = useState(0);
   const [customerDueTotal, setCustomerDueTotal] = useState(0);
   const [supplierDueTotal, setSupplierDueTotal] = useState(0);
-
   const [saving, setSaving] = useState(false);
 
-  // Load live balances
   useEffect(() => {
     (async () => {
       const [custRes, suppRes] = await Promise.all([
@@ -52,26 +52,28 @@ export function DrawerAccordionContent({ opening, closing, summary, onSaveOpenin
     })();
   }, []);
 
-  // Update state when props change
   useEffect(() => {
-    setCoin(opening?.coin?.toString() || '0');
-    setNote(opening?.cash?.toString() || '0');
-  }, [opening]);
+    const c = opening?.coin ?? previousClosing?.manualCoin ?? 0;
+    const n = opening?.cash ?? previousClosing?.manualCash ?? 0;
+    setCoin(c.toString());
+    setNote(n.toString());
+  }, [opening, previousClosing]);
 
   useEffect(() => {
     setManualCoin(closing?.manualCoin?.toString() || '0');
     setManualNote(closing?.manualCash?.toString() || '0');
   }, [closing]);
 
-  // Cash = Coin + Note
-  const openingCash = opening ? opening.coin + opening.cash : 0;
+  // Calculations - always dynamic based on current transactions
+  const openingCash = opening ? (opening.coin + opening.cash) : ((previousClosing?.manualCoin ?? 0) + (previousClosing?.manualCash ?? 0));
   const systemCash = openingCash + summary.cashIn - summary.cashOut;
-  // UPI opening = 0 always
   const systemUpi = summary.upiIn - summary.upiOut;
+  const adjustBalance = (summary.adjustIn || 0) - (summary.adjustOut || 0);
+  const chequeBalance = (summary.chequeIn || 0) - (summary.chequeOut || 0);
 
-  // Closing
+  // Closing error - always calculated dynamically against current system cash
   const closingTotal = (parseFloat(manualCoin) || 0) + (parseFloat(manualNote) || 0);
-  const cashError = closingTotal - systemCash;
+  const cashError = closing ? (closingTotal - systemCash) : 0;
 
   const handleSaveOpening = async () => {
     setSaving(true);
@@ -96,54 +98,23 @@ export function DrawerAccordionContent({ opening, closing, summary, onSaveOpenin
         manualCoin: parseFloat(manualCoin) || 0,
         manualCash: parseFloat(manualNote) || 0,
         cashToHome: 0,
-        difference: cashError,
+        difference: closingTotal - systemCash,
         systemUpi,
         systemBank: 0,
       });
-      setEditingClosing(false);
       toast.success('Closing saved');
     } catch { toast.error('Failed to save'); }
     finally { setSaving(false); }
   };
 
   const rows = [
-    {
-      label: 'Cash',
-      icon: Wallet,
-      colorClass: 'text-success',
-      bgClass: 'bg-success/10',
-      value: closing ? closingTotal : systemCash,
-      detail: `Coin: ${formatINR(opening?.coin || 0)} + Note: ${formatINR(opening?.cash || 0)}`,
-    },
-    {
-      label: 'UPI',
-      icon: CreditCard,
-      colorClass: 'text-info',
-      bgClass: 'bg-info/10',
-      value: closing ? closing.systemUpi : systemUpi,
-      detail: 'Opening: ₹0',
-    },
-    {
-      label: 'Customer Advance',
-      icon: Users,
-      colorClass: 'text-success',
-      bgClass: 'bg-success/10',
-      value: customerAdvanceTotal,
-    },
-    {
-      label: 'Customer Due',
-      icon: Users,
-      colorClass: 'text-warning',
-      bgClass: 'bg-warning/10',
-      value: customerDueTotal,
-    },
-    {
-      label: 'Supplier Due',
-      icon: Truck,
-      colorClass: 'text-destructive',
-      bgClass: 'bg-destructive/10',
-      value: supplierDueTotal,
-    },
+    { label: 'Cash', icon: Wallet, colorClass: 'text-success', bgClass: 'bg-success/10', value: systemCash },
+    { label: 'UPI', icon: CreditCard, colorClass: 'text-info', bgClass: 'bg-info/10', value: systemUpi },
+    ...(chequeBalance !== 0 ? [{ label: 'Cheque', icon: Wallet, colorClass: 'text-warning', bgClass: 'bg-warning/10', value: chequeBalance }] : []),
+    ...(adjustBalance !== 0 ? [{ label: 'Adjust', icon: Scale, colorClass: adjustBalance === 0 ? 'text-success' : 'text-destructive', bgClass: adjustBalance === 0 ? 'bg-success/10' : 'bg-destructive/10', value: adjustBalance }] : []),
+    { label: 'Customer Advance', icon: Users, colorClass: 'text-success', bgClass: 'bg-success/10', value: customerAdvanceTotal },
+    { label: 'Customer Due', icon: Users, colorClass: 'text-warning', bgClass: 'bg-warning/10', value: customerDueTotal },
+    { label: 'Supplier Due', icon: Truck, colorClass: 'text-destructive', bgClass: 'bg-destructive/10', value: supplierDueTotal },
   ];
 
   return (
@@ -164,10 +135,23 @@ export function DrawerAccordionContent({ opening, closing, summary, onSaveOpenin
         })}
       </div>
 
+      {/* Adjust Error */}
+      {adjustBalance !== 0 && (
+        <div className="flex justify-between text-xs p-2 rounded-lg bg-destructive/10 items-center">
+          <span className="flex items-center gap-1 text-destructive">
+            <AlertCircle className="w-3 h-3" /> Adjust Imbalance
+          </span>
+          <span className="font-bold text-destructive">{formatINR(adjustBalance)}</span>
+        </div>
+      )}
+
       {/* Opening Section */}
       <div className="bg-secondary/30 rounded-xl p-3">
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-medium text-foreground">Opening (Cash)</h4>
+          <h4 className="text-sm font-medium text-foreground">
+            Opening (Cash)
+            {!opening && previousClosing && <span className="text-xs text-muted-foreground ml-1">(from prev closing)</span>}
+          </h4>
           <button onClick={() => setEditingOpening(!editingOpening)} className="text-xs text-accent flex items-center gap-1 hover:underline">
             <Edit2 className="w-3 h-3" /> {editingOpening ? 'Cancel' : 'Edit'}
           </button>
@@ -196,11 +180,11 @@ export function DrawerAccordionContent({ opening, closing, summary, onSaveOpenin
           <div className="grid grid-cols-3 gap-2 text-sm">
             <div>
               <p className="text-muted-foreground text-xs">Coin</p>
-              <p className="font-medium">{formatINR(opening?.coin || 0)}</p>
+              <p className="font-medium">{formatINR(opening?.coin ?? previousClosing?.manualCoin ?? 0)}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">Note</p>
-              <p className="font-medium">{formatINR(opening?.cash || 0)}</p>
+              <p className="font-medium">{formatINR(opening?.cash ?? previousClosing?.manualCash ?? 0)}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">Total</p>
@@ -210,85 +194,48 @@ export function DrawerAccordionContent({ opening, closing, summary, onSaveOpenin
         )}
       </div>
 
-      {/* Closing Section */}
+      {/* System Cash */}
+      <div className="flex items-center justify-between text-sm bg-accent/10 rounded-xl p-3">
+        <span className="text-muted-foreground font-medium">System Cash</span>
+        <span className="font-bold text-accent">{formatINR(systemCash)}</span>
+      </div>
+
+      {/* Closing Section - Always visible */}
       <div className="bg-secondary/30 rounded-xl p-3">
         <div className="flex items-center justify-between mb-2">
           <h4 className="text-sm font-medium text-foreground">Closing (Cash)</h4>
-          <button onClick={() => setEditingClosing(!editingClosing)} className="text-xs text-accent flex items-center gap-1 hover:underline">
-            <Calculator className="w-3 h-3" /> {closing ? (editingClosing ? 'Cancel' : 'Edit') : (editingClosing ? 'Cancel' : 'Close Drawer')}
-          </button>
         </div>
-
-        {/* System Cash */}
-        <div className="flex items-center justify-between text-sm mb-2 bg-accent/10 rounded-lg p-2">
-          <span className="text-muted-foreground text-xs">System Cash</span>
-          <span className="font-bold text-accent">{formatINR(systemCash)}</span>
-        </div>
-
-        {editingClosing ? (
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-muted-foreground">Coin</label>
-                <Input type="number" value={manualCoin} onChange={e => setManualCoin(e.target.value)} className="h-9 text-sm mt-1" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">Note</label>
-                <Input type="number" value={manualNote} onChange={e => setManualNote(e.target.value)} className="h-9 text-sm mt-1" />
-              </div>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground">Coin</label>
+              <Input type="number" value={manualCoin} onChange={e => setManualCoin(e.target.value)} className="h-9 text-sm mt-1" />
             </div>
-            <div className="flex justify-between text-xs p-2 bg-secondary/50 rounded-lg">
-              <span className="text-muted-foreground">Closing Total</span>
-              <span className="font-semibold">{formatINR(closingTotal)}</span>
-            </div>
-            <div className={cn(
-              "flex justify-between text-xs p-2 rounded-lg items-center",
-              cashError === 0 ? "bg-success/10" : "bg-destructive/10"
-            )}>
-              <span className="text-muted-foreground flex items-center gap-1">
-                {cashError === 0 ? <Check className="w-3 h-3 text-success" /> : <AlertCircle className="w-3 h-3 text-destructive" />}
-                Error
-              </span>
-              <span className={cn("font-bold", cashError === 0 ? "text-success" : "text-destructive")}>
-                {cashError === 0 ? '0 Error' : `${cashError >= 0 ? '+' : ''}${formatINR(cashError)}`}
-              </span>
-            </div>
-            <Button size="sm" onClick={handleSaveClosing} disabled={saving} className="w-full">
-              {saving ? 'Saving...' : 'Save Closing'}
-            </Button>
-          </div>
-        ) : closing ? (
-          <div className="space-y-1">
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <div>
-                <p className="text-muted-foreground text-xs">Coin</p>
-                <p className="font-medium">{formatINR(closing.manualCoin)}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Note</p>
-                <p className="font-medium">{formatINR(closing.manualCash)}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Total</p>
-                <p className="font-medium">{formatINR(closing.manualCoin + closing.manualCash)}</p>
-              </div>
-            </div>
-            <div className={cn(
-              "flex justify-between text-xs p-2 rounded-lg items-center mt-1",
-              closing.difference === 0 ? "bg-success/10" : "bg-destructive/10"
-            )}>
-              <span className="flex items-center gap-1">
-                {closing.difference === 0 ? <Check className="w-3 h-3 text-success" /> : <AlertCircle className="w-3 h-3 text-destructive" />}
-                Error
-              </span>
-              <span className={cn("font-bold", closing.difference === 0 ? "text-success" : "text-destructive")}>
-                {closing.difference === 0 ? '0 Error' : formatINR(closing.difference)}
-              </span>
+            <div>
+              <label className="text-xs text-muted-foreground">Note</label>
+              <Input type="number" value={manualNote} onChange={e => setManualNote(e.target.value)} className="h-9 text-sm mt-1" />
             </div>
           </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">Not closed yet. Click "Close Drawer" to enter manual count.</p>
-        )}
+          <div className="flex justify-between text-xs p-2 bg-secondary/50 rounded-lg">
+            <span className="text-muted-foreground">Closing Total</span>
+            <span className="font-semibold">{formatINR(closingTotal)}</span>
+          </div>
+          <div className={cn(
+            "flex justify-between text-xs p-2 rounded-lg items-center",
+            (closingTotal === 0 && !closing) ? "bg-secondary/50" : cashError === 0 ? "bg-success/10" : "bg-destructive/10"
+          )}>
+            <span className="text-muted-foreground flex items-center gap-1">
+              {cashError === 0 ? <Check className="w-3 h-3 text-success" /> : <AlertCircle className="w-3 h-3 text-destructive" />}
+              Error
+            </span>
+            <span className={cn("font-bold", (closingTotal === 0 && !closing) ? "text-muted-foreground" : cashError === 0 ? "text-success" : "text-destructive")}>
+              {closingTotal === 0 && !closing ? '—' : cashError === 0 ? '0 Error' : `${cashError >= 0 ? '+' : ''}${formatINR(cashError)}`}
+            </span>
+          </div>
+          <Button size="sm" onClick={handleSaveClosing} disabled={saving} className="w-full">
+            {saving ? 'Saving...' : closing ? 'Update Closing' : 'Save Closing'}
+          </Button>
+        </div>
       </div>
     </div>
   );

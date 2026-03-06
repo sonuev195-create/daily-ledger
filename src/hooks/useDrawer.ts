@@ -6,17 +6,23 @@ import { v4 as uuidv4 } from 'uuid';
 export function useDrawer(date: Date) {
   const [opening, setOpening] = useState<DrawerOpening | null>(null);
   const [closing, setClosing] = useState<DrawerClosing | null>(null);
+  const [previousClosing, setPreviousClosing] = useState<DrawerClosing | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadDrawer = useCallback(async () => {
     try {
       setLoading(true);
-      const [openingData, closingData] = await Promise.all([
+      const prevDate = new Date(date);
+      prevDate.setDate(prevDate.getDate() - 1);
+      
+      const [openingData, closingData, prevClosingData] = await Promise.all([
         getDrawerOpening(date),
         getDrawerClosing(date),
+        getDrawerClosing(prevDate),
       ]);
       setOpening(openingData || null);
       setClosing(closingData || null);
+      setPreviousClosing(prevClosingData || null);
     } catch (err) {
       console.error('Failed to load drawer:', err);
     } finally {
@@ -72,6 +78,7 @@ export function useDrawer(date: Date) {
   return {
     opening,
     closing,
+    previousClosing,
     loading,
     updateOpening,
     updateClosing,

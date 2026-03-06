@@ -37,7 +37,7 @@ interface BalanceTransaction {
   payments: any;
 }
 
-type PaymentMode = 'cash' | 'upi' | 'bank';
+type PaymentMode = 'cash' | 'upi' | 'cheque';
 
 interface PaymentEntry {
   mode: PaymentMode;
@@ -152,7 +152,7 @@ export default function BalancePaidPage() {
 
   const addPaymentMode = () => {
     const usedModes = payments.map(p => p.mode);
-    const available: PaymentMode[] = (['cash', 'upi', 'bank'] as PaymentMode[]).filter(m => !usedModes.includes(m));
+    const available: PaymentMode[] = (['cash', 'upi', 'cheque'] as PaymentMode[]).filter(m => !usedModes.includes(m));
     if (available.length > 0) {
       setPayments([...payments, { mode: available[0], amount: 0 }]);
     }
@@ -538,7 +538,7 @@ export default function BalancePaidPage() {
                     >
                       <option value="cash">Cash</option>
                       <option value="upi">UPI</option>
-                      <option value="bank">Bank</option>
+                      <option value="cheque">Cheque</option>
                     </select>
                     <Input
                       type="number"

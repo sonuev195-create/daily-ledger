@@ -34,7 +34,7 @@ interface AdvancePurpose {
   name: string;
 }
 
-type PaymentMode = 'cash' | 'upi' | 'bank';
+type PaymentMode = 'cash' | 'upi' | 'cheque';
 interface PaymentEntry { mode: PaymentMode; amount: number; }
 
 export default function CustomerAdvancePage() {
@@ -137,7 +137,7 @@ export default function CustomerAdvancePage() {
 
   const addPaymentMode = () => {
     const used = advPayments.map(p => p.mode);
-    const avail: PaymentMode[] = (['cash', 'upi', 'bank'] as PaymentMode[]).filter(m => !used.includes(m));
+    const avail: PaymentMode[] = (['cash', 'upi', 'cheque'] as PaymentMode[]).filter(m => !used.includes(m));
     if (avail.length > 0) setAdvPayments([...advPayments, { mode: avail[0], amount: 0 }]);
   };
 
@@ -498,7 +498,7 @@ export default function CustomerAdvancePage() {
                     >
                       <option value="cash">Cash</option>
                       <option value="upi">UPI</option>
-                      <option value="bank">Bank</option>
+                      <option value="cheque">Cheque</option>
                     </select>
                     <Input
                       type="number"

@@ -31,7 +31,7 @@ export default function TodayPage() {
   const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null);
 
   const { transactions, loading, add, update, remove, getSummary } = useTransactions(selectedDate);
-  const { opening, closing, updateOpening, updateClosing } = useDrawer(selectedDate);
+  const { opening, closing, previousClosing, updateOpening, updateClosing } = useDrawer(selectedDate);
   const summary = getSummary();
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export default function TodayPage() {
     }
   }, [location.state]);
 
-  const openingCash = opening ? opening.coin + opening.cash : 0;
+  const openingCash = opening ? (opening.coin + opening.cash) : ((previousClosing?.manualCoin ?? 0) + (previousClosing?.manualCash ?? 0));
   const currentCash = openingCash + summary.cashIn - summary.cashOut;
   const currentUpi = summary.upiIn - summary.upiOut;
 
@@ -86,7 +86,7 @@ export default function TodayPage() {
 
   const renderCategoryContent = (categoryId: CategoryId) => {
     if (categoryId === 'drawer') {
-      return <DrawerAccordionContent opening={opening} closing={closing} summary={summary} onSaveOpening={updateOpening} onSaveClosing={updateClosing} />;
+      return <DrawerAccordionContent opening={opening} closing={closing} previousClosing={previousClosing} summary={summary} onSaveOpening={updateOpening} onSaveClosing={updateClosing} />;
     }
     if (categoryId === 'customer') {
       return <CustomerInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />;

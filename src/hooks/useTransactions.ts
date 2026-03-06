@@ -56,57 +56,57 @@ export function useTransactions(date: Date) {
     let cashOut = 0;
     let upiIn = 0;
     let upiOut = 0;
+    let chequeIn = 0;
+    let chequeOut = 0;
+    let adjustIn = 0;
+    let adjustOut = 0;
+
+    const addPaymentsIn = (payments: any[]) => {
+      payments.forEach(p => {
+        if (p.mode === 'cash') cashIn += p.amount;
+        if (p.mode === 'upi') upiIn += p.amount;
+        if (p.mode === 'cheque') chequeIn += p.amount;
+        if (p.mode === 'adjust') adjustIn += p.amount;
+      });
+    };
+
+    const addPaymentsOut = (payments: any[]) => {
+      payments.forEach(p => {
+        if (p.mode === 'cash') cashOut += p.amount;
+        if (p.mode === 'upi') upiOut += p.amount;
+        if (p.mode === 'cheque') chequeOut += p.amount;
+        if (p.mode === 'adjust') adjustOut += p.amount;
+      });
+    };
 
     transactions.forEach(t => {
       if (t.section === 'sale') {
         if (t.type === 'sale' || t.type === 'customer_advance' || t.type === 'balance_paid') {
           totalSales += t.amount;
-          t.payments.forEach(p => {
-            if (p.mode === 'cash') cashIn += p.amount;
-            if (p.mode === 'upi') upiIn += p.amount;
-          });
+          addPaymentsIn(t.payments);
           // Deduct giveBack from cash/UPI (overpayment returned to customer)
           if (t.giveBack) {
-            t.giveBack.forEach(g => {
-              if (g.mode === 'cash') cashOut += g.amount;
-              if (g.mode === 'upi') upiOut += g.amount;
-            });
+            addPaymentsOut(t.giveBack);
           }
         } else if (t.type === 'sales_return') {
           totalSales -= t.amount;
-          t.payments.forEach(p => {
-            if (p.mode === 'cash') cashOut += p.amount;
-            if (p.mode === 'upi') upiOut += p.amount;
-          });
+          addPaymentsOut(t.payments);
         }
       } else if (t.section === 'expenses') {
         totalExpenses += t.amount;
-        t.payments.forEach(p => {
-          if (p.mode === 'cash') cashOut += p.amount;
-          if (p.mode === 'upi') upiOut += p.amount;
-        });
+        addPaymentsOut(t.payments);
       } else if (t.section === 'home') {
         // Home: cash only. From Owner = cash in, To Owner = cash out
         if (t.type === 'home_credit') {
-          t.payments.forEach(p => {
-            if (p.mode === 'cash') cashIn += p.amount;
-          });
+          addPaymentsIn(t.payments);
         } else {
-          t.payments.forEach(p => {
-            if (p.mode === 'cash') cashOut += p.amount;
-          });
+          addPaymentsOut(t.payments);
         }
       } else if (t.section === 'purchase') {
-        // Bills (purchase_bill): amount only, no cash/UPI effect
-        // Payment & expenses: affects cash/UPI
         if (t.type === 'purchase_payment' || t.type === 'purchase_expenses') {
           totalPurchases += t.amount;
-          t.payments.forEach(p => {
-            if (p.mode === 'cash') cashOut += p.amount;
-            if (p.mode === 'upi') upiOut += p.amount;
-          });
+          addPaymentsOut(t.payments);
         } else if (t.type === 'purchase_return') {
-          // Returns: amount only, no cash effect
           totalPurchases -= t.amount;
         } else {
           // purchase_bill, purchase_delivered: amount only
@@ -114,22 +114,13 @@ export function useTransactions(date: Date) {
         }
       } else if (t.section === 'exchange') {
         // Exchange: payments = what customer gives (income), giveBack = what you give
-        t.payments.forEach(p => {
-          if (p.mode === 'cash') cashIn += p.amount;
-          if (p.mode === 'upi') upiIn += p.amount;
-        });
+        addPaymentsIn(t.payments);
         if (t.giveBack) {
-          t.giveBack.forEach(g => {
-            if (g.mode === 'cash') cashOut += g.amount;
-            if (g.mode === 'upi') upiOut += g.amount;
-          });
+          addPaymentsOut(t.giveBack);
         }
       } else if (t.section === 'employee') {
         totalExpenses += t.amount;
-        t.payments.forEach(p => {
-          if (p.mode === 'cash') cashOut += p.amount;
-          if (p.mode === 'upi') upiOut += p.amount;
-        });
+        addPaymentsOut(t.payments);
       }
     });
 
@@ -142,6 +133,10 @@ export function useTransactions(date: Date) {
       cashOut,
       upiIn,
       upiOut,
+      chequeIn,
+      chequeOut,
+      adjustIn,
+      adjustOut,
       transactionCount: transactions.length,
     };
   }, [transactions, date]);

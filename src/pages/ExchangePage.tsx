@@ -23,7 +23,7 @@ interface Exchange {
 const modeOptions = [
   { value: 'cash', label: 'Cash', icon: Wallet, color: 'bg-success/10 text-success' },
   { value: 'upi', label: 'UPI', icon: CreditCard, color: 'bg-info/10 text-info' },
-  { value: 'bank', label: 'Bank', icon: Building2, color: 'bg-primary/10 text-primary' },
+  { value: 'cheque', label: 'Cheque', icon: Building2, color: 'bg-primary/10 text-primary' },
 ];
 
 export default function ExchangePage() {

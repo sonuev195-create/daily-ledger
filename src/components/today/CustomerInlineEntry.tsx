@@ -426,7 +426,7 @@ export function CustomerInlineEntry({
                     <SelectContent>
                       <SelectItem value="cash" className="text-xs">Cash</SelectItem>
                       <SelectItem value="upi" className="text-xs">UPI</SelectItem>
-                      <SelectItem value="bank" className="text-xs">Bank</SelectItem>
+                      <SelectItem value="cheque" className="text-xs">Cheque</SelectItem>
                     </SelectContent>
                   </Select>
                   <Input type="number" inputMode="numeric" value={p.amount || ''}

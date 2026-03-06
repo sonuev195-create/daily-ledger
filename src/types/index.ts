@@ -1,4 +1,4 @@
-export type PaymentMode = 'cash' | 'upi' | 'bank' | 'advance' | 'adjust';
+export type PaymentMode = 'cash' | 'upi' | 'cheque' | 'advance' | 'adjust';
 
 export interface PaymentEntry {
   id: string;
@@ -190,6 +190,10 @@ export interface DailySummary {
   cashOut: number;
   upiIn: number;
   upiOut: number;
+  chequeIn: number;
+  chequeOut: number;
+  adjustIn: number;
+  adjustOut: number;
   transactionCount: number;
   drawerError?: number;
 }

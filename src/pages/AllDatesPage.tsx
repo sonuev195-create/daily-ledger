@@ -77,7 +77,7 @@ export default function AllDatesPage() {
           // Calculate purchase payments
           if (t.section === 'purchase' && t.type !== 'purchase_return') {
             t.payments.forEach(p => {
-              if (['cash', 'upi', 'bank'].includes(p.mode)) {
+              if (['cash', 'upi', 'cheque'].includes(p.mode)) {
                 purchasePayment += p.amount;
               }
             });

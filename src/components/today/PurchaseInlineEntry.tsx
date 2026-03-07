@@ -456,6 +456,43 @@ export function PurchaseInlineEntry({
         </div>
         )}
 
+        {/* Bill capture for purchase bills */}
+        {isBillType && (
+          <div className="space-y-2">
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1" onClick={() => billCameraRef.current?.click()} disabled={isExtracting}>
+                {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />} Capture
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1" onClick={() => billFileRef.current?.click()} disabled={isExtracting}>
+                {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Upload
+              </Button>
+              <input ref={billCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleBillCapture} />
+              <input ref={billFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleBillCapture} />
+            </div>
+            {extractedBillItems.length > 0 && (
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
+                  Extracted Items ({extractedBillItems.length})
+                </div>
+                <div className="max-h-40 overflow-y-auto divide-y divide-border/30">
+                  {extractedBillItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-1 px-2 py-1.5 text-xs">
+                      <span className="flex-1 truncate font-medium">{item.matchedName || item.extractedName}</span>
+                      <span className="text-muted-foreground">×{item.quantity}</span>
+                      <span className="font-medium">{formatINR(item.amount)}</span>
+                      <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
+                        className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-2 py-1 bg-accent/10 text-xs font-medium text-accent text-right">
+                  Total: {formatINR(extractedBillItems.reduce((s, i) => s + i.amount, 0))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
           <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save & Next'}
         </Button>

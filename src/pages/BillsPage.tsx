@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Receipt, Search, Phone, MapPin, AlertCircle, CreditCard, ChevronDown, Wallet, Package, Edit2 } from 'lucide-react';
+import { Receipt, Search, Phone, MapPin, AlertCircle, CreditCard, ChevronDown, Wallet, Package, Edit2, Trash2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 interface BillItem {
   id: string;
@@ -512,20 +513,44 @@ export default function BillsPage() {
               <div className="flex items-center justify-between">
                 <SheetTitle className="text-lg font-semibold">Bill Details</SheetTitle>
                 {selectedBill && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      // Navigate to Today page with the bill date to edit
-                      const billDate = new Date(selectedBill.created_at);
-                      setSelectedBill(null);
-                      navigate('/', { state: { date: billDate.toISOString() } });
-                    }}
-                    className="gap-2"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                    Edit
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const billDate = new Date(selectedBill.created_at);
+                        setSelectedBill(null);
+                        navigate('/', { state: { date: billDate.toISOString(), openTransaction: true, section: selectedBill.supplier_name ? 'purchase' : 'sale', type: selectedBill.bill_type } });
+                      }}
+                      className="gap-2"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={async () => {
+                        if (!confirm('Delete this bill permanently?')) return;
+                        try {
+                          if (selectedBill.source === 'bill') {
+                            await supabase.from('bill_items').delete().eq('bill_id', selectedBill.id);
+                            await supabase.from('bills').delete().eq('id', selectedBill.id);
+                          }
+                          if (selectedBill.transaction_id) {
+                            await supabase.from('transactions').delete().eq('id', selectedBill.transaction_id);
+                          }
+                          toast.success('Bill deleted');
+                          setSelectedBill(null);
+                          fetchBills();
+                        } catch { toast.error('Failed to delete'); }
+                      }}
+                      className="gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </Button>
+                  </div>
                 )}
               </div>
             </SheetHeader>

@@ -26,6 +26,7 @@ interface WelderSalesData {
 
 export default function WeldersPage() {
   const [welders, setWelders] = useState<Welder[]>([]);
+  const [welderTotals, setWelderTotals] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWelder, setSelectedWelder] = useState<Welder | null>(null);
@@ -42,6 +43,15 @@ export default function WeldersPage() {
     setLoading(true);
     const { data } = await supabase.from('welders').select('*').order('name');
     setWelders(data || []);
+    // Fetch total sales per welder
+    if (data && data.length > 0) {
+      const { data: txData } = await supabase.from('transactions').select('welder_id, amount').eq('type', 'sale').not('welder_id', 'is', null);
+      const totals: Record<string, number> = {};
+      (txData || []).forEach(t => {
+        if (t.welder_id) totals[t.welder_id] = (totals[t.welder_id] || 0) + Number(t.amount);
+      });
+      setWelderTotals(totals);
+    }
     setLoading(false);
   };
 
@@ -151,9 +161,15 @@ export default function WeldersPage() {
                     <h3 className="font-semibold text-foreground">{w.name}</h3>
                     {w.phone && <p className="text-sm text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3" />{w.phone}</p>}
                   </div>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(w)}><Edit2 className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(w.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-accent">{formatINR(welderTotals[w.id] || 0)}</p>
+                      <p className="text-xs text-muted-foreground">Total Sales</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(w)}><Edit2 className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(w.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                    </div>
                   </div>
                 </div>
               </motion.div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Check, X, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Check, X, Pencil, Trash2, Camera, Upload, Loader2 } from 'lucide-react';
 import { Transaction, TransactionSection, PaymentEntry, PaymentMode } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useItems } from '@/hooks/useSupabaseData';
 
 type PurchaseSubType = 'purchase_payment' | 'purchase_bill_a' | 'purchase_bill_b' | 'purchase_bill_c' | 'purchase_delivered' | 'purchase_return_a' | 'purchase_return_b' | 'purchase_expenses';
 
@@ -75,12 +76,17 @@ interface PurchaseInlineEntryProps {
 export function PurchaseInlineEntry({
   transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction,
 }: PurchaseInlineEntryProps) {
+  const { items: allItems } = useItems();
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
   const [supplierResults, setSupplierResults] = useState<SupplierResult[]>([]);
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
   const supplierInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const billFileRef = useRef<HTMLInputElement>(null);
+  const billCameraRef = useRef<HTMLInputElement>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractedBillItems, setExtractedBillItems] = useState<any[]>([]);
 
   const purchaseTransactions = transactions.filter(t => t.section === 'purchase');
 
@@ -163,6 +169,50 @@ export function PurchaseInlineEntry({
 
   const addPaymentMode = () => setEntry(prev => ({ ...prev, payments: [...prev.payments, { id: uuidv4(), mode: 'upi', amount: 0 }] }));
   const removePayment = (i: number) => { if (entry.payments.length > 1) setEntry(prev => ({ ...prev, payments: prev.payments.filter((_, idx) => idx !== i) })); };
+
+  const handleBillCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setIsExtracting(true);
+    try {
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      const itemNames = allItems.map(i => i.name);
+      const paperBillNames = allItems.reduce((acc: Record<string, string>, i) => {
+        if (i.paperBillName) acc[i.name] = i.paperBillName;
+        return acc;
+      }, {});
+      const { data: configData } = await supabase.from('bill_format_config').select('*').eq('config_name', 'default').maybeSingle();
+      const columnMapping = configData ? {
+        totalColumns: configData.total_columns, itemNameColumn: configData.item_name_column,
+        quantityColumn: configData.quantity_column, quantityType: configData.quantity_type,
+        rateColumn: configData.has_rate ? configData.rate_column : null,
+        amountColumn: configData.amount_column, hasRate: configData.has_rate, hasAmount: configData.has_amount,
+      } : undefined;
+      const { data, error } = await supabase.functions.invoke('extract-bill-items', {
+        body: { imageBase64: base64, itemNames, paperBillNames, columnMapping },
+      });
+      if (error) throw error;
+      const items = data?.items || [];
+      if (items.length === 0) { toast.error('No items found'); return; }
+      const enriched = items.map((ext: any) => {
+        const masterItem = allItems.find(i => i.name.toLowerCase() === (ext.matchedName || ext.extractedName)?.toLowerCase());
+        return { ...ext, selectedItemId: masterItem?.id || null, confirmed: !!masterItem };
+      });
+      setExtractedBillItems(enriched);
+      const total = enriched.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+      if (total > 0) setEntry(prev => ({ ...prev, amount: total.toString() }));
+      toast.success(`Extracted ${enriched.length} items`);
+    } catch (err: any) {
+      toast.error('Extraction failed: ' + (err.message || 'Unknown'));
+    } finally {
+      setIsExtracting(false);
+    }
+  };
 
   const handleSave = async () => {
     const amountNum = parseFloat(entry.amount) || 0;
@@ -404,6 +454,43 @@ export function PurchaseInlineEntry({
             <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add payment mode</button>
           </div>
         </div>
+        )}
+
+        {/* Bill capture for purchase bills */}
+        {isBillType && (
+          <div className="space-y-2">
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1" onClick={() => billCameraRef.current?.click()} disabled={isExtracting}>
+                {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />} Capture
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1" onClick={() => billFileRef.current?.click()} disabled={isExtracting}>
+                {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Upload
+              </Button>
+              <input ref={billCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleBillCapture} />
+              <input ref={billFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleBillCapture} />
+            </div>
+            {extractedBillItems.length > 0 && (
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
+                  Extracted Items ({extractedBillItems.length})
+                </div>
+                <div className="max-h-40 overflow-y-auto divide-y divide-border/30">
+                  {extractedBillItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-1 px-2 py-1.5 text-xs">
+                      <span className="flex-1 truncate font-medium">{item.matchedName || item.extractedName}</span>
+                      <span className="text-muted-foreground">×{item.quantity}</span>
+                      <span className="font-medium">{formatINR(item.amount)}</span>
+                      <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
+                        className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-2 py-1 bg-accent/10 text-xs font-medium text-accent text-right">
+                  Total: {formatINR(extractedBillItems.reduce((s, i) => s + i.amount, 0))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">

@@ -135,8 +135,10 @@ export function EmployeeInlineEntry({
 
   const handleSave = async () => {
     if (!entry.employeeId) { toast.error('Select an employee'); return; }
+    if (!entry.categoryId) { toast.error('Select a category'); return; }
     const totalPayments = entry.payments.reduce((s, p) => s + p.amount, 0);
-    if (totalPayments <= 0) { toast.error('Payment required'); return; }
+    const salaryAmount = parseFloat(entry.salary) || 0;
+    // Allow zero salary (presence only) and zero payment (salary recorded, payment later)
 
     setSaving(true);
     try {
@@ -144,23 +146,23 @@ export function EmployeeInlineEntry({
         date: selectedDate,
         section: 'employee' as TransactionSection,
         type: 'salary',
-        amount: totalPayments,
+        amount: salaryAmount,
         payments: entry.payments.filter(p => p.amount > 0),
         employeeId: entry.employeeId,
         billNumber: `EM${Date.now().toString().slice(-6)}`,
+        reference: entry.categoryId,
       };
-
-      if (entry.categoryId) {
-        (transaction as any).reference = entry.categoryId;
-      }
 
       await onSave(transaction);
 
-      const { data: emp } = await supabase.from('employees').select('advance_balance').eq('id', entry.employeeId).single();
-      if (emp) {
-        await supabase.from('employees').update({
-          advance_balance: Math.max(0, Number(emp.advance_balance) - totalPayments),
-        }).eq('id', entry.employeeId);
+      // Only deduct advance if payment was actually made
+      if (totalPayments > 0) {
+        const { data: emp } = await supabase.from('employees').select('advance_balance').eq('id', entry.employeeId).single();
+        if (emp && Number(emp.advance_balance) > 0) {
+          await supabase.from('employees').update({
+            advance_balance: Math.max(0, Number(emp.advance_balance) - totalPayments),
+          }).eq('id', entry.employeeId);
+        }
       }
 
       setEntry(createEmptyRow());

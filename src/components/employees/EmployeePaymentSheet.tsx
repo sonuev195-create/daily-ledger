@@ -178,10 +178,7 @@ export function EmployeePaymentSheet({ isOpen, onClose, onSuccess, selectedDate 
       toast.error('Please select a category');
       return;
     }
-    if (amountNum <= 0) {
-      toast.error('Please enter a valid amount');
-      return;
-    }
+    // Allow zero amount (presence-only entry) and zero payments (pay later)
 
     setLoading(true);
     try {
@@ -474,7 +471,7 @@ export function EmployeePaymentSheet({ isOpen, onClose, onSuccess, selectedDate 
           <div className="px-6 py-4 border-t border-border">
             <Button
               onClick={handleSave}
-              disabled={loading || !selectedEmployee || !selectedCategory || amountNum <= 0}
+              disabled={loading || !selectedEmployee || !selectedCategory}
               className="w-full py-6 text-lg gap-2"
             >
               <ArrowUpRight className="w-5 h-5" />

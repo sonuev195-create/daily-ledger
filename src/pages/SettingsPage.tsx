@@ -216,6 +216,37 @@ export default function SettingsPage() {
 
   const columnNumbers = Array.from({ length: formatConfig.total_columns }, (_, i) => i + 1);
 
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetDatabase = async () => {
+    if (resetConfirm !== 'RESET') {
+      toast.error('Type RESET to confirm');
+      return;
+    }
+    setIsResetting(true);
+    try {
+      const tables = [
+        'bill_items', 'bills', 'transactions', 'batches',
+        'drawer_closings', 'drawer_openings', 'exchanges',
+      ];
+      for (const table of tables) {
+        await supabase.from(table as any).delete().gte('created_at', '1970-01-01');
+      }
+      // Reset balances
+      await supabase.from('customers').update({ due_balance: 0, advance_balance: 0 } as any).gte('created_at', '1970-01-01');
+      await supabase.from('suppliers').update({ balance: 0 } as any).gte('created_at', '1970-01-01');
+      await supabase.from('employees').update({ advance_balance: 0 } as any).gte('created_at', '1970-01-01');
+      toast.success('All data erased successfully');
+      setResetConfirm('');
+    } catch (err) {
+      console.error('Reset error:', err);
+      toast.error('Failed to reset database');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   return (
     <AppLayout title="Settings">
       <div className="max-w-3xl mx-auto px-4 py-6 pb-24 lg:py-8 space-y-6">
@@ -624,6 +655,48 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </motion.div>
+
+        {/* ========== Reset Database Section ========== */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-destructive/5 border border-destructive/20 rounded-2xl p-5 space-y-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center">
+              <Trash2 className="w-5 h-5 text-destructive" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-destructive">Reset Database</h2>
+              <p className="text-xs text-muted-foreground">
+                This will permanently delete ALL transactions, bills, drawer data, and reset all balances. This action cannot be undone.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Type <span className="font-bold text-destructive">RESET</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={resetConfirm}
+              onChange={(e) => setResetConfirm(e.target.value)}
+              placeholder="Type RESET here..."
+              className="w-full h-10 px-4 bg-background border border-destructive/30 rounded-xl text-sm focus:ring-2 focus:ring-destructive/50"
+            />
+          </div>
+
+          <button
+            onClick={handleResetDatabase}
+            disabled={isResetting || resetConfirm !== 'RESET'}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-destructive text-destructive-foreground font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
+          >
+            {isResetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            {isResetting ? 'Resetting...' : 'Erase All Data'}
+          </button>
         </motion.div>
       </div>
     </AppLayout>

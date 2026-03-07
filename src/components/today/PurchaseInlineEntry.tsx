@@ -76,12 +76,17 @@ interface PurchaseInlineEntryProps {
 export function PurchaseInlineEntry({
   transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction,
 }: PurchaseInlineEntryProps) {
+  const { items: allItems } = useItems();
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
   const [supplierResults, setSupplierResults] = useState<SupplierResult[]>([]);
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
   const supplierInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const billFileRef = useRef<HTMLInputElement>(null);
+  const billCameraRef = useRef<HTMLInputElement>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractedBillItems, setExtractedBillItems] = useState<any[]>([]);
 
   const purchaseTransactions = transactions.filter(t => t.section === 'purchase');
 

@@ -170,6 +170,50 @@ export function PurchaseInlineEntry({
   const addPaymentMode = () => setEntry(prev => ({ ...prev, payments: [...prev.payments, { id: uuidv4(), mode: 'upi', amount: 0 }] }));
   const removePayment = (i: number) => { if (entry.payments.length > 1) setEntry(prev => ({ ...prev, payments: prev.payments.filter((_, idx) => idx !== i) })); };
 
+  const handleBillCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setIsExtracting(true);
+    try {
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      const itemNames = allItems.map(i => i.name);
+      const paperBillNames = allItems.reduce((acc: Record<string, string>, i) => {
+        if (i.paperBillName) acc[i.name] = i.paperBillName;
+        return acc;
+      }, {});
+      const { data: configData } = await supabase.from('bill_format_config').select('*').eq('config_name', 'default').maybeSingle();
+      const columnMapping = configData ? {
+        totalColumns: configData.total_columns, itemNameColumn: configData.item_name_column,
+        quantityColumn: configData.quantity_column, quantityType: configData.quantity_type,
+        rateColumn: configData.has_rate ? configData.rate_column : null,
+        amountColumn: configData.amount_column, hasRate: configData.has_rate, hasAmount: configData.has_amount,
+      } : undefined;
+      const { data, error } = await supabase.functions.invoke('extract-bill-items', {
+        body: { imageBase64: base64, itemNames, paperBillNames, columnMapping },
+      });
+      if (error) throw error;
+      const items = data?.items || [];
+      if (items.length === 0) { toast.error('No items found'); return; }
+      const enriched = items.map((ext: any) => {
+        const masterItem = allItems.find(i => i.name.toLowerCase() === (ext.matchedName || ext.extractedName)?.toLowerCase());
+        return { ...ext, selectedItemId: masterItem?.id || null, confirmed: !!masterItem };
+      });
+      setExtractedBillItems(enriched);
+      const total = enriched.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+      if (total > 0) setEntry(prev => ({ ...prev, amount: total.toString() }));
+      toast.success(`Extracted ${enriched.length} items`);
+    } catch (err: any) {
+      toast.error('Extraction failed: ' + (err.message || 'Unknown'));
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   const handleSave = async () => {
     const amountNum = parseFloat(entry.amount) || 0;
     const totalPayments = entry.payments.reduce((s, p) => s + p.amount, 0);

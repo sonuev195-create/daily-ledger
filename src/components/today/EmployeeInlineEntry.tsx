@@ -74,6 +74,7 @@ export function EmployeeInlineEntry({
   }, []);
 
   useEffect(() => {
+    if (entry.employeeId) { setShowDropdown(false); return; }
     const timer = setTimeout(async () => {
       if (entry.employeeQuery.length >= 1) {
         const { data } = await supabase.from('employees').select('id, name, advance_balance, salary')
@@ -86,7 +87,7 @@ export function EmployeeInlineEntry({
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [entry.employeeQuery]);
+  }, [entry.employeeQuery, entry.employeeId]);
 
   useEffect(() => {
     if (entry.employeeId) {

@@ -36,7 +36,7 @@ export function SupplierReport() {
   const [txns, setTxns] = useState<any[]>([]);
   const [bills, setBills] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('summary');
+  const [viewMode, setViewMode] = useState<ViewMode>('ledger');
   const [expandedBill, setExpandedBill] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,8 +54,6 @@ export function SupplierReport() {
     setLoading(true);
     const start = format(startOfMonth(month), 'yyyy-MM-dd');
     const end = format(endOfMonth(month), 'yyyy-MM-dd');
-
-    // Get all supplier transactions
     const { data: txnData } = await supabase
       .from('transactions')
       .select('*')
@@ -65,13 +63,9 @@ export function SupplierReport() {
       .order('date');
     setTxns(txnData || []);
 
-    // Get bills for this supplier's transactions
     const txnIds = (txnData || []).filter(t => ['purchase_bill', 'purchase_return'].includes(t.type)).map(t => t.id);
     if (txnIds.length > 0) {
-      const { data: billData } = await supabase
-        .from('bills')
-        .select('*, bill_items(*)')
-        .in('transaction_id', txnIds);
+      const { data: billData } = await supabase.from('bills').select('*, bill_items(*)').in('transaction_id', txnIds);
       setBills(billData || []);
     } else {
       setBills([]);
@@ -81,7 +75,7 @@ export function SupplierReport() {
 
   const selectedSupp = suppliers.find(s => s.id === selectedSuppId);
 
-  // Monthly summary calculations
+  const sum = (arr: any[]) => arr.reduce((s, t) => s + Number(t.amount), 0);
   const billATxns = txns.filter(t => t.type === 'purchase_bill' && t.bill_type === 'g_bill');
   const billBTxns = txns.filter(t => t.type === 'purchase_bill' && t.bill_type === 'n_bill');
   const billCTxns = txns.filter(t => t.type === 'purchase_bill' && t.bill_type === 'ng_bill');
@@ -90,8 +84,6 @@ export function SupplierReport() {
   const returnCTxns = txns.filter(t => t.type === 'purchase_return' && t.bill_type === 'ng_bill');
   const paymentTxns = txns.filter(t => t.type === 'purchase_payment');
   const expenseTxns = txns.filter(t => t.type === 'purchase_expenses');
-
-  const sum = (arr: any[]) => arr.reduce((s, t) => s + Number(t.amount), 0);
 
   const totalBillA = sum(billATxns);
   const totalBillB = sum(billBTxns);
@@ -106,24 +98,39 @@ export function SupplierReport() {
   const netBillA = totalBillA - totalRetA + totalBillC - totalRetC;
   const netBillB = totalBillB - totalRetB - totalBillC + totalRetC;
 
-  // Running balance (chronological ledger)
+  // Running balance: Bill A and B add to due, Bill C does NOT affect due (reporting only)
+  // Payments and Returns reduce due
   const ledgerTxns = txns.map((t, i) => {
-    const isDebit = ['purchase_bill'].includes(t.type);
-    const isCredit = ['purchase_payment', 'purchase_return'].includes(t.type);
-    const direction = isDebit ? 'debit' : isCredit ? 'credit' : 'expense';
+    const isBillAB = t.type === 'purchase_bill' && (t.bill_type === 'g_bill' || t.bill_type === 'n_bill');
+    const isBillC = t.type === 'purchase_bill' && t.bill_type === 'ng_bill';
+    const isReturn = t.type === 'purchase_return';
+    const isPayment = t.type === 'purchase_payment';
+    const direction = isBillAB ? 'debit' : (isReturn || isPayment) ? 'credit' : isBillC ? 'report' : 'expense';
+
     const runningBalance = txns.slice(0, i + 1).reduce((bal, x) => {
-      if (['purchase_bill'].includes(x.type)) return bal + Number(x.amount);
-      if (['purchase_payment', 'purchase_return'].includes(x.type)) return bal - Number(x.amount);
+      // Bill A and B increase supplier due
+      if (x.type === 'purchase_bill' && (x.bill_type === 'g_bill' || x.bill_type === 'n_bill')) return bal + Number(x.amount);
+      // Bill C does NOT affect due (reporting only)
+      // Returns decrease due
+      if (x.type === 'purchase_return') return bal - Number(x.amount);
+      // Payments decrease due
+      if (x.type === 'purchase_payment') return bal - Number(x.amount);
       return bal;
     }, 0);
     return { ...t, direction, runningBalance };
   });
 
-  const typeLabel = (type: string) => {
+  const typeLabel = (type: string, billType?: string | null) => {
+    if (type === 'purchase_bill') {
+      const bt = billTypeLabel(billType);
+      return bt ? `Bill ${bt}` : 'Bill';
+    }
+    if (type === 'purchase_return') {
+      const bt = billTypeLabel(billType);
+      return bt ? `Return ${bt}` : 'Return';
+    }
     const map: Record<string, string> = {
-      purchase_bill: 'Bill', purchase_return: 'Return',
-      purchase_payment: 'Payment', purchase_expenses: 'Expense',
-      purchase_delivered: 'Delivered',
+      purchase_payment: 'Payment', purchase_expenses: 'Expense', purchase_delivered: 'Delivered',
     };
     return map[type] || type.replace(/_/g, ' ');
   };
@@ -137,7 +144,6 @@ export function SupplierReport() {
     if (!selectedSupp) return;
     const doc = new jsPDF();
     const pw = doc.internal.pageSize.getWidth();
-
     doc.setFontSize(16);
     doc.text(`Supplier Report: ${selectedSupp.name}`, pw / 2, 18, { align: 'center' });
     doc.setFontSize(10);
@@ -148,69 +154,49 @@ export function SupplierReport() {
       startY: 32,
       head: [['Category', 'Amount']],
       body: [
-        ['Bill A', fmtINR(totalBillA)],
-        ['Bill B', fmtINR(totalBillB)],
-        ['Bill C', fmtINR(totalBillC)],
-        ['Return A', fmtINR(totalRetA)],
-        ['Return B', fmtINR(totalRetB)],
-        ['Return C', fmtINR(totalRetC)],
+        ['Bill A', fmtINR(totalBillA)], ['Bill B', fmtINR(totalBillB)], ['Bill C', fmtINR(totalBillC)],
+        ['Return A', fmtINR(totalRetA)], ['Return B', fmtINR(totalRetB)], ['Return C', fmtINR(totalRetC)],
         ['Net Bill A', fmtINR(netBillA)],
         ['Net Bill B', netBillB >= 0 ? fmtINR(netBillB) : `-${fmtINR(netBillB)}`],
-        ['Total Payments', fmtINR(totalPayments)],
-        ['Total Expenses', fmtINR(totalExpenses)],
+        ['Total Payments', fmtINR(totalPayments)], ['Total Expenses', fmtINR(totalExpenses)],
         ['Current Balance', fmtINR(Number(selectedSupp.balance || 0))],
       ],
-      theme: 'striped',
-      headStyles: { fillColor: [66, 66, 66] },
-      styles: { fontSize: 9 },
+      theme: 'striped', headStyles: { fillColor: [66, 66, 66] }, styles: { fontSize: 9 },
     });
-
     let y = (doc as any).lastAutoTable.finalY + 10;
 
-    // Ledger
+    // Ledger table
     autoTable(doc, {
       startY: y,
-      head: [['Date', 'Type', 'Bill#', 'BT', 'Amount', 'Payment', 'Balance']],
+      head: [['Date', 'Type', 'Bill#', 'Amount', 'Payment', 'Balance']],
       body: ledgerTxns.map(t => [
-        format(parseISO(t.date), 'dd MMM'),
-        typeLabel(t.type),
+        format(parseISO(t.date), 'dd MMM yyyy'),
+        typeLabel(t.type, t.bill_type),
         t.bill_number || '-',
-        billTypeLabel(t.bill_type) || '-',
         fmtINR(Number(t.amount)),
         paymentStr(t) || '-',
-        fmtINR(t.runningBalance),
+        t.runningBalance >= 0 ? fmtINR(t.runningBalance) : `-${fmtINR(t.runningBalance)}`,
       ]),
-      theme: 'striped',
-      headStyles: { fillColor: [66, 66, 66] },
-      styles: { fontSize: 7 },
+      theme: 'striped', headStyles: { fillColor: [66, 66, 66] }, styles: { fontSize: 7 },
     });
-
     doc.save(`Supplier_${selectedSupp.name}_${format(month, 'yyyy-MM')}.pdf`);
   };
 
   const handleExportCSV = () => {
     if (!selectedSupp) return;
-    const header = ['Date', 'Type', 'Bill#', 'Bill Type', 'Amount', 'Payment', 'Running Balance'];
+    const header = ['Date', 'Type', 'Bill#', 'Amount', 'Payment', 'Balance'];
     const rows = [header, ...ledgerTxns.map(t => [
       format(parseISO(t.date), 'dd MMM yyyy'),
-      typeLabel(t.type),
-      t.bill_number || '',
-      billTypeLabel(t.bill_type) || '',
-      String(Number(t.amount)),
-      paymentStr(t),
-      String(t.runningBalance),
+      typeLabel(t.type, t.bill_type),
+      t.bill_number || '', String(Number(t.amount)), paymentStr(t), String(t.runningBalance),
     ])];
     downloadCSV(rows, `Supplier_${selectedSupp.name}_${format(month, 'yyyy-MM')}.csv`);
   };
 
   return (
     <div className="space-y-4">
-      {/* Supplier selector */}
-      <select
-        value={selectedSuppId}
-        onChange={e => setSelectedSuppId(e.target.value)}
-        className="w-full h-10 px-3 text-sm bg-background border border-border rounded-xl"
-      >
+      <select value={selectedSuppId} onChange={e => setSelectedSuppId(e.target.value)}
+        className="w-full h-10 px-3 text-sm bg-background border border-border rounded-xl">
         <option value="">Select Supplier</option>
         {suppliers.map(s => (
           <option key={s.id} value={s.id}>{s.name}{Number(s.balance) > 0 ? ` (Due: ${formatINR(Number(s.balance))})` : ''}</option>
@@ -219,7 +205,6 @@ export function SupplierReport() {
 
       {selectedSuppId && (
         <>
-          {/* Month nav */}
           <div className="flex items-center justify-between">
             <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() - 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronLeft className="w-4 h-4" /></button>
             <span className="text-sm font-medium">{format(month, 'MMMM yyyy')}</span>
@@ -236,7 +221,7 @@ export function SupplierReport() {
 
           {/* View mode tabs */}
           <div className="flex gap-1 bg-secondary rounded-lg p-0.5">
-            {(['summary', 'bills', 'ledger'] as ViewMode[]).map(mode => (
+            {(['ledger', 'bills', 'summary'] as ViewMode[]).map(mode => (
               <button key={mode} onClick={() => setViewMode(mode)}
                 className={cn("flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all capitalize",
                   viewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
@@ -252,34 +237,44 @@ export function SupplierReport() {
             <p className="text-sm text-muted-foreground text-center py-8">No transactions this month</p>
           ) : (
             <>
-              {/* SUMMARY VIEW */}
-              {viewMode === 'summary' && (
-                <div className="bg-card border border-border rounded-xl p-4 space-y-1 text-xs">
-                  <div className="font-semibold underline mb-1">PURCHASE SUMMARY</div>
-                  <div className="flex justify-between"><span>Bill A</span><span>{formatINR(totalBillA)}</span></div>
-                  <div className="flex justify-between"><span>Bill B</span><span>{formatINR(totalBillB)}</span></div>
-                  <div className="flex justify-between"><span>Bill C</span><span>{formatINR(totalBillC)}</span></div>
-                  <div className="flex justify-between"><span>Return A</span><span className="text-destructive">-{formatINR(totalRetA)}</span></div>
-                  <div className="flex justify-between"><span>Return B</span><span className="text-destructive">-{formatINR(totalRetB)}</span></div>
-                  <div className="flex justify-between"><span>Return C</span><span className="text-destructive">-{formatINR(totalRetC)}</span></div>
-                  <div className="border-t border-border pt-1 mt-1">
-                    <div className="flex justify-between font-semibold"><span>Net Bill A</span><span>{formatINR(netBillA)}</span></div>
-                    <div className="flex justify-between font-semibold"><span>Net Bill B</span><span>{netBillB < 0 ? '-' : ''}{formatINR(Math.abs(netBillB))}</span></div>
+              {/* LEDGER VIEW - Table pattern: Date | Type | Bill# | Amount | Payment | Balance */}
+              {viewMode === 'ledger' && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="grid grid-cols-[55px_70px_40px_60px_70px_60px] gap-1 px-3 py-2 bg-secondary/50 text-[10px] font-semibold text-muted-foreground border-b border-border">
+                    <span>Date</span>
+                    <span>Type</span>
+                    <span>Bill#</span>
+                    <span className="text-right">Amount</span>
+                    <span className="text-right">Payment</span>
+                    <span className="text-right">Balance</span>
                   </div>
-                  <div className="border-t border-border pt-1 mt-1">
-                    <div className="flex justify-between"><span>Total Bills</span><span>{formatINR(totalBills)}</span></div>
-                    <div className="flex justify-between"><span>Total Returns</span><span className="text-destructive">-{formatINR(totalReturns)}</span></div>
-                    <div className="flex justify-between"><span>Total Payments</span><span className="text-success">{formatINR(totalPayments)}</span></div>
-                    <div className="flex justify-between"><span>Total Expenses</span><span>{formatINR(totalExpenses)}</span></div>
-                  </div>
+                  {ledgerTxns.map(t => (
+                    <div key={t.id} className="grid grid-cols-[55px_70px_40px_60px_70px_60px] gap-1 px-3 py-2 border-b border-border/50 last:border-0 text-[11px] items-start">
+                      <span className="text-muted-foreground">{format(parseISO(t.date), 'dd MMM')}</span>
+                      <span className={cn("font-medium truncate",
+                        t.direction === 'debit' ? "text-warning" : t.direction === 'credit' ? "text-success" : t.direction === 'report' ? "text-info" : ""
+                      )}>
+                        {typeLabel(t.type, t.bill_type)}
+                      </span>
+                      <span className="text-muted-foreground truncate">{t.bill_number || '-'}</span>
+                      <span className="text-right font-semibold">{formatINR(Number(t.amount))}</span>
+                      <span className="text-right text-muted-foreground text-[10px]">{paymentStr(t) || '-'}</span>
+                      <span className={cn("text-right font-semibold", t.runningBalance > 0 ? "text-warning" : "text-success")}>
+                        {t.runningBalance < 0 ? '-' : ''}{formatINR(Math.abs(t.runningBalance))}
+                      </span>
+                    </div>
+                  ))}
+                  {/* Current balance footer */}
                   {selectedSupp && (
-                    <div className="border-t-2 border-border pt-2 mt-2">
-                      <div className="flex justify-between font-bold">
-                        <span>Current Balance</span>
-                        <span className={Number(selectedSupp.balance) > 0 ? "text-warning" : "text-success"}>
-                          {Number(selectedSupp.balance) > 0 ? formatINR(Number(selectedSupp.balance)) : 'Clear'}
-                        </span>
-                      </div>
+                    <div className="grid grid-cols-[55px_70px_40px_60px_70px_60px] gap-1 px-3 py-2 bg-secondary/30 text-[11px] font-bold border-t border-border">
+                      <span></span>
+                      <span>Current</span>
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                      <span className={cn("text-right", Number(selectedSupp.balance) > 0 ? "text-warning" : "text-success")}>
+                        {formatINR(Number(selectedSupp.balance || 0))}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -327,14 +322,11 @@ export function SupplierReport() {
                           </div>
                         )}
                         {isExpanded && !bill && (
-                          <div className="border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
-                            No bill details available
-                          </div>
+                          <div className="border-t border-border px-3 py-2 text-[10px] text-muted-foreground">No bill details</div>
                         )}
                       </div>
                     );
                   })}
-                  {/* Payments */}
                   {paymentTxns.length > 0 && (
                     <>
                       <div className="text-xs font-semibold text-muted-foreground mt-3">PAYMENTS</div>
@@ -352,34 +344,36 @@ export function SupplierReport() {
                 </div>
               )}
 
-              {/* LEDGER VIEW */}
-              {viewMode === 'ledger' && (
-                <div className="space-y-2">
-                  {ledgerTxns.map(t => (
-                    <div key={t.id} className="bg-card border border-border rounded-xl p-3">
-                      <div className="flex justify-between items-start text-xs">
-                        <div>
-                          <p className="font-medium">{format(parseISO(t.date), 'dd MMM yyyy, EEE')}</p>
-                          <p className="text-muted-foreground">
-                            {typeLabel(t.type)}
-                            {t.bill_number ? ` #${t.bill_number}` : ''}
-                            {t.bill_type ? ` [${billTypeLabel(t.bill_type)}]` : ''}
-                          </p>
-                          {paymentStr(t) && <p className="text-[10px] text-muted-foreground">{paymentStr(t)}</p>}
-                        </div>
-                        <div className="text-right">
-                          <p className={cn("font-bold",
-                            t.direction === 'debit' ? "text-warning" : t.direction === 'credit' ? "text-success" : "text-foreground"
-                          )}>
-                            {t.direction === 'credit' ? '-' : '+'}{formatINR(Number(t.amount))}
-                          </p>
-                          <p className="text-[10px] font-semibold text-primary mt-0.5">
-                            Bal: {formatINR(t.runningBalance)}
-                          </p>
-                        </div>
+              {/* SUMMARY VIEW */}
+              {viewMode === 'summary' && (
+                <div className="bg-card border border-border rounded-xl p-4 space-y-1 text-xs">
+                  <div className="font-semibold underline mb-1">PURCHASE SUMMARY</div>
+                  <div className="flex justify-between"><span>Bill A</span><span>{formatINR(totalBillA)}</span></div>
+                  <div className="flex justify-between"><span>Bill B</span><span>{formatINR(totalBillB)}</span></div>
+                  <div className="flex justify-between"><span>Bill C</span><span>{formatINR(totalBillC)}</span></div>
+                  <div className="flex justify-between"><span>Return A</span><span className="text-destructive">-{formatINR(totalRetA)}</span></div>
+                  <div className="flex justify-between"><span>Return B</span><span className="text-destructive">-{formatINR(totalRetB)}</span></div>
+                  <div className="flex justify-between"><span>Return C</span><span className="text-destructive">-{formatINR(totalRetC)}</span></div>
+                  <div className="border-t border-border pt-1 mt-1">
+                    <div className="flex justify-between font-semibold"><span>Net Bill A</span><span>{formatINR(netBillA)}</span></div>
+                    <div className="flex justify-between font-semibold"><span>Net Bill B</span><span>{netBillB < 0 ? '-' : ''}{formatINR(Math.abs(netBillB))}</span></div>
+                  </div>
+                  <div className="border-t border-border pt-1 mt-1">
+                    <div className="flex justify-between"><span>Total Bills</span><span>{formatINR(totalBills)}</span></div>
+                    <div className="flex justify-between"><span>Total Returns</span><span className="text-destructive">-{formatINR(totalReturns)}</span></div>
+                    <div className="flex justify-between"><span>Total Payments</span><span className="text-success">{formatINR(totalPayments)}</span></div>
+                    <div className="flex justify-between"><span>Total Expenses</span><span>{formatINR(totalExpenses)}</span></div>
+                  </div>
+                  {selectedSupp && (
+                    <div className="border-t-2 border-border pt-2 mt-2">
+                      <div className="flex justify-between font-bold">
+                        <span>Current Balance</span>
+                        <span className={Number(selectedSupp.balance) > 0 ? "text-warning" : "text-success"}>
+                          {Number(selectedSupp.balance) > 0 ? formatINR(Number(selectedSupp.balance)) : 'Clear'}
+                        </span>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </>

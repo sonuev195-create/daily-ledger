@@ -289,6 +289,7 @@ export function PurchaseInlineEntry({
         supplierName: entry.supplierQuery || undefined,
         reference: entry.reference || undefined,
         billType: billType as any,
+        due: ['purchase_bill_a', 'purchase_bill_b'].includes(entry.type) ? amountNum : undefined,
       };
 
       await onSave(transaction);

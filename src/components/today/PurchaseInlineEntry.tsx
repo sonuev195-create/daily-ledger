@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useItems, saveBillToSupabase, createBatchFromPurchase } from '@/hooks/useSupabaseData';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
+import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
 
 type PurchaseSubType = 'purchase_payment' | 'purchase_bill_a' | 'purchase_bill_b' | 'purchase_bill_c' | 'purchase_delivered' | 'purchase_return_a' | 'purchase_return_b' | 'purchase_expenses';
 
@@ -611,17 +612,12 @@ export function PurchaseInlineEntry({
                             placeholder="Item name"
                             className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
                           />
-                          <select
-                            value={item.selectedItemId || ''}
-                            onChange={(e) => updateExtractedItemMatch(idx, e.target.value)}
-                            className={cn(
-                              "flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
-                              !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground"
-                            )}
-                          >
-                            <option value="">No match</option>
-                            {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                          </select>
+                          <ItemSearchSelect
+                            items={allItems.map(i => ({ id: i.id, name: i.name, paperBillName: i.paperBillName }))}
+                            value={item.selectedItemId}
+                            onChange={(id) => updateExtractedItemMatch(idx, id || '')}
+                            className="flex-1"
+                          />
                         </div>
                         <div className="flex items-center gap-1 text-xs">
                           <input type="number" value={item.primaryQty || item.quantity || ''} onChange={(e) => {

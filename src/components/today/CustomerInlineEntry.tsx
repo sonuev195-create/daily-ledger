@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useNavigate } from 'react-router-dom';
 import { useItems } from '@/hooks/useSupabaseData';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
+import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
 
 type CustomerSubType = 'sale' | 'sales_return' | 'balance_paid' | 'customer_advance';
 
@@ -842,17 +843,12 @@ export function CustomerInlineEntry({
                             placeholder="Item name"
                             className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
                           />
-                          <select
-                            value={item.selectedItemId || ''}
-                            onChange={(e) => updateExtractedItemMatch(idx, e.target.value)}
-                            className={cn(
-                              "flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
-                              !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground"
-                            )}
-                          >
-                            <option value="">No match</option>
-                            {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                          </select>
+                          <ItemSearchSelect
+                            items={allItems.map(i => ({ id: i.id, name: i.name, paperBillName: i.paperBillName }))}
+                            value={item.selectedItemId}
+                            onChange={(id) => updateExtractedItemMatch(idx, id || '')}
+                            className="flex-1"
+                          />
                         </div>
                         <div className="flex items-center gap-1 text-xs">
                           <input type="number" value={item.quantity || ''} onChange={(e) => {

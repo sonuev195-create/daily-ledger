@@ -21,7 +21,7 @@ export type BatchPreference = 'latest' | 'oldest' | 'custom' | 'category';
 export interface Category {
   id: string;
   name: string;
-  batchPreference: Exclude<BatchPreference, 'category'>; // 'latest' | 'oldest' | 'custom'
+  sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -99,12 +99,34 @@ function DailyReport() {
       const payments = Array.isArray(t.payments) ? t.payments : [];
       return sum + payments.filter((p: any) => p.mode === 'upi').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
     }, 0);
-    return { section: s, label: sectionLabels[s], count: txns.length, total, cashIn, upiIn };
+    const chequeIn = txns.reduce((sum, t) => {
+      const payments = Array.isArray(t.payments) ? t.payments : [];
+      return sum + payments.filter((p: any) => p.mode === 'cheque').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
+    }, 0);
+    const advanceUsed = txns.reduce((sum, t) => {
+      const payments = Array.isArray(t.payments) ? t.payments : [];
+      return sum + payments.filter((p: any) => p.mode === 'advance').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
+    }, 0);
+    const totalPaid = cashIn + upiIn + chequeIn + advanceUsed;
+    const totalDue = txns.reduce((sum, t) => sum + (Number(t.due) || 0), 0);
+    return { section: s, label: sectionLabels[s], count: txns.length, total, cashIn, upiIn, chequeIn, advanceUsed, totalPaid, totalDue };
   });
 
   const handleExportPDF = () => {
     generateDetailedDailyPDF(date, data, drawerData.opening, drawerData.closing);
   };
+
+  // Overall summary
+  const overallBill = data.filter(t => t.section === 'sale').reduce((s, t) => s + Number(t.amount), 0);
+  const overallPaid = data.filter(t => t.section === 'sale').reduce((s, t) => {
+    const payments = Array.isArray(t.payments) ? t.payments : [];
+    return s + payments.reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
+  }, 0);
+  const overallDue = data.filter(t => t.section === 'sale').reduce((s, t) => s + (Number(t.due) || 0), 0);
+  const overallAdvance = data.filter(t => t.section === 'sale').reduce((s, t) => {
+    const payments = Array.isArray(t.payments) ? t.payments : [];
+    return s + payments.filter((p: any) => p.mode === 'advance').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
+  }, 0);
 
   return (
     <div className="space-y-4">
@@ -121,21 +143,45 @@ function DailyReport() {
 
       {loading ? <div className="h-32 bg-secondary/50 animate-pulse rounded-xl" /> : (
         <div className="space-y-3">
+          {/* Day Summary Card */}
+          {data.length > 0 && (
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
+              <h3 className="text-sm font-bold mb-2 text-primary">Day Summary</h3>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><span className="text-muted-foreground">Total Bill</span><p className="font-bold text-lg">{formatINR(overallBill)}</p></div>
+                <div><span className="text-muted-foreground">Total Paid</span><p className="font-bold text-lg text-success">{formatINR(overallPaid)}</p></div>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-[11px] mt-2">
+                <div><span className="text-success">Cash</span><p className="font-semibold">{formatINR(sectionTotals.find(s => s.section === 'sale')?.cashIn || 0)}</p></div>
+                <div><span className="text-info">UPI</span><p className="font-semibold">{formatINR(sectionTotals.find(s => s.section === 'sale')?.upiIn || 0)}</p></div>
+                <div><span className="text-primary">Advance</span><p className="font-semibold">{formatINR(overallAdvance)}</p></div>
+                <div><span className="text-warning">Due</span><p className="font-semibold">{formatINR(overallDue)}</p></div>
+              </div>
+            </div>
+          )}
+
           {sectionTotals.filter(s => s.count > 0).map(s => (
             <div key={s.section} className="bg-card border border-border rounded-xl p-4">
               <div className="flex justify-between items-center mb-2">
                 <h3 className="text-sm font-semibold text-foreground">{s.label}</h3>
                 <span className="text-xs text-muted-foreground">{s.count} txn</span>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div><span className="text-muted-foreground">Total</span><p className="font-semibold">{formatINR(s.total)}</p></div>
-                <div><span className="text-success">Cash</span><p className="font-semibold text-success">{formatINR(s.cashIn)}</p></div>
-                <div><span className="text-info">UPI</span><p className="font-semibold text-info">{formatINR(s.upiIn)}</p></div>
+              <div className="grid grid-cols-3 gap-2 text-xs mb-1">
+                <div><span className="text-muted-foreground">Total Bill</span><p className="font-semibold">{formatINR(s.total)}</p></div>
+                <div><span className="text-muted-foreground">Total Paid</span><p className="font-semibold text-success">{formatINR(s.totalPaid)}</p></div>
+                <div><span className="text-warning">Due</span><p className="font-semibold text-warning">{formatINR(s.totalDue)}</p></div>
+              </div>
+              <div className="flex flex-wrap gap-2 text-[10px] mb-2">
+                {s.cashIn > 0 && <span className="text-success">💵Cash:{formatINR(s.cashIn)}</span>}
+                {s.upiIn > 0 && <span className="text-info">📱UPI:{formatINR(s.upiIn)}</span>}
+                {s.chequeIn > 0 && <span className="text-warning">📄Cheque:{formatINR(s.chequeIn)}</span>}
+                {s.advanceUsed > 0 && <span className="text-primary">🔄Advance:{formatINR(s.advanceUsed)}</span>}
               </div>
 
-              <div className="mt-2 space-y-1">
+              <div className="space-y-1">
                 {data.filter(t => t.section === s.section).map(t => {
                   const payments = Array.isArray(t.payments) ? t.payments : [];
+                  const totalPaid = payments.reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
                   return (
                     <div key={t.id} className="flex items-center gap-2 text-[11px] py-1 border-t border-border/30">
                       <span className="text-muted-foreground capitalize w-16 truncate">{t.type.replace(/_/g, ' ')}</span>
@@ -144,7 +190,7 @@ function DailyReport() {
                       <span className="font-medium">{formatINR(Number(t.amount))}</span>
                       <div className="flex gap-1">
                         {payments.map((p: any, i: number) => (
-                          <span key={i} className={cn("text-[9px]", p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : 'text-muted-foreground')}>
+                          <span key={i} className={cn("text-[9px]", p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : p.mode === 'advance' ? 'text-primary' : 'text-muted-foreground')}>
                             {p.mode}:{formatINR(Number(p.amount))}
                           </span>
                         ))}

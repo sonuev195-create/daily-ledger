@@ -34,6 +34,7 @@ export default function ItemsPage() {
   const [categoryId, setCategoryId] = useState<string>('');
   const [secondaryUnit, setSecondaryUnit] = useState('');
   const [conversionRate, setConversionRate] = useState('');
+  const [conversionType, setConversionType] = useState<'permanent' | 'batch_wise'>('permanent');
   const [primaryQty, setPrimaryQty] = useState('');
   const [secondaryQty, setSecondaryQty] = useState('');
   const [purchaseRate, setPurchaseRate] = useState('');

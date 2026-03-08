@@ -15,7 +15,7 @@ import { BatchList } from '@/components/items/BatchList';
 import { cn } from '@/lib/utils';
 
 export default function ItemsPage() {
-  const { items: supabaseItems, loading: itemsLoading, addItem: addSupabaseItem, updateItem: updateSupabaseItem, deleteItem: deleteSupabaseItem, refetch: refetchItems } = useItems();
+  const { items: supabaseItems, loading: itemsLoading, addItem: addSupabaseItem, updateItem: updateSupabaseItem, deleteItem: deleteSupabaseItem, reorderItems, refetch: refetchItems } = useItems();
   const { categories, loading: categoriesLoading, refetch: refetchCategories } = useCategories();
 
   const [items, setItems] = useState<Item[]>([]);

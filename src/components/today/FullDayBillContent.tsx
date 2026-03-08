@@ -130,6 +130,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const billFileRef = useRef<HTMLInputElement>(null);
   const billCameraRef = useRef<HTMLInputElement>(null);
+  const [showColumnConfig, setShowColumnConfig] = useState(false);
 
   const saleTransactions = transactions.filter(t => t.section === 'sale' && (t.type === 'sale' || t.type === 'sales_return'));
 

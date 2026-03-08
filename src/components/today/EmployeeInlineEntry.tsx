@@ -50,6 +50,8 @@ interface EmployeeInlineEntryProps {
   onSave: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onEditTransaction: (transaction: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
+  editingTransaction?: Transaction | null;
+  onCancelEdit?: () => void;
 }
 
 export function EmployeeInlineEntry({

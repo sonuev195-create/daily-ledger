@@ -37,7 +37,7 @@ export default function TodayPage() {
       if (txn) {
         setEditingTransaction(txn);
         // Expand the right category
-        const categoryMap: Record<string, CategoryId> = { sale: 'customer', purchase: 'purchase', employee: 'employee', expenses: 'expenses', home: 'home', exchange: 'exchange' };
+        const categoryMap: Record<string, CategoryId> = { sale: 'customer', purchase: 'purchase', employee: 'employee', expenses: 'expense', home: 'home', exchange: 'exchange' };
         setExpandedCategory(categoryMap[txn.section] || null);
       }
       window.history.replaceState({}, document.title);

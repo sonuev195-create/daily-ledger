@@ -40,7 +40,8 @@ const allMenuItems = [
 export function Sidebar({ isCollapsed, onToggle, isMobileOpen, onMobileClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
+  const menuItems = allMenuItems.filter(item => !item.adminOnly || isAdmin);
 
   const handleNavigation = (path: string) => {
     navigate(path);

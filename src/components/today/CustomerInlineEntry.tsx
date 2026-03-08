@@ -672,9 +672,16 @@ export function CustomerInlineEntry({
           </div>
         )}
 
-        <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save & Next'}
-        </Button>
+        <div className="flex gap-2">
+          {editingTransaction && (
+            <Button variant="outline" onClick={() => { onCancelEdit?.(); setEntry(createEmptyRow()); setExtractedBillItems([]); }} size="sm" className="h-8 text-xs">
+              Cancel
+            </Button>
+          )}
+          <Button onClick={handleSave} disabled={saving} size="sm" className="flex-1 h-8 text-xs gap-1">
+            <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : editingTransaction ? 'Update' : 'Save & Next'}
+          </Button>
+        </div>
       </div>
     </div>
   );

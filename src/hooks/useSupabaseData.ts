@@ -73,6 +73,7 @@ export function useItems() {
         sellingPrice: Number(i.selling_price),
         secondaryUnit: i.secondary_unit || undefined,
         conversionRate: i.conversion_rate ? Number(i.conversion_rate) : undefined,
+        conversionType: i.conversion_type as 'permanent' | 'batch_wise' | undefined,
         createdAt: new Date(i.created_at),
         updatedAt: new Date(i.updated_at),
       })));

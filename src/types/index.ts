@@ -142,6 +142,7 @@ export interface Item {
   sellingPrice: number;
   secondaryUnit?: string;
   conversionRate?: number;
+  conversionType?: 'permanent' | 'batch_wise';
   // Computed fields (sum from batches)
   primaryQuantity?: number;
   secondaryQuantity?: number;

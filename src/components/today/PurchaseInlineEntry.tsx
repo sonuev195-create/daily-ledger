@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useItems, saveBillToSupabase, createBatchFromPurchase } from '@/hooks/useSupabaseData';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
+import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
 
 type PurchaseSubType = 'purchase_payment' | 'purchase_bill_a' | 'purchase_bill_b' | 'purchase_bill_c' | 'purchase_delivered' | 'purchase_return_a' | 'purchase_return_b' | 'purchase_expenses';
 

@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useNavigate } from 'react-router-dom';
 import { useItems } from '@/hooks/useSupabaseData';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
+import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
 
 type CustomerSubType = 'sale' | 'sales_return' | 'balance_paid' | 'customer_advance';
 

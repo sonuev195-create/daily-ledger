@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { getOrCreateCustomer, updateCustomerBalance, saveBillToSupabase, deductFromBatch, getBatchesForItem, useItems, restoreInventoryForBillItems } from '@/hooks/useSupabaseData';
+import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
 
 interface FullDayBillRow {
   id: string;

@@ -4,6 +4,7 @@ import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { CategoryAccordion, CategoryId } from '@/components/today/CategoryAccordion';
 import { DrawerAccordionContent } from '@/components/today/DrawerAccordionContent';
+import { FullDayBillContent } from '@/components/today/FullDayBillContent';
 import { CategoryTransactionList } from '@/components/today/CategoryTransactionList';
 import { CustomerInlineEntry } from '@/components/today/CustomerInlineEntry';
 import { PurchaseInlineEntry } from '@/components/today/PurchaseInlineEntry';

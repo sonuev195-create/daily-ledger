@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Pencil, Trash2, AlertTriangle, FileText, X, Check, Camera, Upload, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, FileText, X, Check, Camera, Upload, Loader2, Settings } from 'lucide-react';
 import { Transaction, TransactionSection, PaymentEntry, PaymentMode } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
@@ -104,6 +104,13 @@ export function CustomerInlineEntry({
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedBillItems, setExtractedBillItems] = useState<any[]>([]);
   const [billImageBase64, setBillImageBase64] = useState<string | null>(null);
+  const [showColumnConfig, setShowColumnConfig] = useState(false);
+
+  const getItemSecondaryUnit = (itemId: string | null) => {
+    if (!itemId) return null;
+    const item = allItems.find(i => i.id === itemId);
+    return item?.secondaryUnit || null;
+  };
 
   const customerTransactions = transactions.filter(t => t.section === 'sale');
 
@@ -654,82 +661,100 @@ export function CustomerInlineEntry({
                 {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Upload Bill
               </Button>
               <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => {
-                setExtractedBillItems(prev => [...prev, { extractedName: '', matchedName: null, quantity: 1, amount: 0, selectedItemId: null, confirmed: false }]);
+                setExtractedBillItems(prev => [...prev, { extractedName: '', matchedName: null, quantity: 1, primaryQty: 1, secondaryQty: 0, rate: 0, amount: 0, selectedItemId: null, confirmed: false }]);
               }}>
                 <Plus className="w-3 h-3" /> Item
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowColumnConfig(!showColumnConfig)}
+                title="Column config">
+                <Settings className="w-3 h-3 text-muted-foreground" />
               </Button>
               <input ref={billCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleBillCapture} />
               <input ref={billFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleBillCapture} />
             </div>
+            {/* Inline column config */}
+            {showColumnConfig && (
+              <SaleColumnConfigInline onClose={() => setShowColumnConfig(false)} />
+            )}
             {extractedBillItems.length > 0 && (
               <div className="border border-border rounded-lg overflow-hidden">
                 <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
                   Items ({extractedBillItems.length}) — {extractedBillItems.filter(i => i.selectedItemId).length} matched
                 </div>
                 <div className="max-h-60 overflow-y-auto divide-y divide-border/30">
-                  {extractedBillItems.map((item, idx) => (
-                    <div key={idx} className="px-2 py-1.5 space-y-1">
-                      <div className="flex items-center gap-1 text-xs">
-                        <input
-                          type="text"
-                          value={item.extractedName}
-                          onChange={(e) => {
+                  {extractedBillItems.map((item, idx) => {
+                    const secUnit = getItemSecondaryUnit(item.selectedItemId);
+                    return (
+                      <div key={idx} className="px-2 py-1.5 space-y-1">
+                        <div className="flex items-center gap-1 text-xs">
+                          <input
+                            type="text"
+                            value={item.extractedName}
+                            onChange={(e) => {
+                              const updated = [...extractedBillItems];
+                              updated[idx] = { ...updated[idx], extractedName: e.target.value };
+                              setExtractedBillItems(updated);
+                            }}
+                            placeholder="Item name"
+                            className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
+                          />
+                          <select
+                            value={item.selectedItemId || ''}
+                            onChange={(e) => updateExtractedItemMatch(idx, e.target.value)}
+                            className={cn(
+                              "flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
+                              !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground"
+                            )}
+                          >
+                            <option value="">No match</option>
+                            {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs">
+                          <input type="number" value={item.quantity || ''} onChange={(e) => {
                             const updated = [...extractedBillItems];
-                            updated[idx] = { ...updated[idx], extractedName: e.target.value };
+                            const qty = parseFloat(e.target.value) || 0;
+                            updated[idx] = { ...updated[idx], quantity: qty, primaryQty: qty };
+                            if (updated[idx].rate && qty > 0) {
+                              updated[idx].amount = qty * updated[idx].rate;
+                            }
                             setExtractedBillItems(updated);
-                          }}
-                          placeholder="Item name"
-                          className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
-                        />
-                        <select
-                          value={item.selectedItemId || ''}
-                          onChange={(e) => updateExtractedItemMatch(idx, e.target.value)}
-                          className={cn(
-                            "flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
-                            !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground"
+                          }} placeholder="Pri Qty" className="w-14 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
+                          {secUnit && (
+                            <input type="number" value={item.secondaryQty || ''} onChange={(e) => {
+                              const updated = [...extractedBillItems];
+                              updated[idx] = { ...updated[idx], secondaryQty: parseFloat(e.target.value) || 0 };
+                              setExtractedBillItems(updated);
+                            }} placeholder={secUnit} className="w-14 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
                           )}
-                        >
-                          <option value="">No match</option>
-                          {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                        </select>
-                        <input type="number" value={item.quantity || ''} onChange={(e) => {
-                          const updated = [...extractedBillItems];
-                          const qty = parseFloat(e.target.value) || 0;
-                          updated[idx] = { ...updated[idx], quantity: qty };
-                          // Auto-calc amount from rate if rate exists
-                          if (updated[idx].rate && qty > 0) {
-                            updated[idx].amount = qty * updated[idx].rate;
-                          }
-                          setExtractedBillItems(updated);
-                        }} placeholder="Qty" className="w-12 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
-                        <input type="number" value={item.rate || ''} onChange={(e) => {
-                          const updated = [...extractedBillItems];
-                          const rate = parseFloat(e.target.value) || 0;
-                          updated[idx] = { ...updated[idx], rate };
-                          if (rate > 0 && updated[idx].quantity > 0) {
-                            updated[idx].amount = updated[idx].quantity * rate;
-                          }
-                          setExtractedBillItems(updated);
-                        }} placeholder="Rate" className="w-14 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
-                        <input type="number" value={item.amount || ''} onChange={(e) => {
-                          const updated = [...extractedBillItems];
-                          const amount = parseFloat(e.target.value) || 0;
-                          updated[idx] = { ...updated[idx], amount };
-                          // Auto-calc rate from amount if qty exists
-                          if (updated[idx].quantity > 0) {
-                            updated[idx].rate = amount / updated[idx].quantity;
-                          }
-                          setExtractedBillItems(updated);
-                        }} placeholder="₹" className="w-16 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
-                        <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
-                          className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                          <input type="number" value={item.rate || ''} onChange={(e) => {
+                            const updated = [...extractedBillItems];
+                            const rate = parseFloat(e.target.value) || 0;
+                            updated[idx] = { ...updated[idx], rate };
+                            if (rate > 0 && updated[idx].quantity > 0) {
+                              updated[idx].amount = updated[idx].quantity * rate;
+                            }
+                            setExtractedBillItems(updated);
+                          }} placeholder="Rate" className="w-14 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
+                          <input type="number" value={item.amount || ''} onChange={(e) => {
+                            const updated = [...extractedBillItems];
+                            const amount = parseFloat(e.target.value) || 0;
+                            updated[idx] = { ...updated[idx], amount };
+                            if (updated[idx].quantity > 0) {
+                              updated[idx].rate = amount / updated[idx].quantity;
+                            }
+                            setExtractedBillItems(updated);
+                          }} placeholder="₹" className="w-16 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
+                          <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
+                            className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="px-2 py-1 bg-accent/10 flex justify-between text-xs font-medium text-accent">
                   <button onClick={() => {
-                    setExtractedBillItems(prev => [...prev, { extractedName: '', matchedName: null, quantity: 1, amount: 0, selectedItemId: null, confirmed: false }]);
+                    setExtractedBillItems(prev => [...prev, { extractedName: '', matchedName: null, quantity: 1, primaryQty: 1, secondaryQty: 0, rate: 0, amount: 0, selectedItemId: null, confirmed: false }]);
                   }} className="text-[10px] hover:underline">+ Add Item</button>
                   <span>Total: {formatINR(extractedBillItems.reduce((s, i) => s + i.amount, 0))}</span>
                 </div>
@@ -749,6 +774,100 @@ export function CustomerInlineEntry({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Inline column config for sale OCR
+function SaleColumnConfigInline({ onClose }: { onClose: () => void }) {
+  const [totalCols, setTotalCols] = useState(4);
+  const [itemCol, setItemCol] = useState(1);
+  const [qtyCol, setQtyCol] = useState(2);
+  const [rateCol, setRateCol] = useState<number | null>(null);
+  const [amtCol, setAmtCol] = useState(3);
+  const [hasRate, setHasRate] = useState(false);
+  const [qtyType, setQtyType] = useState('primary');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('bill_format_config').select('*')
+        .eq('config_name', 'default').maybeSingle();
+      if (data) {
+        setTotalCols(data.total_columns);
+        setItemCol(data.item_name_column);
+        setQtyCol(data.quantity_column);
+        setRateCol(data.has_rate ? data.rate_column : null);
+        setAmtCol(data.amount_column);
+        setHasRate(data.has_rate);
+        setQtyType(data.quantity_type);
+      }
+      setLoaded(true);
+    })();
+  }, []);
+
+  const handleSaveConfig = async () => {
+    await supabase.from('bill_format_config').upsert({
+      config_name: 'default',
+      total_columns: totalCols,
+      item_name_column: itemCol,
+      quantity_column: qtyCol,
+      rate_column: hasRate ? rateCol : null,
+      amount_column: amtCol,
+      has_rate: hasRate,
+      has_amount: true,
+      quantity_type: qtyType,
+    }, { onConflict: 'config_name' });
+    toast.success('Column config saved');
+    onClose();
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="border border-border rounded-lg p-2 bg-secondary/10 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-medium text-muted-foreground">Column Order (Sale)</span>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        <div>
+          <label className="text-[9px] text-muted-foreground">Total Cols</label>
+          <Input type="number" value={totalCols} onChange={e => setTotalCols(parseInt(e.target.value) || 4)} className="h-6 text-[10px]" />
+        </div>
+        <div>
+          <label className="text-[9px] text-muted-foreground">Item Col</label>
+          <Input type="number" value={itemCol} onChange={e => setItemCol(parseInt(e.target.value) || 1)} className="h-6 text-[10px]" />
+        </div>
+        <div>
+          <label className="text-[9px] text-muted-foreground">Qty Col</label>
+          <Input type="number" value={qtyCol} onChange={e => setQtyCol(parseInt(e.target.value) || 2)} className="h-6 text-[10px]" />
+        </div>
+        <div>
+          <label className="text-[9px] text-muted-foreground">Amt Col</label>
+          <Input type="number" value={amtCol} onChange={e => setAmtCol(parseInt(e.target.value) || 3)} className="h-6 text-[10px]" />
+        </div>
+      </div>
+      <div className="flex items-center gap-3 text-[10px]">
+        <label className="flex items-center gap-1">
+          <Checkbox checked={hasRate} onCheckedChange={(v) => { setHasRate(!!v); if (v && !rateCol) setRateCol(3); }} />
+          Has Rate
+        </label>
+        {hasRate && (
+          <div className="flex items-center gap-1">
+            <label className="text-[9px] text-muted-foreground">Rate Col</label>
+            <Input type="number" value={rateCol || ''} onChange={e => setRateCol(parseInt(e.target.value) || null)} className="h-6 w-10 text-[10px]" />
+          </div>
+        )}
+        <Select value={qtyType} onValueChange={setQtyType}>
+          <SelectTrigger className="h-6 text-[10px] w-20"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="primary" className="text-xs">Primary</SelectItem>
+            <SelectItem value="secondary" className="text-xs">Secondary</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <Button size="sm" className="h-6 text-[10px] w-full" onClick={handleSaveConfig}>Save Config</Button>
     </div>
   );
 }

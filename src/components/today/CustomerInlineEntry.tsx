@@ -661,13 +661,21 @@ export function CustomerInlineEntry({
                 {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Upload Bill
               </Button>
               <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => {
-                setExtractedBillItems(prev => [...prev, { extractedName: '', matchedName: null, quantity: 1, amount: 0, selectedItemId: null, confirmed: false }]);
+                setExtractedBillItems(prev => [...prev, { extractedName: '', matchedName: null, quantity: 1, primaryQty: 1, secondaryQty: 0, rate: 0, amount: 0, selectedItemId: null, confirmed: false }]);
               }}>
                 <Plus className="w-3 h-3" /> Item
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowColumnConfig(!showColumnConfig)}
+                title="Column config">
+                <Settings className="w-3 h-3 text-muted-foreground" />
               </Button>
               <input ref={billCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleBillCapture} />
               <input ref={billFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleBillCapture} />
             </div>
+            {/* Inline column config */}
+            {showColumnConfig && (
+              <SaleColumnConfigInline onClose={() => setShowColumnConfig(false)} />
+            )}
             {extractedBillItems.length > 0 && (
               <div className="border border-border rounded-lg overflow-hidden">
                 <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">

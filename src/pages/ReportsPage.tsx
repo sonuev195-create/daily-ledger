@@ -452,48 +452,49 @@ function MonthlyReport() {
             </div>
           </div>
 
-          {/* Cash/UPI Mode Breakdown */}
-          <div className="bg-card border border-border rounded-xl p-4">
-            <h3 className="text-sm font-bold mb-3 text-center">CASH / UPI BREAKDOWN</h3>
-            <div className="grid grid-cols-3 gap-1 text-[11px]">
-              <div className="font-semibold">CREDIT</div>
-              <div className="font-semibold text-right">CASH</div>
-              <div className="font-semibold text-right">UPI</div>
+          {isAdmin && (
+            <div className="bg-card border border-border rounded-xl p-4">
+              <h3 className="text-sm font-bold mb-3 text-center">CASH / UPI BREAKDOWN</h3>
+              <div className="grid grid-cols-3 gap-1 text-[11px]">
+                <div className="font-semibold">CREDIT</div>
+                <div className="font-semibold text-right">CASH</div>
+                <div className="font-semibold text-right">UPI</div>
 
-              <div className="font-semibold text-muted-foreground mt-1" style={{ gridColumn: '1 / -1' }}>CUSTOMER</div>
-              <div>SALE</div><div className="text-right">{formatINR(saleCash)}</div><div className="text-right">{formatINR(saleUpi)}</div>
-              <div>BALANCE PAID</div><div className="text-right">{formatINR(bpCash)}</div><div className="text-right">{formatINR(bpUpi)}</div>
-              <div>CUSTOMER ADVANCE</div><div className="text-right">{formatINR(caCash)}</div><div className="text-right">{formatINR(caUpi)}</div>
-              <div className="border-t border-border pt-1 font-semibold">Total Credit</div>
-              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalCreditCash)}</div>
-              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalCreditUpi)}</div>
-              <div className="text-right font-bold" style={{ gridColumn: '1 / -1' }}>NET CREDIT: {formatINR(totalCreditCash + totalCreditUpi)}</div>
+                <div className="font-semibold text-muted-foreground mt-1" style={{ gridColumn: '1 / -1' }}>CUSTOMER</div>
+                <div>SALE</div><div className="text-right">{formatINR(saleCash)}</div><div className="text-right">{formatINR(saleUpi)}</div>
+                <div>BALANCE PAID</div><div className="text-right">{formatINR(bpCash)}</div><div className="text-right">{formatINR(bpUpi)}</div>
+                <div>CUSTOMER ADVANCE</div><div className="text-right">{formatINR(caCash)}</div><div className="text-right">{formatINR(caUpi)}</div>
+                <div className="border-t border-border pt-1 font-semibold">Total Credit</div>
+                <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalCreditCash)}</div>
+                <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalCreditUpi)}</div>
+                <div className="text-right font-bold" style={{ gridColumn: '1 / -1' }}>NET CREDIT: {formatINR(totalCreditCash + totalCreditUpi)}</div>
 
-              <div className="font-semibold mt-3" style={{ gridColumn: '1 / -1' }}>DEBIT</div>
-              <div className="font-semibold text-muted-foreground">CUSTOMER</div><div /><div />
-              <div>SALES RETURN</div><div className="text-right">{formatINR(returnCash)}</div><div className="text-right">{formatINR(returnUpi)}</div>
+                <div className="font-semibold mt-3" style={{ gridColumn: '1 / -1' }}>DEBIT</div>
+                <div className="font-semibold text-muted-foreground">CUSTOMER</div><div /><div />
+                <div>SALES RETURN</div><div className="text-right">{formatINR(returnCash)}</div><div className="text-right">{formatINR(returnUpi)}</div>
 
-              <div className="font-semibold text-muted-foreground mt-1">SUPPLIER</div><div /><div />
-              <div>PAID</div><div className="text-right">{formatINR(suppPaidCash)}</div><div className="text-right">{formatINR(suppPaidUpi)}</div>
-              <div>EXPENSES</div><div className="text-right">{formatINR(suppExpCash)}</div><div className="text-right">{formatINR(suppExpUpi)}</div>
+                <div className="font-semibold text-muted-foreground mt-1">SUPPLIER</div><div /><div />
+                <div>PAID</div><div className="text-right">{formatINR(suppPaidCash)}</div><div className="text-right">{formatINR(suppPaidUpi)}</div>
+                <div>EXPENSES</div><div className="text-right">{formatINR(suppExpCash)}</div><div className="text-right">{formatINR(suppExpUpi)}</div>
 
-              <div className="font-semibold text-muted-foreground mt-1">EMPLOYEE</div><div /><div />
-              <div>SALARY</div><div className="text-right">{formatINR(empCash)}</div><div className="text-right">{formatINR(empUpi)}</div>
+                <div className="font-semibold text-muted-foreground mt-1">EMPLOYEE</div><div /><div />
+                <div>SALARY</div><div className="text-right">{formatINR(empCash)}</div><div className="text-right">{formatINR(empUpi)}</div>
 
-              <div className="font-semibold text-muted-foreground mt-1">EXPENSES</div><div /><div />
-              <div>OTHER EXPENSES</div><div className="text-right">{formatINR(expCash)}</div><div className="text-right">{formatINR(expUpi)}</div>
+                <div className="font-semibold text-muted-foreground mt-1">EXPENSES</div><div /><div />
+                <div>OTHER EXPENSES</div><div className="text-right">{formatINR(expCash)}</div><div className="text-right">{formatINR(expUpi)}</div>
 
-              <div className="border-t border-border pt-1 font-semibold">Total Debit</div>
-              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalDebitCash)}</div>
-              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalDebitUpi)}</div>
-              <div className="text-right font-bold" style={{ gridColumn: '1 / -1' }}>NET DEBIT: {formatINR(totalDebitCash + totalDebitUpi)}</div>
+                <div className="border-t border-border pt-1 font-semibold">Total Debit</div>
+                <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalDebitCash)}</div>
+                <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalDebitUpi)}</div>
+                <div className="text-right font-bold" style={{ gridColumn: '1 / -1' }}>NET DEBIT: {formatINR(totalDebitCash + totalDebitUpi)}</div>
 
-              <div className="border-t-2 border-border mt-2 pt-2 font-bold">NET AMOUNT</div>
-              <div className="border-t-2 border-border mt-2 pt-2 text-right font-bold">{formatINR(netCash)}</div>
-              <div className="border-t-2 border-border mt-2 pt-2 text-right font-bold">{formatINR(netUpi)}</div>
-              <div className="text-right font-bold text-primary" style={{ gridColumn: '1 / -1' }}>{formatINR(netAmount)}</div>
+                <div className="border-t-2 border-border mt-2 pt-2 font-bold">NET AMOUNT</div>
+                <div className="border-t-2 border-border mt-2 pt-2 text-right font-bold">{formatINR(netCash)}</div>
+                <div className="border-t-2 border-border mt-2 pt-2 text-right font-bold">{formatINR(netUpi)}</div>
+                <div className="text-right font-bold text-primary" style={{ gridColumn: '1 / -1' }}>{formatINR(netAmount)}</div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

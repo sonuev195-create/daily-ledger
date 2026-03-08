@@ -11,10 +11,12 @@ import {
   ChevronRight,
   X,
   Wallet,
-  Settings
+  Settings,
+  LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -39,9 +41,15 @@ const menuItems = [
 export function Sidebar({ isCollapsed, onToggle, isMobileOpen, onMobileClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const handleNavigation = (path: string) => {
     navigate(path);
+    onMobileClose();
+  };
+
+  const handleLogout = () => {
+    logout();
     onMobileClose();
   };
 
@@ -133,16 +141,39 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen, onMobileClose }: 
       {/* Footer */}
       <div className="p-4 border-t border-sidebar-border">
         <AnimatePresence mode="wait">
-          {!isCollapsed && (
+          {!isCollapsed ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="text-xs text-sidebar-foreground/50"
+              className="space-y-3"
             >
-              <p>Offline Ready</p>
-              <p className="text-sidebar-primary">● Synced</p>
+              <div className="flex items-center gap-2 text-xs text-sidebar-foreground/70">
+                <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[10px] font-bold">
+                  {user?.display_name?.[0] || user?.username?.[0] || '?'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="truncate font-medium text-sidebar-foreground">{user?.display_name || user?.username}</p>
+                  <p className="text-sidebar-foreground/50 capitalize">{user?.role}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 text-xs text-destructive hover:text-destructive/80 transition-colors w-full"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Sign Out</span>
+              </button>
             </motion.div>
+          ) : (
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <button onClick={handleLogout} className="w-full flex justify-center text-destructive hover:text-destructive/80">
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Sign Out</TooltipContent>
+            </Tooltip>
           )}
         </AnimatePresence>
       </div>
@@ -213,11 +244,23 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen, onMobileClose }: 
             </nav>
 
             {/* Footer */}
-            <div className="p-4 border-t border-sidebar-border">
-              <div className="text-xs text-sidebar-foreground/50">
-                <p>Offline Ready</p>
-                <p className="text-sidebar-primary">● Synced</p>
+            <div className="p-4 border-t border-sidebar-border space-y-3">
+              <div className="flex items-center gap-2 text-xs text-sidebar-foreground/70">
+                <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[10px] font-bold">
+                  {user?.display_name?.[0] || user?.username?.[0] || '?'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="truncate font-medium text-sidebar-foreground">{user?.display_name || user?.username}</p>
+                  <p className="text-sidebar-foreground/50 capitalize">{user?.role}</p>
+                </div>
               </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 text-xs text-destructive hover:text-destructive/80 transition-colors w-full"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Sign Out</span>
+              </button>
             </div>
           </motion.aside>
         </>

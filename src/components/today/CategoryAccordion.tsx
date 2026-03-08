@@ -51,6 +51,7 @@ function getSectionFlow(categoryId: CategoryId, transactions: Transaction[]): Se
     expense: ['expenses'],
     exchange: ['exchange'],
     home: ['home'],
+    fullday: [],
   };
 
   const addIn = (payments: any[]) => {

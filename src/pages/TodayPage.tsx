@@ -85,7 +85,14 @@ export default function TodayPage() {
   const goToPreviousDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d); };
   const goToNextDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d); };
 
-  const isToday = format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const selectedStr = format(selectedDate, 'yyyy-MM-dd');
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const isToday = selectedStr === todayStr;
+  const isYesterday = selectedStr === format(yesterday, 'yyyy-MM-dd');
+  const isTomorrow = selectedStr === format(tomorrow, 'yyyy-MM-dd');
+  const dayLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : isTomorrow ? 'Tomorrow' : format(selectedDate, 'EEEE');
 
   const handleDayClickFromMonth = (date: Date) => { setSelectedDate(date); setViewMode('day'); };
   const handleMonthClickFromYear = (date: Date) => { setSelectedDate(date); setViewMode('month'); };

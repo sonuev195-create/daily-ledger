@@ -337,7 +337,6 @@ function ExpenseInlineEntry({ transactions, selectedDate, onSave, onEditTransact
     if (editingTransaction && editingTransaction.section === 'expenses') {
       setDetails(editingTransaction.reference || '');
       setPayments(editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
-      if (editingTransaction.expenseCategoryId) setCategoryId(editingTransaction.expenseCategoryId);
     }
   }, [editingTransaction]);
 

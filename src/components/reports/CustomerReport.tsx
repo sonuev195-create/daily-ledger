@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Download, FileSpreadsheet } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, parseISO, eachMonthOfInterval } from 'date-fns';
 import { formatINR } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -21,6 +22,7 @@ function downloadCSV(rows: string[][], filename: string) {
 const fmtINR = (n: number) => `Rs.${Math.abs(n).toLocaleString('en-IN')}`;
 
 type ViewMode = 'ledger' | 'summary' | 'yearly';
+type DateMode = 'month' | 'custom';
 
 export function CustomerReport() {
   const [customers, setCustomers] = useState<any[]>([]);
@@ -31,6 +33,9 @@ export function CustomerReport() {
   const [yearlyTxns, setYearlyTxns] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('ledger');
+  const [dateMode, setDateMode] = useState<DateMode>('month');
+  const [fromDate, setFromDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [toDate, setToDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
 
   useEffect(() => {
     supabase.from('customers').select('*').order('name').then(({ data }) => {
@@ -41,22 +46,30 @@ export function CustomerReport() {
   useEffect(() => {
     if (!selectedCustId) { setTxns([]); return; }
     if (viewMode !== 'yearly') fetchData();
-  }, [selectedCustId, month, viewMode]);
+  }, [selectedCustId, month, viewMode, dateMode]);
 
   useEffect(() => {
     if (!selectedCustId || viewMode !== 'yearly') return;
     fetchYearlyData();
   }, [selectedCustId, year, viewMode]);
 
+  const getDateRange = () => {
+    if (dateMode === 'custom') return { start: fromDate, end: toDate };
+    return { start: format(startOfMonth(month), 'yyyy-MM-dd'), end: format(endOfMonth(month), 'yyyy-MM-dd') };
+  };
+
   const fetchData = async () => {
     setLoading(true);
-    const start = format(startOfMonth(month), 'yyyy-MM-dd');
-    const end = format(endOfMonth(month), 'yyyy-MM-dd');
+    const { start, end } = getDateRange();
     const { data } = await supabase
       .from('transactions').select('*').eq('customer_id', selectedCustId)
       .gte('date', start).lte('date', end).order('date');
     setTxns(data || []);
     setLoading(false);
+  };
+
+  const fetchCustomRange = () => {
+    if (selectedCustId && dateMode === 'custom') fetchData();
   };
 
   const fetchYearlyData = async () => {
@@ -86,7 +99,7 @@ export function CustomerReport() {
     return payments.map((p: any) => `${p.mode}: ${formatINR(Number(p.amount))}`).join(', ');
   };
 
-  // Running balance: sales add due, returns/payments reduce
+  // Running balance
   const ledgerTxns = txns.map((t, i) => {
     const runningBalance = txns.slice(0, i + 1).reduce((bal, x) => {
       if (x.type === 'sale') return bal + (Number(x.due) || 0);
@@ -127,6 +140,10 @@ export function CustomerReport() {
     };
   });
 
+  const dateLabel = dateMode === 'custom'
+    ? `${format(parseISO(fromDate), 'dd MMM yyyy')} - ${format(parseISO(toDate), 'dd MMM yyyy')}`
+    : format(month, 'MMMM yyyy');
+
   const handleExportPDF = () => {
     if (!selectedCust) return;
     const doc = new jsPDF();
@@ -134,7 +151,7 @@ export function CustomerReport() {
     doc.setFontSize(16);
     doc.text(`Customer Report: ${selectedCust.name}`, pw / 2, 18, { align: 'center' });
     doc.setFontSize(10);
-    doc.text(format(month, 'MMMM yyyy'), pw / 2, 25, { align: 'center' });
+    doc.text(dateLabel, pw / 2, 25, { align: 'center' });
 
     autoTable(doc, {
       startY: 32,
@@ -149,7 +166,7 @@ export function CustomerReport() {
       ]),
       theme: 'striped', headStyles: { fillColor: [66, 66, 66] }, styles: { fontSize: 7 },
     });
-    doc.save(`Customer_${selectedCust.name}_${format(month, 'yyyy-MM')}.pdf`);
+    doc.save(`Customer_${selectedCust.name}_${dateMode === 'custom' ? 'custom' : format(month, 'yyyy-MM')}.pdf`);
   };
 
   const handleExportCSV = () => {
@@ -161,7 +178,7 @@ export function CustomerReport() {
       String(Number(t.amount)), String(Number(t.due) || 0),
       paymentStr(t), String(t.runningBalance),
     ])];
-    downloadCSV(rows, `Customer_${selectedCust.name}_${format(month, 'yyyy-MM')}.csv`);
+    downloadCSV(rows, `Customer_${selectedCust.name}_${dateMode === 'custom' ? 'custom' : format(month, 'yyyy-MM')}.csv`);
   };
 
   return (
@@ -198,18 +215,61 @@ export function CustomerReport() {
               <button onClick={() => { const d = new Date(year); d.setFullYear(d.getFullYear() + 1); setYear(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
             </div>
           ) : (
-            <div className="flex items-center justify-between">
-              <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() - 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronLeft className="w-4 h-4" /></button>
-              <span className="text-sm font-medium">{format(month, 'MMMM yyyy')}</span>
-              <div className="flex items-center gap-1">
-                <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() + 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
-                <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading || txns.length === 0}>
-                  <Download className="w-3 h-3" /> PDF
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportCSV} disabled={loading || txns.length === 0}>
-                  <FileSpreadsheet className="w-3 h-3" /> CSV
-                </Button>
+            <div className="space-y-2">
+              {/* Date mode toggle */}
+              <div className="flex gap-1 bg-secondary/50 rounded-lg p-0.5">
+                <button onClick={() => setDateMode('month')}
+                  className={cn("flex-1 px-2 py-1 rounded-md text-[10px] font-medium",
+                    dateMode === 'month' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}>
+                  Monthly
+                </button>
+                <button onClick={() => setDateMode('custom')}
+                  className={cn("flex-1 px-2 py-1 rounded-md text-[10px] font-medium flex items-center justify-center gap-1",
+                    dateMode === 'custom' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}>
+                  <Calendar className="w-3 h-3" /> Custom Date
+                </button>
               </div>
+
+              {dateMode === 'month' ? (
+                <div className="flex items-center justify-between">
+                  <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() - 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronLeft className="w-4 h-4" /></button>
+                  <span className="text-sm font-medium">{format(month, 'MMMM yyyy')}</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() + 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
+                    <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading || txns.length === 0}>
+                      <Download className="w-3 h-3" /> PDF
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportCSV} disabled={loading || txns.length === 0}>
+                      <FileSpreadsheet className="w-3 h-3" /> CSV
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <label className="text-[10px] text-muted-foreground">From</label>
+                      <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-8 text-xs" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] text-muted-foreground">To</label>
+                      <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="h-8 text-xs" />
+                    </div>
+                    <Button size="sm" className="h-8 text-xs" onClick={fetchCustomRange}>Go</Button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">{dateLabel}</span>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading || txns.length === 0}>
+                        <Download className="w-3 h-3" /> PDF
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportCSV} disabled={loading || txns.length === 0}>
+                        <FileSpreadsheet className="w-3 h-3" /> CSV
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -221,12 +281,8 @@ export function CustomerReport() {
               {viewMode === 'yearly' && (
                 <div className="bg-card border border-border rounded-xl overflow-hidden">
                   <div className="grid grid-cols-[40px_55px_45px_50px_45px_45px] gap-1 px-3 py-2 bg-secondary/50 text-[10px] font-semibold text-muted-foreground border-b border-border">
-                    <span>Month</span>
-                    <span className="text-right">Sales</span>
-                    <span className="text-right">Return</span>
-                    <span className="text-right">Paid</span>
-                    <span className="text-right">Adv</span>
-                    <span className="text-right">Due</span>
+                    <span>Month</span><span className="text-right">Sales</span><span className="text-right">Return</span>
+                    <span className="text-right">Paid</span><span className="text-right">Adv</span><span className="text-right">Due</span>
                   </div>
                   {yearlyMonthData.filter(m => m.count > 0).map(m => (
                     <div key={m.label} className="grid grid-cols-[40px_55px_45px_50px_45px_45px] gap-1 px-3 py-2 border-b border-border/50 last:border-0 text-[11px]">
@@ -261,24 +317,18 @@ export function CustomerReport() {
               {/* LEDGER VIEW */}
               {viewMode === 'ledger' && (
                 txns.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">No transactions this month</p>
+                  <p className="text-sm text-muted-foreground text-center py-8">No transactions for this period</p>
                 ) : (
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="grid grid-cols-[50px_55px_35px_50px_35px_55px_45px] gap-1 px-3 py-2 bg-secondary/50 text-[10px] font-semibold text-muted-foreground border-b border-border">
-                      <span>Date</span>
-                      <span>Type</span>
-                      <span>Bill#</span>
-                      <span className="text-right">Amount</span>
-                      <span className="text-right">Due</span>
-                      <span className="text-right">Payment</span>
-                      <span className="text-right">Balance</span>
+                      <span>Date</span><span>Type</span><span>Bill#</span>
+                      <span className="text-right">Amount</span><span className="text-right">Due</span>
+                      <span className="text-right">Payment</span><span className="text-right">Balance</span>
                     </div>
                     {ledgerTxns.map(t => (
                       <div key={t.id} className="grid grid-cols-[50px_55px_35px_50px_35px_55px_45px] gap-1 px-3 py-2 border-b border-border/50 last:border-0 text-[11px] items-start">
                         <span className="text-muted-foreground">{format(parseISO(t.date), 'dd MMM')}</span>
-                        <span className={cn("font-medium truncate",
-                          t.direction === 'debit' ? "text-warning" : "text-success"
-                        )}>
+                        <span className={cn("font-medium truncate", t.direction === 'debit' ? "text-warning" : "text-success")}>
                           {typeLabel(t.type)}
                         </span>
                         <span className="text-muted-foreground truncate">{t.bill_number || '-'}</span>
@@ -305,7 +355,7 @@ export function CustomerReport() {
               {/* SUMMARY VIEW */}
               {viewMode === 'summary' && (
                 txns.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">No transactions this month</p>
+                  <p className="text-sm text-muted-foreground text-center py-8">No transactions for this period</p>
                 ) : (
                   <div className="bg-card border border-border rounded-xl p-4 space-y-1 text-xs">
                     <div className="font-semibold underline mb-1">CUSTOMER SUMMARY</div>

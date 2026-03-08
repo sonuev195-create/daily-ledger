@@ -26,10 +26,16 @@ export function EmployeeReport() {
   const [month, setMonth] = useState(new Date());
   const [txns, setTxns] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [salaryCategories, setSalaryCategories] = useState<Record<string, string>>({});
 
   useEffect(() => {
     supabase.from('employees').select('*').order('name').then(({ data }) => {
       setEmployees(data || []);
+    });
+    supabase.from('salary_categories').select('id, name').then(({ data }) => {
+      const map: Record<string, string> = {};
+      (data || []).forEach(c => { map[c.id] = c.name; });
+      setSalaryCategories(map);
     });
   }, []);
 
@@ -56,26 +62,26 @@ export function EmployeeReport() {
   const selectedEmp = employees.find(e => e.id === selectedEmpId);
   const daysInMonth = getDaysInMonth(month);
 
-  // Attendance: days with at least one transaction
   const uniqueDays = new Set(txns.map(t => t.date));
   const daysPresent = uniqueDays.size;
-
-  // Transaction totals
   const totalPaid = txns.reduce((s, t) => s + Number(t.amount), 0);
 
-  // Running balance calculation
   const runningTxns = txns.map((t, i) => {
     const runningTotal = txns.slice(0, i + 1).reduce((s, x) => s + Number(x.amount), 0);
     return { ...t, runningTotal };
   });
 
-  // Type labels
-  const typeLabel = (type: string) => {
-    const map: Record<string, string> = {
-      salary: 'Salary', daily_wage: 'Daily Wage', advance: 'Advance',
+  // Resolve type + category to a readable label
+  const getTxnLabel = (t: any) => {
+    const baseLabels: Record<string, string> = {
+      salary: 'Day Salary', daily_wage: 'Daily Wage', advance: 'Advance',
       bonus: 'Bonus', deduction: 'Deduction',
     };
-    return map[type] || type.replace(/_/g, ' ');
+    const base = baseLabels[t.type] || t.type.replace(/_/g, ' ');
+    if (t.salary_category_id && salaryCategories[t.salary_category_id]) {
+      return `${base} - ${salaryCategories[t.salary_category_id]}`;
+    }
+    return base;
   };
 
   const paymentStr = (t: any) => {
@@ -93,8 +99,6 @@ export function EmployeeReport() {
     doc.setFontSize(10);
     doc.text(format(month, 'MMMM yyyy'), pw / 2, 25, { align: 'center' });
 
-    // Summary
-    doc.setFontSize(11);
     autoTable(doc, {
       startY: 32,
       head: [['Summary', 'Value']],
@@ -111,13 +115,12 @@ export function EmployeeReport() {
 
     let y = (doc as any).lastAutoTable.finalY + 10;
 
-    // Transactions
     autoTable(doc, {
       startY: y,
       head: [['Date', 'Type', 'Amount', 'Payment', 'Running Total']],
       body: runningTxns.map(t => [
-        format(parseISO(t.date), 'dd MMM'),
-        typeLabel(t.type),
+        format(parseISO(t.date), 'dd MMM yyyy'),
+        getTxnLabel(t),
         fmtINR(Number(t.amount)),
         paymentStr(t) || '-',
         fmtINR(t.runningTotal),
@@ -135,7 +138,7 @@ export function EmployeeReport() {
     const header = ['Date', 'Type', 'Amount', 'Payment', 'Running Total'];
     const rows = [header, ...runningTxns.map(t => [
       format(parseISO(t.date), 'dd MMM yyyy'),
-      typeLabel(t.type),
+      getTxnLabel(t),
       String(Number(t.amount)),
       paymentStr(t),
       String(t.runningTotal),
@@ -145,7 +148,6 @@ export function EmployeeReport() {
 
   return (
     <div className="space-y-4">
-      {/* Employee selector */}
       <select
         value={selectedEmpId}
         onChange={e => setSelectedEmpId(e.target.value)}
@@ -159,7 +161,6 @@ export function EmployeeReport() {
 
       {selectedEmpId && (
         <>
-          {/* Month nav */}
           <div className="flex items-center justify-between">
             <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() - 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronLeft className="w-4 h-4" /></button>
             <span className="text-sm font-medium">{format(month, 'MMMM yyyy')}</span>
@@ -174,7 +175,6 @@ export function EmployeeReport() {
             </div>
           </div>
 
-          {/* Summary cards */}
           {selectedEmp && (
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-card border border-border rounded-xl p-3">
@@ -198,20 +198,18 @@ export function EmployeeReport() {
             </div>
           )}
 
-          {/* Transaction list with running balance */}
           {loading ? (
             <div className="h-32 bg-secondary/50 animate-pulse rounded-xl" />
           ) : txns.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No transactions this month</p>
           ) : (
             <div className="space-y-2">
-              {runningTxns.map((t, i) => (
+              {runningTxns.map(t => (
                 <div key={t.id} className="bg-card border border-border rounded-xl p-3">
                   <div className="flex justify-between items-start text-xs">
                     <div>
-                      <p className="font-medium">{format(parseISO(t.date), 'dd MMM, EEE')}</p>
-                      <p className="text-muted-foreground">{typeLabel(t.type)}</p>
-                      {t.reference && <p className="text-[10px] text-muted-foreground">{t.reference}</p>}
+                      <p className="font-medium">{format(parseISO(t.date), 'dd MMM yyyy, EEE')}</p>
+                      <p className="text-muted-foreground">{getTxnLabel(t)}</p>
                     </div>
                     <div className="text-right">
                       <p className="font-bold">{formatINR(Number(t.amount))}</p>

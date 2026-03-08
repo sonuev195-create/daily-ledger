@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Trash2, ClipboardPaste, Lock, Unlock, Save, AlertTriangle, X, Package, FileSpreadsheet, Camera, Upload, Loader2, Settings, ChevronRight, Check } from 'lucide-react';
+import { Plus, Trash2, ClipboardPaste, Lock, Unlock, Save, AlertTriangle, X, Package, FileSpreadsheet, Camera, Upload, Loader2, Settings, ChevronRight, Check, Pencil, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,9 +37,12 @@ interface ExistingSaleBill {
   customerName: string;
   amount: number;
   hasItems: boolean;
+  itemCount: number;
+  billId: string | null;
 }
 
-interface OcrBillItem {
+interface BillItemRow {
+  id?: string;
   extractedName: string;
   matchedName: string | null;
   selectedItemId: string | null;
@@ -48,6 +51,7 @@ interface OcrBillItem {
   rate: number;
   amount: number;
   confirmed: boolean;
+  isNew?: boolean;
 }
 
 interface FullDayBillContentProps {
@@ -57,7 +61,7 @@ interface FullDayBillContentProps {
   onDeleteTransaction: (id: string) => void;
 }
 
-type FullDayMode = 'inventory' | 'bills' | 'add_items';
+type FullDayMode = 'inventory' | 'bills' | 'bill_items';
 
 // Fuzzy match item name against master list
 function fuzzyMatchItem(name: string, items: { id: string; name: string; paperBillName?: string | null }[]): { id: string; name: string; score: number } | null {
@@ -68,11 +72,7 @@ function fuzzyMatchItem(name: string, items: { id: string; name: string; paperBi
   for (const item of items) {
     const masterNorm = item.name.toLowerCase().trim();
     const paperNorm = item.paperBillName?.toLowerCase().trim() || '';
-
-    // Exact match
     if (norm === masterNorm || norm === paperNorm) return { id: item.id, name: item.name, score: 1 };
-
-    // Contains match
     if (masterNorm.includes(norm) || norm.includes(masterNorm)) {
       const score = 0.9;
       if (!best || score > best.score) best = { id: item.id, name: item.name, score };
@@ -83,8 +83,6 @@ function fuzzyMatchItem(name: string, items: { id: string; name: string; paperBi
       if (!best || score > best.score) best = { id: item.id, name: item.name, score };
       continue;
     }
-
-    // Levenshtein similarity
     const maxLen = Math.max(norm.length, masterNorm.length);
     if (maxLen > 0) {
       const dist = levenshtein(norm, masterNorm);
@@ -123,20 +121,21 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
   const [pasteText, setPasteText] = useState('');
   const [showPaste, setShowPaste] = useState(false);
 
-  // OCR for add_items mode
+  // Bill Wise Items mode state
   const [existingSales, setExistingSales] = useState<ExistingSaleBill[]>([]);
   const [currentBillIdx, setCurrentBillIdx] = useState(0);
-  const [ocrItems, setOcrItems] = useState<OcrBillItem[]>([]);
+  const [billItems, setBillItems] = useState<BillItemRow[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [savedBillIds, setSavedBillIds] = useState<Set<string>>(new Set());
+  const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const billFileRef = useRef<HTMLInputElement>(null);
   const billCameraRef = useRef<HTMLInputElement>(null);
 
   const saleTransactions = transactions.filter(t => t.section === 'sale' && (t.type === 'sale' || t.type === 'sales_return'));
 
-  // Load existing sales without items for add_items mode
+  // Load ALL existing sales for bill_items mode
   useEffect(() => {
-    if (entryMode !== 'add_items') return;
+    if (entryMode !== 'bill_items') return;
     (async () => {
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       const { data: saleTxns } = await supabase.from('transactions')
@@ -148,8 +147,9 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       const sales: ExistingSaleBill[] = [];
       for (const txn of saleTxns) {
         const { data: bills } = await supabase.from('bills').select('id').eq('transaction_id', txn.id);
-        const { data: items } = bills?.[0]
-          ? await supabase.from('bill_items').select('id').eq('bill_id', bills[0].id).limit(1)
+        const billId = bills?.[0]?.id || null;
+        const { data: items } = billId
+          ? await supabase.from('bill_items').select('id').eq('bill_id', billId)
           : { data: null };
         sales.push({
           transactionId: txn.id,
@@ -157,12 +157,15 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
           customerName: txn.customer_name || '-',
           amount: Number(txn.amount),
           hasItems: (items?.length || 0) > 0,
+          itemCount: items?.length || 0,
+          billId,
         });
       }
       setExistingSales(sales);
       setCurrentBillIdx(0);
-      setOcrItems([]);
+      setBillItems([]);
       setSavedBillIds(new Set());
+      setEditingBillId(null);
     })();
   }, [entryMode, selectedDate, transactions]);
 
@@ -182,7 +185,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
   useEffect(() => {
     if (rows.length === 0 || allItems.length === 0) return;
     const updated = rows.map(row => {
-      if (row.matchedItemId) return row; // already matched
+      if (row.matchedItemId) return row;
       if (!row.itemName.trim()) return row;
       const match = fuzzyMatchItem(row.itemName, allItems);
       if (match) {
@@ -226,7 +229,6 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     for (const line of lines) {
       const cols = line.split(/\t|,/).map(c => c.trim());
       if (entryMode === 'inventory') {
-        // Inventory: Item, Qty, Amount
         if (cols.length >= 2) {
           const item = cols[0] || '';
           const qty = parseFloat(cols[1]) || 0;
@@ -234,7 +236,6 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
           newRows.push({ id: uuidv4(), customerName: '', itemName: item, quantity: qty, amount: amt, matchedItemId: null, matchedItemName: null, secondaryQty: 0, rate: qty > 0 && amt > 0 ? amt / qty : 0 });
         }
       } else {
-        // Bills: Customer, Item, Qty, Amount
         if (cols.length >= 3) {
           const name = cols[0] || '';
           const item = cols[1] || '';
@@ -264,12 +265,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     setRows(prev => prev.map(r => {
       if (r.id !== id) return r;
       const updated = { ...r, [field]: value };
-      // Clear match if itemName changed
-      if (field === 'itemName') {
-        updated.matchedItemId = null;
-        updated.matchedItemName = null;
-      }
-      // Auto-calc rate/amount
+      if (field === 'itemName') { updated.matchedItemId = null; updated.matchedItemName = null; }
       if (field === 'quantity' || field === 'amount') {
         const qty = field === 'quantity' ? (value as number) : updated.quantity;
         const amt = field === 'amount' ? (value as number) : updated.amount;
@@ -285,7 +281,6 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
 
   const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id));
 
-  // Deduct inventory for items
   const deductInventoryForItems = async (items: { itemId: string; primaryQty: number; secondaryQty: number }[]) => {
     for (const item of items) {
       if (!item.itemId) continue;
@@ -327,26 +322,19 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
             total_amount: item.amount,
           }));
           await supabase.from('bill_items').insert(billItems);
-
-          // Deduct inventory for matched items
           const toDeduct = rows.filter(r => r.matchedItemId).map(r => ({
             itemId: r.matchedItemId!, primaryQty: r.quantity, secondaryQty: r.secondaryQty,
           }));
           if (toDeduct.length > 0) await deductInventoryForItems(toDeduct);
         }
-
         toast.success(`Saved ${rows.length} inventory items`);
         setRows([]);
-      } catch (err) {
-        console.error(err);
-        toast.error('Error saving inventory');
-      } finally {
-        setSaving(false);
-      }
+      } catch (err) { console.error(err); toast.error('Error saving inventory'); }
+      finally { setSaving(false); }
       return;
     }
 
-    // Bills mode
+    // Bills mode - auto group by customer name and create transactions with items
     if (groups.length === 0) { toast.error('No items to save'); return; }
     setSaving(true);
     try {
@@ -383,25 +371,47 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
           }));
           await saveBillToSupabase(savedTxn.id, billNumber, 'sale', group.total, group.customerName, undefined, billItemsData);
 
-          // Deduct inventory
           const toDeduct = group.items.filter(i => i.matchedItemId).map(i => ({
             itemId: i.matchedItemId!, primaryQty: i.quantity, secondaryQty: i.secondaryQty,
           }));
           if (toDeduct.length > 0) await deductInventoryForItems(toDeduct);
         }
       }
-
       toast.success(`Saved ${groups.length} bills`);
       setRows([]);
-    } catch (err) {
-      console.error(err);
-      toast.error('Error saving bills');
-    } finally {
-      setSaving(false);
+    } catch (err) { console.error(err); toast.error('Error saving bills'); }
+    finally { setSaving(false); }
+  };
+
+  // === Bill Wise Items: Load items for a specific bill ===
+  const loadBillItems = async (sale: ExistingSaleBill) => {
+    if (!sale.billId) {
+      setBillItems([]);
+      setEditingBillId(null);
+      return;
+    }
+    const { data } = await supabase.from('bill_items').select('*').eq('bill_id', sale.billId);
+    if (data && data.length > 0) {
+      const items: BillItemRow[] = data.map(d => ({
+        id: d.id,
+        extractedName: d.item_name,
+        matchedName: d.item_name,
+        selectedItemId: d.item_id,
+        quantity: Number(d.primary_quantity),
+        secondaryQty: Number(d.secondary_quantity),
+        rate: Number(d.rate),
+        amount: Number(d.total_amount),
+        confirmed: !!d.item_id,
+        isNew: false,
+      }));
+      setBillItems(items);
+      setEditingBillId(sale.billId);
+    } else {
+      setBillItems([]);
+      setEditingBillId(null);
     }
   };
 
-  // === OCR for Add Items to existing sales ===
   const currentSale = existingSales[currentBillIdx];
   const salesWithoutItems = existingSales.filter(s => !s.hasItems && !savedBillIds.has(s.transactionId));
 
@@ -436,7 +446,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       const items = data?.items || [];
       if (items.length === 0) { toast.error('No items found'); return; }
 
-      const enriched: OcrBillItem[] = items.map((ext: any) => {
+      const enriched: BillItemRow[] = items.map((ext: any) => {
         const masterItem = allItems.find(i => i.name.toLowerCase() === (ext.matchedName || ext.extractedName)?.toLowerCase());
         const conv = masterItem?.conversionRate && masterItem?.conversionType === 'permanent' ? masterItem.conversionRate : 0;
         return {
@@ -448,9 +458,10 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
           rate: ext.rate || (ext.quantity > 0 && ext.amount > 0 ? ext.amount / ext.quantity : 0),
           amount: ext.amount || 0,
           confirmed: !!masterItem,
+          isNew: true,
         };
       });
-      setOcrItems(prev => [...prev, ...enriched]);
+      setBillItems(prev => [...prev, ...enriched]);
       toast.success(`Extracted ${enriched.length} items`);
     } catch (err: any) {
       toast.error('Extraction failed: ' + (err.message || 'Unknown'));
@@ -459,49 +470,54 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     }
   };
 
-  const handleSaveOcrItems = async () => {
-    if (!currentSale || ocrItems.length === 0) return;
+  const handleSaveBillItems = async () => {
+    if (!currentSale || billItems.length === 0) return;
     setSaving(true);
     try {
-      const billItemsData = ocrItems.filter(i => i.selectedItemId).map(i => ({
+      // If editing existing bill, delete old items first
+      if (editingBillId) {
+        await supabase.from('bill_items').delete().eq('bill_id', editingBillId);
+      }
+
+      const billItemsData = billItems.filter(i => i.selectedItemId || i.extractedName.trim()).map(i => ({
         itemId: i.selectedItemId || undefined,
         itemName: i.matchedName || i.extractedName,
         primaryQty: i.quantity, secondaryQty: i.secondaryQty,
         rate: i.rate, total: i.amount,
       }));
-      const totalAmt = ocrItems.reduce((s, i) => s + i.amount, 0);
+      const totalAmt = billItems.reduce((s, i) => s + i.amount, 0);
       await saveBillToSupabase(currentSale.transactionId, currentSale.billNumber, 'sale', totalAmt, currentSale.customerName, undefined, billItemsData);
 
-      // Deduct inventory
-      const toDeduct = ocrItems.filter(i => i.selectedItemId).map(i => ({
-        itemId: i.selectedItemId!, primaryQty: i.quantity, secondaryQty: i.secondaryQty,
-      }));
-      if (toDeduct.length > 0) await deductInventoryForItems(toDeduct);
+      // Deduct inventory only for new items
+      const newItems = billItems.filter(i => i.isNew && i.selectedItemId);
+      if (newItems.length > 0) {
+        await deductInventoryForItems(newItems.map(i => ({
+          itemId: i.selectedItemId!, primaryQty: i.quantity, secondaryQty: i.secondaryQty,
+        })));
+      }
 
       setSavedBillIds(prev => new Set([...prev, currentSale.transactionId]));
+      // Update local state
+      setExistingSales(prev => prev.map((s, i) => i === currentBillIdx ? { ...s, hasItems: true, itemCount: billItemsData.length } : s));
       toast.success(`Items saved for ${currentSale.billNumber}`);
-      setOcrItems([]);
+      setBillItems([]);
+      setEditingBillId(null);
 
-      // Move to next bill without items
+      // Auto-advance to next bill without items
       const nextIdx = existingSales.findIndex((s, i) => i > currentBillIdx && !s.hasItems && !savedBillIds.has(s.transactionId));
       if (nextIdx >= 0) setCurrentBillIdx(nextIdx);
-    } catch (err) {
-      console.error(err);
-      toast.error('Error saving items');
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { console.error(err); toast.error('Error saving items'); }
+    finally { setSaving(false); }
   };
 
-  const updateOcrItem = (idx: number, field: string, value: any) => {
-    setOcrItems(prev => {
+  const updateBillItem = (idx: number, field: string, value: any) => {
+    setBillItems(prev => {
       const updated = [...prev];
       updated[idx] = { ...updated[idx], [field]: value };
       if (field === 'selectedItemId') {
         const masterItem = allItems.find(i => i.id === value);
         updated[idx].matchedName = masterItem?.name || null;
         updated[idx].confirmed = !!value;
-        // Auto-calc secondary
         if (masterItem?.conversionRate && masterItem.conversionType === 'permanent') {
           updated[idx].secondaryQty = updated[idx].quantity * masterItem.conversionRate;
         }
@@ -533,10 +549,10 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
           {([
             { key: 'inventory' as FullDayMode, icon: Package, label: 'Inventory' },
             { key: 'bills' as FullDayMode, icon: FileSpreadsheet, label: 'Full Bills' },
-            { key: 'add_items' as FullDayMode, icon: Plus, label: 'Add Items' },
+            { key: 'bill_items' as FullDayMode, icon: Eye, label: 'Bill Wise Items' },
           ]).map(tab => (
             <button key={tab.key}
-              onClick={() => { setEntryMode(tab.key); setRows([]); setOcrItems([]); }}
+              onClick={() => { setEntryMode(tab.key); setRows([]); setBillItems([]); setEditingBillId(null); }}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-medium transition-colors",
                 entryMode === tab.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
@@ -546,7 +562,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
             </button>
           ))}
         </div>
-        {entryMode !== 'add_items' && (
+        {entryMode !== 'bill_items' && (
           <button onClick={() => setLockMode(lockMode === 'partial' ? 'full' : 'partial')}
             className={cn(
               "flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors shrink-0",
@@ -561,7 +577,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       </div>
 
       {/* Lock warning */}
-      {lockMode === 'full' && saleTransactions.length > 0 && entryMode !== 'add_items' && (
+      {lockMode === 'full' && saleTransactions.length > 0 && entryMode !== 'bill_items' && (
         <div className="bg-warning/10 border border-warning/30 rounded-lg p-2 space-y-1">
           <div className="flex items-center gap-1 text-xs text-warning font-medium">
             <AlertTriangle className="w-3 h-3" /> {saleTransactions.length} sale(s) may duplicate inventory
@@ -573,7 +589,6 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       {/* ============ INVENTORY & BILLS MODES ============ */}
       {(entryMode === 'inventory' || entryMode === 'bills') && (
         <>
-          {/* Paste Area */}
           {showPaste ? (
             <div className="space-y-2 border border-accent/30 rounded-lg p-2 bg-accent/5">
               <label className="text-[10px] text-muted-foreground">
@@ -624,7 +639,6 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                               placeholder="₹" className="h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
                             <button onClick={() => removeRow(row.id)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
                           </div>
-                          {/* Match indicator */}
                           {row.itemName.trim() && (
                             <div className="flex items-center gap-1 pl-1">
                               {row.matchedItemId ? (
@@ -635,9 +649,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                               ) : (
                                 <select value="" onChange={e => {
                                   const item = allItems.find(i => i.id === e.target.value);
-                                  if (item) {
-                                    setRows(prev => prev.map(r => r.id === row.id ? { ...r, matchedItemId: item.id, matchedItemName: item.name } : r));
-                                  }
+                                  if (item) setRows(prev => prev.map(r => r.id === row.id ? { ...r, matchedItemId: item.id, matchedItemName: item.name } : r));
                                 }} className="text-[9px] text-destructive bg-transparent border-none h-4">
                                   <option value="">⚠ No match - Select</option>
                                   {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
@@ -655,7 +667,6 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                   </div>
                 </>
               ) : (
-                /* Bills mode table */
                 <>
                   <div className="grid grid-cols-[1fr_1fr_50px_60px_24px] gap-1 px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
                     <span>Customer</span><span>Item</span><span>Qty</span><span>Amount</span><span></span>
@@ -718,7 +729,6 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
             </div>
           )}
 
-          {/* Comparison */}
           {entryMode === 'bills' && rows.length > 0 && (
             <div className="bg-secondary/30 rounded-lg p-2 space-y-1">
               <div className="flex justify-between text-xs">
@@ -741,33 +751,45 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
         </>
       )}
 
-      {/* ============ ADD ITEMS MODE ============ */}
-      {entryMode === 'add_items' && (
+      {/* ============ BILL WISE ITEMS MODE ============ */}
+      {entryMode === 'bill_items' && (
         <div className="space-y-3">
-          {/* Bill list */}
+          {/* All bills list */}
           <div className="border border-border rounded-lg overflow-hidden">
-            <div className="px-2 py-1.5 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
-              Today's Sales — Select bill to add items
+            <div className="px-2 py-1.5 bg-secondary/30 text-[10px] text-muted-foreground font-medium flex justify-between">
+              <span>Today's Sales — Select bill to view/edit items</span>
+              {salesWithoutItems.length > 0 && (
+                <span className="text-warning">{salesWithoutItems.length} need items</span>
+              )}
             </div>
-            <div className="max-h-40 overflow-y-auto divide-y divide-border/30">
+            <div className="max-h-48 overflow-y-auto divide-y divide-border/30">
               {existingSales.length === 0 ? (
                 <div className="px-2 py-3 text-xs text-muted-foreground text-center">No sales found for today</div>
               ) : existingSales.map((sale, idx) => {
                 const isSaved = savedBillIds.has(sale.transactionId);
+                const isSelected = currentBillIdx === idx;
                 return (
                   <button key={sale.transactionId}
-                    onClick={() => { setCurrentBillIdx(idx); setOcrItems([]); }}
+                    onClick={() => {
+                      setCurrentBillIdx(idx);
+                      setBillItems([]);
+                      setEditingBillId(null);
+                      if (sale.hasItems || isSaved) {
+                        loadBillItems(sale);
+                      }
+                    }}
                     className={cn(
                       "w-full px-2 py-1.5 text-left text-xs flex items-center gap-2 transition-colors",
-                      currentBillIdx === idx ? "bg-accent/10" : "hover:bg-secondary/30",
-                      (sale.hasItems || isSaved) && "opacity-60"
+                      isSelected ? "bg-accent/10" : "hover:bg-secondary/30"
                     )}
                   >
                     <span className="font-mono text-[10px] text-muted-foreground shrink-0">#{sale.billNumber}</span>
                     <span className="font-medium truncate flex-1">{sale.customerName}</span>
                     <span className="font-semibold shrink-0">{formatINR(sale.amount)}</span>
                     {(sale.hasItems || isSaved) ? (
-                      <Check className="w-3 h-3 text-success shrink-0" />
+                      <span className="text-[9px] text-success flex items-center gap-0.5 shrink-0">
+                        <Check className="w-3 h-3" /> {sale.itemCount} items
+                      </span>
                     ) : (
                       <span className="text-[9px] text-warning shrink-0">No items</span>
                     )}
@@ -775,23 +797,23 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                 );
               })}
             </div>
-            {salesWithoutItems.length > 0 && (
-              <div className="px-2 py-1 bg-warning/10 text-[10px] text-warning font-medium">
-                {salesWithoutItems.length} bill(s) need items
-              </div>
-            )}
           </div>
 
-          {/* Current bill OCR */}
-          {currentSale && !currentSale.hasItems && !savedBillIds.has(currentSale.transactionId) && (
+          {/* Current bill items editor */}
+          {currentSale && (
             <div className="border border-accent/30 rounded-lg p-2 bg-accent/5 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-accent">
                   #{currentSale.billNumber} — {currentSale.customerName} — {formatINR(currentSale.amount)}
                 </span>
+                {(currentSale.hasItems || editingBillId) && (
+                  <span className="text-[9px] text-success flex items-center gap-0.5">
+                    <Pencil className="w-2.5 h-2.5" /> Editing
+                  </span>
+                )}
               </div>
 
-              {/* OCR buttons */}
+              {/* OCR + Manual buttons */}
               <div className="flex gap-1">
                 <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1"
                   onClick={() => billCameraRef.current?.click()} disabled={isExtracting}>
@@ -802,30 +824,30 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                   {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Upload
                 </Button>
                 <Button variant="outline" size="sm" className="h-7 text-xs gap-1"
-                  onClick={() => setOcrItems(prev => [...prev, { extractedName: '', matchedName: null, selectedItemId: null, quantity: 1, secondaryQty: 0, rate: 0, amount: 0, confirmed: false }])}>
+                  onClick={() => setBillItems(prev => [...prev, { extractedName: '', matchedName: null, selectedItemId: null, quantity: 1, secondaryQty: 0, rate: 0, amount: 0, confirmed: false, isNew: true }])}>
                   <Plus className="w-3 h-3" /> Item
                 </Button>
                 <input ref={billCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleOcrCapture} />
                 <input ref={billFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleOcrCapture} />
               </div>
 
-              {/* OCR Items */}
-              {ocrItems.length > 0 && (
+              {/* Items table */}
+              {billItems.length > 0 && (
                 <div className="border border-border rounded-lg overflow-hidden">
                   <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
-                    Items ({ocrItems.length}) — {ocrItems.filter(i => i.selectedItemId).length} matched
+                    Items ({billItems.length}) — {billItems.filter(i => i.selectedItemId).length} matched
                   </div>
                   <div className="max-h-60 overflow-y-auto divide-y divide-border/30">
-                    {ocrItems.map((item, idx) => {
+                    {billItems.map((item, idx) => {
                       const secUnit = getItemSecondaryUnit(item.selectedItemId);
                       return (
                         <div key={idx} className="px-2 py-1.5 space-y-1">
                           <div className="flex items-center gap-1 text-xs">
                             <input type="text" value={item.extractedName}
-                              onChange={e => updateOcrItem(idx, 'extractedName', e.target.value)}
+                              onChange={e => updateBillItem(idx, 'extractedName', e.target.value)}
                               placeholder="Name" className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate" />
                             <select value={item.selectedItemId || ''}
-                              onChange={e => updateOcrItem(idx, 'selectedItemId', e.target.value || null)}
+                              onChange={e => updateBillItem(idx, 'selectedItemId', e.target.value || null)}
                               className={cn("flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
                                 !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground")}>
                               <option value="">No match</option>
@@ -833,17 +855,17 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                             </select>
                           </div>
                           <div className="flex items-center gap-1 text-xs">
-                            <input type="number" value={item.quantity || ''} onChange={e => updateOcrItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                            <input type="number" value={item.quantity || ''} onChange={e => updateBillItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
                               placeholder="Qty" className="w-14 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
                             {secUnit && (
-                              <input type="number" value={item.secondaryQty || ''} onChange={e => updateOcrItem(idx, 'secondaryQty', parseFloat(e.target.value) || 0)}
+                              <input type="number" value={item.secondaryQty || ''} onChange={e => updateBillItem(idx, 'secondaryQty', parseFloat(e.target.value) || 0)}
                                 placeholder={secUnit} className="w-14 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
                             )}
-                            <input type="number" value={item.rate || ''} onChange={e => updateOcrItem(idx, 'rate', parseFloat(e.target.value) || 0)}
+                            <input type="number" value={item.rate || ''} onChange={e => updateBillItem(idx, 'rate', parseFloat(e.target.value) || 0)}
                               placeholder="Rate" className="w-14 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
-                            <input type="number" value={item.amount || ''} onChange={e => updateOcrItem(idx, 'amount', parseFloat(e.target.value) || 0)}
+                            <input type="number" value={item.amount || ''} onChange={e => updateBillItem(idx, 'amount', parseFloat(e.target.value) || 0)}
                               placeholder="₹" className="w-16 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
-                            <button onClick={() => setOcrItems(prev => prev.filter((_, i) => i !== idx))}
+                            <button onClick={() => setBillItems(prev => prev.filter((_, i) => i !== idx))}
                               className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
                           </div>
                         </div>
@@ -851,9 +873,9 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                     })}
                   </div>
                   <div className="px-2 py-1 bg-accent/10 flex justify-between text-xs font-medium text-accent">
-                    <span>Total: {formatINR(ocrItems.reduce((s, i) => s + i.amount, 0))}</span>
+                    <span>Total: {formatINR(billItems.reduce((s, i) => s + i.amount, 0))}</span>
                     <span className={cn(
-                      Math.abs(ocrItems.reduce((s, i) => s + i.amount, 0) - currentSale.amount) < 1 ? "text-success" : "text-warning"
+                      Math.abs(billItems.reduce((s, i) => s + i.amount, 0) - currentSale.amount) < 1 ? "text-success" : "text-warning"
                     )}>
                       Bill: {formatINR(currentSale.amount)}
                     </span>
@@ -863,25 +885,19 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
 
               {/* Save + Next */}
               <div className="flex gap-1">
-                <Button onClick={handleSaveOcrItems} disabled={saving || ocrItems.length === 0} size="sm" className="flex-1 h-8 text-xs gap-1">
-                  <Save className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Items'}
+                <Button onClick={handleSaveBillItems} disabled={saving || billItems.length === 0} size="sm" className="flex-1 h-8 text-xs gap-1">
+                  <Save className="w-3.5 h-3.5" /> {saving ? 'Saving...' : editingBillId ? 'Update Items' : 'Save Items'}
                 </Button>
                 {existingSales.findIndex((s, i) => i > currentBillIdx && !s.hasItems && !savedBillIds.has(s.transactionId)) >= 0 && (
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1"
                     onClick={() => {
                       const nextIdx = existingSales.findIndex((s, i) => i > currentBillIdx && !s.hasItems && !savedBillIds.has(s.transactionId));
-                      if (nextIdx >= 0) { setCurrentBillIdx(nextIdx); setOcrItems([]); }
+                      if (nextIdx >= 0) { setCurrentBillIdx(nextIdx); setBillItems([]); setEditingBillId(null); }
                     }}>
                     Next <ChevronRight className="w-3 h-3" />
                   </Button>
                 )}
               </div>
-            </div>
-          )}
-
-          {currentSale && (currentSale.hasItems || savedBillIds.has(currentSale.transactionId)) && (
-            <div className="bg-success/10 border border-success/30 rounded-lg p-2 text-xs text-success font-medium flex items-center gap-1">
-              <Check className="w-3.5 h-3.5" /> #{currentSale.billNumber} already has items
             </div>
           )}
         </div>

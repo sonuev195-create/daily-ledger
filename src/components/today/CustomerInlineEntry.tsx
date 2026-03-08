@@ -567,9 +567,9 @@ export function CustomerInlineEntry({
                   <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
                     <SelectTrigger className="h-7 text-[10px] w-20"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cash" className="text-xs">Cash</SelectItem>
-                      <SelectItem value="upi" className="text-xs">UPI</SelectItem>
-                      <SelectItem value="cheque" className="text-xs">Cheque</SelectItem>
+                      {selectableMethods.map(m => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Input type="number" inputMode="numeric" value={p.amount || ''}

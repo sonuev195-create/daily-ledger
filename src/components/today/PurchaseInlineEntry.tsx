@@ -98,9 +98,11 @@ export function PurchaseInlineEntry({
   useEffect(() => {
     if (entry.supplierId) { setShowSupplierDropdown(false); return; }
     const timer = setTimeout(async () => {
+      if (entry.supplierId) return; // guard against race
       if (entry.supplierQuery.length >= 2) {
         const { data } = await supabase.from('suppliers').select('*')
           .ilike('name', `%${entry.supplierQuery}%`).order('name').limit(10);
+        if (entry.supplierId) return; // guard after async
         setSupplierResults((data || []).map(s => ({ id: s.id, name: s.name, balance: Number(s.balance) })));
         setShowSupplierDropdown(true);
       } else {

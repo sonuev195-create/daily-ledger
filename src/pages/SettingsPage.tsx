@@ -741,3 +741,102 @@ export default function SettingsPage() {
     </AppLayout>
   );
 }
+
+function PaymentMethodSettings() {
+  const defaultMethods = [
+    { id: 'cash', name: 'Cash', reset: 'none', editable: false },
+    { id: 'upi', name: 'UPI', reset: 'daily', editable: false },
+    { id: 'cheque', name: 'Cheque', reset: 'none', editable: false },
+    { id: 'adjust', name: 'Adjust', reset: 'daily', editable: false },
+  ];
+
+  const [methods, setMethods] = useState(() => {
+    const stored = localStorage.getItem('payment-methods');
+    return stored ? JSON.parse(stored) : defaultMethods;
+  });
+  const [newName, setNewName] = useState('');
+  const [newReset, setNewReset] = useState('none');
+
+  const save = (updated: any[]) => {
+    setMethods(updated);
+    localStorage.setItem('payment-methods', JSON.stringify(updated));
+    toast.success('Payment methods saved');
+  };
+
+  const addMethod = () => {
+    if (!newName.trim()) return;
+    const id = newName.trim().toLowerCase().replace(/\s+/g, '_');
+    if (methods.find((m: any) => m.id === id)) { toast.error('Already exists'); return; }
+    save([...methods, { id, name: newName.trim(), reset: newReset, editable: true }]);
+    setNewName('');
+    setNewReset('none');
+  };
+
+  const removeMethod = (id: string) => {
+    save(methods.filter((m: any) => m.id !== id));
+  };
+
+  const updateReset = (id: string, reset: string) => {
+    save(methods.map((m: any) => m.id === id ? { ...m, reset } : m));
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.18 }}
+      className="bg-secondary/30 rounded-2xl p-5 space-y-4"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
+          <Settings className="w-5 h-5 text-accent" />
+        </div>
+        <div>
+          <h2 className="font-semibold text-foreground">Payment Methods</h2>
+          <p className="text-xs text-muted-foreground">Manage payment modes and their reset behavior</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {methods.map((m: any) => (
+          <div key={m.id} className={cn(
+            "flex items-center justify-between bg-background rounded-lg p-3 border",
+            m.id === 'adjust' ? "border-primary/30" : "border-border"
+          )}>
+            <div>
+              <span className="text-sm font-medium">{m.name}</span>
+              {m.id === 'adjust' && <span className="text-[10px] text-primary ml-1">(net must = 0)</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <select value={m.reset} onChange={e => updateReset(m.id, e.target.value)}
+                className="h-7 px-2 text-[11px] bg-secondary/50 border border-border rounded-lg">
+                <option value="none">No Reset</option>
+                <option value="daily">Reset Daily</option>
+                <option value="monthly">Reset Monthly</option>
+              </select>
+              {m.editable && (
+                <button onClick={() => removeMethod(m.id)} className="text-destructive/60 hover:text-destructive">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-2">
+        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="New method name..."
+          className="flex-1 h-9 px-3 text-sm bg-background border border-border rounded-lg" />
+        <select value={newReset} onChange={e => setNewReset(e.target.value)}
+          className="h-9 px-2 text-xs bg-background border border-border rounded-lg">
+          <option value="none">No Reset</option>
+          <option value="daily">Daily</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <button onClick={addMethod} className="h-9 px-4 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90">
+          Add
+        </button>
+      </div>
+    </motion.div>
+  );
+}

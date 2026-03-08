@@ -65,7 +65,7 @@ export default function ReportsPage() {
         {activeTab === 'monthly' && <MonthlyReport />}
         {activeTab === 'employee' && <EmployeeReport />}
         {activeTab === 'supplier_detail' && <SupplierReport />}
-        {activeTab === 'customer' && <CustomerLedger />}
+        {activeTab === 'customer' && <CustomerReport />}
         {activeTab === 'supplier' && <SupplierLedger />}
         {activeTab === 'inventory' && <InventoryReport />}
         {activeTab === 'drawer' && <DrawerReport />}

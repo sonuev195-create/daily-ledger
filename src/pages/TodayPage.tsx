@@ -61,13 +61,18 @@ export default function TodayPage() {
     setEditingTransaction(null);
   };
 
+  const { canEdit } = useCanEdit();
+  const dateEditable = canEdit(selectedDate);
+
   const handleEdit = (transaction: Transaction) => {
+    if (!dateEditable) return;
     setEditingTransaction(transaction);
     const categoryMap: Record<string, CategoryId> = { sale: 'customer', purchase: 'purchase', employee: 'employee', expenses: 'expense', home: 'home', exchange: 'exchange' };
     setExpandedCategory(categoryMap[transaction.section] || null);
   };
 
   const handleDelete = async (id: string) => {
+    if (!dateEditable) return;
     if (confirm('Delete this transaction?')) await remove(id);
   };
 

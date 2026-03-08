@@ -10,11 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { useItems } from '@/hooks/useSupabaseData';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+
 
 interface ExtractedItem {
   extractedName: string;

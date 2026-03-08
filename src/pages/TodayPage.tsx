@@ -88,6 +88,9 @@ export default function TodayPage() {
     if (categoryId === 'drawer') {
       return <DrawerAccordionContent opening={opening} closing={closing} previousClosing={previousClosing} summary={summary} onSaveOpening={updateOpening} onSaveClosing={updateClosing} />;
     }
+    if (categoryId === 'fullday') {
+      return <FullDayBillContent transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onDeleteTransaction={handleDelete} />;
+    }
     if (categoryId === 'customer') {
       return <CustomerInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} editingTransaction={editingTransaction?.section === 'sale' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
     }

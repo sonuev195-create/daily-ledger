@@ -12,6 +12,7 @@ import { Fab } from '@/components/ui/fab';
 import { toast } from 'sonner';
 import { CategorySheet } from '@/components/items/CategorySheet';
 import { BatchList } from '@/components/items/BatchList';
+import { cn } from '@/lib/utils';
 
 export default function ItemsPage() {
   const { items: supabaseItems, loading: itemsLoading, addItem: addSupabaseItem, updateItem: updateSupabaseItem, deleteItem: deleteSupabaseItem, refetch: refetchItems } = useItems();

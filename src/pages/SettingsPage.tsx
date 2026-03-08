@@ -693,6 +693,9 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
+        {/* ========== Payment Methods Section ========== */}
+        <PaymentMethodSettings />
+
         {/* ========== Reset Database Section ========== */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

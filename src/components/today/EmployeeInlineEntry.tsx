@@ -256,6 +256,10 @@ export function EmployeeInlineEntry({
   };
 
   const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || 'Unknown';
+  const isPreviousCategory = (() => {
+    const prevCat = categories.find(c => c.name.toLowerCase() === 'previous');
+    return prevCat ? entry.categoryId === prevCat.id : false;
+  })();
 
   return (
     <div className="space-y-3">

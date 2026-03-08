@@ -113,8 +113,8 @@ interface FlowBadgeProps {
 function FlowBadge({ icon: Icon, inAmount, outAmount, inColor, outColor }: FlowBadgeProps) {
   if (inAmount === 0 && outAmount === 0) return null;
   return (
-    <div className="flex items-center gap-1 text-[10px]">
-      <Icon className="w-3 h-3 text-muted-foreground" />
+    <div className="flex items-center gap-1 text-[10px] lg:text-xs">
+      <Icon className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-muted-foreground" />
       {inAmount > 0 && <span className={cn("font-medium", inColor)}>+{formatINR(inAmount)}</span>}
       {outAmount > 0 && <span className={cn("font-medium", outColor)}>-{formatINR(outAmount)}</span>}
     </div>
@@ -146,15 +146,15 @@ export function CategoryAccordion({
             <button
               onClick={() => onToggle(cat.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 transition-colors",
+                "w-full flex items-center gap-3 px-4 py-3 lg:px-5 lg:py-4 transition-colors",
                 isExpanded ? "bg-secondary/70" : "hover:bg-secondary/30"
               )}
             >
-              <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", cat.bgClass)}>
-                <Icon className={cn("w-5 h-5", cat.colorClass)} />
+              <div className={cn("w-9 h-9 lg:w-11 lg:h-11 rounded-lg flex items-center justify-center shrink-0", cat.bgClass)}>
+                <Icon className={cn("w-5 h-5 lg:w-6 lg:h-6", cat.colorClass)} />
               </div>
               <div className="flex-1 text-left min-w-0">
-                <span className="text-sm font-semibold text-foreground">{cat.label}</span>
+                <span className="text-sm lg:text-base font-semibold text-foreground">{cat.label}</span>
                 {/* Per-section flow summary */}
                 {flow && flow.count > 0 && (
                   <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
@@ -169,7 +169,7 @@ export function CategoryAccordion({
                   </div>
                 )}
                 {cat.id === 'drawer' && (
-                  <div className="flex gap-2 mt-0.5 text-[10px]">
+                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
                     <span className="text-success font-medium">💵 {formatINR(drawerCash)}</span>
                     <span className="text-info font-medium">📱 {formatINR(drawerUpi)}</span>
                   </div>
@@ -177,10 +177,10 @@ export function CategoryAccordion({
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {flow && flow.count > 0 && (
-                  <span className="text-xs text-muted-foreground bg-secondary rounded-full px-1.5 py-0.5">{flow.count}</span>
+                  <span className="text-xs lg:text-sm text-muted-foreground bg-secondary rounded-full px-1.5 py-0.5 lg:px-2 lg:py-1">{flow.count}</span>
                 )}
                 <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5 text-muted-foreground" />
                 </motion.div>
               </div>
             </button>

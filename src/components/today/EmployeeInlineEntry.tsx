@@ -308,7 +308,7 @@ export function EmployeeInlineEntry({
             const catName = txn.reference ? getCategoryName(txn.reference) : undefined;
             const totalPaid = txn.payments.reduce((s, p) => s + p.amount, 0);
             return (
-              <div key={txn.id} className="px-2 py-2 hover:bg-secondary/20 space-y-0.5">
+              <div key={txn.id} className={cn("px-2 py-2 hover:bg-secondary/20 space-y-0.5", editingTransaction?.id === txn.id && "bg-accent/10 ring-1 ring-accent/30")}>
                 <div className="flex items-center gap-1.5 text-xs">
                   <span className="font-medium truncate flex-1">{empName || txn.employeeName || '-'}</span>
                   {catName && catName !== 'Unknown' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{catName}</span>}

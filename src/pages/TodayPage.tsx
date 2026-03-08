@@ -107,12 +107,14 @@ export default function TodayPage() {
       return <PurchaseInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})} editingTransaction={editingTransaction?.section === 'purchase' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
     }
     if (categoryId === 'employee') {
-      return <EmployeeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})} />;
+      return <EmployeeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})} editingTransaction={editingTransaction?.section === 'employee' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
     }
     return (
       <CategoryTransactionList categoryId={categoryId as any} transactions={transactions}
         onAddTransaction={handleAddTransaction} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})}
-        selectedDate={selectedDate} onSave={handleSave} />
+        selectedDate={selectedDate} onSave={handleSave}
+        editingTransaction={['home', 'exchange', 'expenses'].includes(editingTransaction?.section || '') ? editingTransaction : null}
+        onCancelEdit={() => setEditingTransaction(null)} />
     );
   };
 

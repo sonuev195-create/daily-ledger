@@ -87,6 +87,7 @@ export default function ItemsPage() {
     setCategoryId('');
     setSecondaryUnit('');
     setConversionRate('');
+    setConversionType('permanent');
     setPrimaryQty('');
     setSecondaryQty('');
     setPurchaseRate('');

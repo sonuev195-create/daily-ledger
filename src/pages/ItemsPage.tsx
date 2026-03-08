@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen, Filter, ChevronDown, Tag } from 'lucide-react';
+import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen, ArrowUp, ArrowDown, Tag } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Item, Category } from '@/types';
 import { useItems, useCategories } from '@/hooks/useSupabaseData';

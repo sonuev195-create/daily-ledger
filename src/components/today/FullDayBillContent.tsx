@@ -130,6 +130,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const billFileRef = useRef<HTMLInputElement>(null);
   const billCameraRef = useRef<HTMLInputElement>(null);
+  const [showColumnConfig, setShowColumnConfig] = useState(false);
 
   const saleTransactions = transactions.filter(t => t.section === 'sale' && (t.type === 'sale' || t.type === 'sales_return'));
 
@@ -827,9 +828,18 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                   onClick={() => setBillItems(prev => [...prev, { extractedName: '', matchedName: null, selectedItemId: null, quantity: 1, secondaryQty: 0, rate: 0, amount: 0, confirmed: false, isNew: true }])}>
                   <Plus className="w-3 h-3" /> Item
                 </Button>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowColumnConfig(!showColumnConfig)}
+                  title="Column config">
+                  <Settings className="w-3 h-3 text-muted-foreground" />
+                </Button>
                 <input ref={billCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleOcrCapture} />
                 <input ref={billFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleOcrCapture} />
               </div>
+
+              {/* Inline column config */}
+              {showColumnConfig && (
+                <BillColumnConfigInline onClose={() => setShowColumnConfig(false)} />
+              )}
 
               {/* Items table */}
               {billItems.length > 0 && (
@@ -902,6 +912,100 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Inline column config for Full Day Bill OCR
+function BillColumnConfigInline({ onClose }: { onClose: () => void }) {
+  const [totalCols, setTotalCols] = useState(4);
+  const [itemCol, setItemCol] = useState(1);
+  const [qtyCol, setQtyCol] = useState(2);
+  const [rateCol, setRateCol] = useState<number | null>(null);
+  const [amtCol, setAmtCol] = useState(3);
+  const [hasRate, setHasRate] = useState(false);
+  const [qtyType, setQtyType] = useState('primary');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('bill_format_config').select('*')
+        .eq('config_name', 'default').maybeSingle();
+      if (data) {
+        setTotalCols(data.total_columns);
+        setItemCol(data.item_name_column);
+        setQtyCol(data.quantity_column);
+        setRateCol(data.has_rate ? data.rate_column : null);
+        setAmtCol(data.amount_column);
+        setHasRate(data.has_rate);
+        setQtyType(data.quantity_type);
+      }
+      setLoaded(true);
+    })();
+  }, []);
+
+  const handleSaveConfig = async () => {
+    await supabase.from('bill_format_config').upsert({
+      config_name: 'default',
+      total_columns: totalCols,
+      item_name_column: itemCol,
+      quantity_column: qtyCol,
+      rate_column: hasRate ? rateCol : null,
+      amount_column: amtCol,
+      has_rate: hasRate,
+      has_amount: true,
+      quantity_type: qtyType,
+    }, { onConflict: 'config_name' });
+    toast.success('Column config saved');
+    onClose();
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="border border-border rounded-lg p-2 bg-secondary/10 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-medium text-muted-foreground">Column Order (OCR)</span>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        <div>
+          <label className="text-[9px] text-muted-foreground">Total Cols</label>
+          <Input type="number" value={totalCols} onChange={e => setTotalCols(parseInt(e.target.value) || 4)} className="h-6 text-[10px]" />
+        </div>
+        <div>
+          <label className="text-[9px] text-muted-foreground">Item Col</label>
+          <Input type="number" value={itemCol} onChange={e => setItemCol(parseInt(e.target.value) || 1)} className="h-6 text-[10px]" />
+        </div>
+        <div>
+          <label className="text-[9px] text-muted-foreground">Qty Col</label>
+          <Input type="number" value={qtyCol} onChange={e => setQtyCol(parseInt(e.target.value) || 2)} className="h-6 text-[10px]" />
+        </div>
+        <div>
+          <label className="text-[9px] text-muted-foreground">Amt Col</label>
+          <Input type="number" value={amtCol} onChange={e => setAmtCol(parseInt(e.target.value) || 3)} className="h-6 text-[10px]" />
+        </div>
+      </div>
+      <div className="flex items-center gap-3 text-[10px]">
+        <label className="flex items-center gap-1">
+          <Checkbox checked={hasRate} onCheckedChange={(v) => { setHasRate(!!v); if (v && !rateCol) setRateCol(3); }} />
+          Has Rate
+        </label>
+        {hasRate && (
+          <div className="flex items-center gap-1">
+            <label className="text-[9px] text-muted-foreground">Rate Col</label>
+            <Input type="number" value={rateCol || ''} onChange={e => setRateCol(parseInt(e.target.value) || null)} className="h-6 w-10 text-[10px]" />
+          </div>
+        )}
+        <Select value={qtyType} onValueChange={setQtyType}>
+          <SelectTrigger className="h-6 text-[10px] w-20"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="primary" className="text-xs">Primary</SelectItem>
+            <SelectItem value="secondary" className="text-xs">Secondary</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <Button size="sm" className="h-6 text-[10px] w-full" onClick={handleSaveConfig}>Save Config</Button>
     </div>
   );
 }

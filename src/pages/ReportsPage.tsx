@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download, FileSpreadsheet } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,6 +9,17 @@ import { Button } from '@/components/ui/button';
 import { generateDetailedDailyPDF, generateFullMonthlyPDF } from '@/lib/reportExport';
 
 type ReportTab = 'daily' | 'monthly' | 'customer' | 'supplier' | 'inventory' | 'drawer';
+
+// CSV export helper
+function downloadCSV(rows: string[][], filename: string) {
+  const csv = rows.map(r => r.map(c => `"${(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
 
 const reportTabs: { id: ReportTab; label: string; icon: any }[] = [
   { id: 'daily', label: 'Daily', icon: FileText },
@@ -55,23 +66,13 @@ export default function ReportsPage() {
   );
 }
 
-// Helper to resolve employee names for display
-function ResolvedName({ txn }: { txn: any }) {
-  const [name, setName] = useState<string | null>(null);
-  
-  useEffect(() => {
-    if (txn.customer_name || txn.supplier_name || txn.reference) {
-      setName(txn.customer_name || txn.supplier_name || txn.reference);
-    } else if (txn.employee_id) {
-      supabase.from('employees').select('name').eq('id', txn.employee_id).maybeSingle().then(({ data }) => {
-        setName(data?.name || txn.employee_id?.slice(0, 8));
-      });
-    } else {
-      setName('-');
-    }
-  }, [txn]);
-
-  return <>{name || '-'}</>;
+// Helper to get name from pre-fetched map
+function getResolvedName(txn: any, empMap: Record<string, string>) {
+  if (txn.customer_name) return txn.customer_name;
+  if (txn.supplier_name) return txn.supplier_name;
+  if (txn.reference) return txn.reference;
+  if (txn.employee_id && empMap[txn.employee_id]) return empMap[txn.employee_id];
+  return '-';
 }
 
 // ====== Helper to get bill type label ======
@@ -88,19 +89,24 @@ function DailyReport() {
   const [data, setData] = useState<any[]>([]);
   const [drawerData, setDrawerData] = useState<{ opening: any; closing: any }>({ opening: null, closing: null });
   const [loading, setLoading] = useState(true);
+  const [empMap, setEmpMap] = useState<Record<string, string>>({});
 
   useEffect(() => { fetchData(); }, [date]);
 
   const fetchData = async () => {
     setLoading(true);
     const dateStr = format(date, 'yyyy-MM-dd');
-    const [{ data: txns }, { data: opening }, { data: closing }] = await Promise.all([
+    const [{ data: txns }, { data: opening }, { data: closing }, { data: employees }] = await Promise.all([
       supabase.from('transactions').select('*').eq('date', dateStr).order('created_at'),
       supabase.from('drawer_openings').select('*').eq('date', dateStr).maybeSingle(),
       supabase.from('drawer_closings').select('*').eq('date', dateStr).maybeSingle(),
+      supabase.from('employees').select('id, name'),
     ]);
     setData(txns || []);
     setDrawerData({ opening, closing });
+    const map: Record<string, string> = {};
+    (employees || []).forEach(e => { map[e.id] = e.name; });
+    setEmpMap(map);
     setLoading(false);
   };
 
@@ -135,16 +141,29 @@ function DailyReport() {
     await generateDetailedDailyPDF(date, data, drawerData.opening, drawerData.closing);
   };
 
-  // Overall summary
-  const overallBill = data.filter(t => t.section === 'sale').reduce((s, t) => s + Number(t.amount), 0);
-  const overallPaid = data.filter(t => t.section === 'sale').reduce((s, t) => {
+  const handleExportCSV = () => {
+    const header = ['Type', 'Section', 'Name', 'Bill#', 'Bill Type', 'Amount', 'Cash', 'UPI', 'Cheque', 'Advance', 'Due'];
+    const rows = data.map((t: any) => {
+      const payments = Array.isArray(t.payments) ? t.payments : [];
+      const modeSum = (m: string) => payments.filter((p: any) => p.mode === m).reduce((s: number, p: any) => s + Number(p.amount), 0);
+      return [t.type, t.section, getResolvedName(t, empMap), t.bill_number || '', t.bill_type || '', String(t.amount), String(modeSum('cash')), String(modeSum('upi')), String(modeSum('cheque')), String(modeSum('advance')), String(t.due || 0)];
+    });
+    downloadCSV([header, ...rows], `Daily_Report_${format(date, 'yyyy-MM-dd')}.csv`);
+  };
+
+  // Overall summary - include overpayment as advance
+  const saleTxns = data.filter(t => t.section === 'sale');
+  const overallBill = saleTxns.reduce((s, t) => s + Number(t.amount), 0);
+  const overallPaid = saleTxns.reduce((s, t) => {
     const payments = Array.isArray(t.payments) ? t.payments : [];
     return s + payments.reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
   }, 0);
-  const overallDue = data.filter(t => t.section === 'sale').reduce((s, t) => s + (Number(t.due) || 0), 0);
-  const overallAdvance = data.filter(t => t.section === 'sale').reduce((s, t) => {
+  const overallDue = saleTxns.reduce((s, t) => s + (Number(t.due) || 0), 0);
+  const overallAdvance = saleTxns.reduce((s, t) => {
     const payments = Array.isArray(t.payments) ? t.payments : [];
-    return s + payments.filter((p: any) => p.mode === 'advance').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
+    const advPay = payments.filter((p: any) => p.mode === 'advance').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
+    const overpay = Number(t.overpayment) || 0;
+    return s + advPay + overpay;
   }, 0);
 
   return (
@@ -156,6 +175,9 @@ function DailyReport() {
           <button onClick={() => { const d = new Date(date); d.setDate(d.getDate() + 1); setDate(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading}>
             <Download className="w-3 h-3" /> PDF
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportCSV} disabled={loading}>
+            <FileSpreadsheet className="w-3 h-3" /> CSV
           </Button>
         </div>
       </div>
@@ -204,7 +226,7 @@ function DailyReport() {
                   return (
                     <div key={t.id} className="flex items-center gap-2 text-[11px] py-1 border-t border-border/30">
                       <span className="text-muted-foreground capitalize w-16 truncate">{t.type.replace(/_/g, ' ')}</span>
-                      <span className="truncate flex-1"><ResolvedName txn={t} /></span>
+                      <span className="truncate flex-1">{getResolvedName(t, empMap)}</span>
                       {t.bill_number && <span className="text-muted-foreground">#{t.bill_number}</span>}
                       <span className="font-medium">{formatINR(Number(t.amount))}</span>
                       <div className="flex gap-1">
@@ -350,6 +372,24 @@ function MonthlyReport() {
     generateFullMonthlyPDF(month, data);
   };
 
+  const handleExportCSV = () => {
+    const header = ['Category', 'Amount'];
+    const rows = [
+      ['SALES', String(totalSales)], ['RETURN', String(totalReturn)],
+      ['BALANCE PAID', String(totalBalancePaid)], ['CUSTOMER ADVANCE', String(totalCustAdvance)],
+      ['BILL A', String(totalBillA)], ['BILL B', String(totalBillB)], ['BILL C', String(totalBillC)],
+      ['RETURN A', String(totalReturnA)], ['RETURN B', String(totalReturnB)], ['RETURN C', String(totalReturnC)],
+      ['NET BILL A', String(netBillA)], ['NET BILL B', String(netBillB)],
+      ['PURCHASE PAID', String(totalPurchasePayment)], ['PURCHASE EXPENSE', String(totalPurchaseExpenses)],
+      ['TOTAL SALARY PAID', String(totalSalaryPaid)], ['TO EXPENSES', String(totalExpenses)],
+      ['', ''],
+      ['CREDIT CASH', String(totalCreditCash)], ['CREDIT UPI', String(totalCreditUpi)],
+      ['DEBIT CASH', String(totalDebitCash)], ['DEBIT UPI', String(totalDebitUpi)],
+      ['NET CASH', String(netCash)], ['NET UPI', String(netUpi)], ['NET AMOUNT', String(netAmount)],
+    ];
+    downloadCSV([header, ...rows], `Monthly_Report_${format(month, 'yyyy-MM')}.csv`);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -359,6 +399,9 @@ function MonthlyReport() {
           <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() + 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading}>
             <Download className="w-3 h-3" /> PDF
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportCSV} disabled={loading}>
+            <FileSpreadsheet className="w-3 h-3" /> CSV
           </Button>
         </div>
       </div>

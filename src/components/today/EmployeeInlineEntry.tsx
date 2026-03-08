@@ -50,10 +50,12 @@ interface EmployeeInlineEntryProps {
   onSave: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onEditTransaction: (transaction: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
+  editingTransaction?: Transaction | null;
+  onCancelEdit?: () => void;
 }
 
 export function EmployeeInlineEntry({
-  transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction,
+  transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction, editingTransaction, onCancelEdit,
 }: EmployeeInlineEntryProps) {
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
   const [employees, setEmployees] = useState<EmployeeResult[]>([]);
@@ -166,6 +168,29 @@ export function EmployeeInlineEntry({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingTransaction && editingTransaction.section === 'employee') {
+      // Find employee name
+      const empId = editingTransaction.employeeId;
+      if (empId) {
+        supabase.from('employees').select('id, name, advance_balance, salary').eq('id', empId).single().then(({ data }) => {
+          if (data) {
+            setEntry(prev => ({
+              ...prev,
+              employeeQuery: data.name,
+              employeeId: data.id,
+              employeeAdvance: Number(data.advance_balance),
+              salary: editingTransaction.amount.toString(),
+              categoryId: editingTransaction.reference || '',
+              payments: editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }],
+            }));
+          }
+        });
+      }
+    }
+  }, [editingTransaction]);
+
   const selectEmployee = (e: EmployeeResult) => {
     setEntry(prev => ({ ...prev, employeeQuery: e.name, employeeId: e.id, employeeAdvance: e.advance_balance, salary: e.salary.toString() }));
     setShowDropdown(false);
@@ -216,7 +241,8 @@ export function EmployeeInlineEntry({
       }
 
       setEntry(createEmptyRow());
-      toast.success('Saved');
+      onCancelEdit?.();
+      toast.success(editingTransaction ? 'Updated' : 'Saved');
     } catch (err) {
       toast.error('Error saving');
       console.error(err);
@@ -282,7 +308,7 @@ export function EmployeeInlineEntry({
             const catName = txn.reference ? getCategoryName(txn.reference) : undefined;
             const totalPaid = txn.payments.reduce((s, p) => s + p.amount, 0);
             return (
-              <div key={txn.id} className="px-2 py-2 hover:bg-secondary/20 space-y-0.5">
+              <div key={txn.id} className={cn("px-2 py-2 hover:bg-secondary/20 space-y-0.5", editingTransaction?.id === txn.id && "bg-accent/10 ring-1 ring-accent/30")}>
                 <div className="flex items-center gap-1.5 text-xs">
                   <span className="font-medium truncate flex-1">{empName || txn.employeeName || '-'}</span>
                   {catName && catName !== 'Unknown' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{catName}</span>}
@@ -310,9 +336,14 @@ export function EmployeeInlineEntry({
         </div>
       )}
 
-      <div className="border border-accent/30 rounded-lg p-3 bg-accent/5 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-accent">
-          <Plus className="w-3.5 h-3.5" /> New Entry
+      <div className={cn("border rounded-lg p-3 space-y-2", editingTransaction ? "border-warning/50 bg-warning/5" : "border-accent/30 bg-accent/5")}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: editingTransaction ? 'hsl(var(--warning))' : 'hsl(var(--accent))' }}>
+            {editingTransaction ? <><Pencil className="w-3.5 h-3.5" /> Editing</> : <><Plus className="w-3.5 h-3.5" /> New Entry</>}
+          </div>
+          {editingTransaction && (
+            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => { setEntry(createEmptyRow()); onCancelEdit?.(); }}><X className="w-3 h-3 mr-1" /> Cancel</Button>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -409,7 +440,7 @@ export function EmployeeInlineEntry({
         </div>
 
         <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save & Next'}
+          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : editingTransaction ? 'Update' : 'Save & Next'}
         </Button>
       </div>
 

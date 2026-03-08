@@ -22,15 +22,19 @@ interface CategoryTransactionListProps {
   onDeleteTransaction: (id: string) => void;
   selectedDate: Date;
   onSave: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  editingTransaction?: Transaction | null;
+  onCancelEdit?: () => void;
 }
 
 // ========== HOME SECTION ==========
-function HomeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction }: {
+function HomeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction, editingTransaction, onCancelEdit }: {
   transactions: Transaction[];
   selectedDate: Date;
   onSave: (t: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onEditTransaction: (t: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
+  editingTransaction?: Transaction | null;
+  onCancelEdit?: () => void;
 }) {
   const [direction, setDirection] = useState<'to_owner' | 'from_owner'>('to_owner');
   const [categoryId, setCategoryId] = useState('');
@@ -49,6 +53,15 @@ function HomeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction
     });
   }, []);
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingTransaction && editingTransaction.section === 'home') {
+      setDirection(editingTransaction.type === 'home_credit' ? 'from_owner' : 'to_owner');
+      setDetails(editingTransaction.reference || '');
+      setAmount(editingTransaction.amount.toString());
+    }
+  }, [editingTransaction]);
+
   const addCategory = async () => {
     if (!newCatName.trim()) return;
     const { data } = await supabase.from('home_categories').insert({ name: newCatName.trim() }).select().single();
@@ -58,6 +71,13 @@ function HomeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction
     }
     setNewCatName('');
     setAddCatOpen(false);
+  };
+
+  const resetForm = () => {
+    setDetails('');
+    setAmount('');
+    setDirection('to_owner');
+    setCategoryId('');
   };
 
   const handleSave = async () => {
@@ -74,11 +94,16 @@ function HomeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction
         payments: [{ id: uuidv4(), mode: 'cash' as PaymentMode, amount: amt }],
         reference: details || undefined,
       });
-      setDetails('');
-      setAmount('');
-      toast.success('Saved');
+      resetForm();
+      onCancelEdit?.();
+      toast.success(editingTransaction ? 'Updated' : 'Saved');
     } catch { toast.error('Error'); }
     finally { setSaving(false); }
+  };
+
+  const handleCancel = () => {
+    resetForm();
+    onCancelEdit?.();
   };
 
   return (
@@ -93,7 +118,7 @@ function HomeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction
       {homeTransactions.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden divide-y divide-border/50">
           {homeTransactions.map(txn => (
-            <div key={txn.id} className="flex items-center gap-2 px-2 py-2 hover:bg-secondary/20 text-xs">
+            <div key={txn.id} className={cn("flex items-center gap-2 px-2 py-2 hover:bg-secondary/20 text-xs", editingTransaction?.id === txn.id && "bg-accent/10 ring-1 ring-accent/30")}>
               <span className={cn("text-[10px] w-14 shrink-0 font-medium", txn.type === 'home_credit' ? 'text-success' : 'text-destructive')}>
                 {txn.type === 'home_credit' ? 'From' : 'To'}
               </span>
@@ -108,9 +133,14 @@ function HomeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction
         </div>
       )}
 
-      <div className="border border-accent/30 rounded-lg p-3 bg-accent/5 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-accent">
-          <Plus className="w-3.5 h-3.5" /> New Entry
+      <div className={cn("border rounded-lg p-3 space-y-2", editingTransaction ? "border-warning/50 bg-warning/5" : "border-accent/30 bg-accent/5")}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: editingTransaction ? 'hsl(var(--warning))' : 'hsl(var(--accent))' }}>
+            {editingTransaction ? <><Pencil className="w-3.5 h-3.5" /> Editing</> : <><Plus className="w-3.5 h-3.5" /> New Entry</>}
+          </div>
+          {editingTransaction && (
+            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={handleCancel}><X className="w-3 h-3 mr-1" /> Cancel</Button>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -144,7 +174,7 @@ function HomeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction
           </div>
         </div>
         <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save'}
+          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : editingTransaction ? 'Update' : 'Save'}
         </Button>
       </div>
 
@@ -162,12 +192,14 @@ function HomeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction
 }
 
 // ========== EXCHANGE SECTION ==========
-function ExchangeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction }: {
+function ExchangeInlineEntry({ transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction, editingTransaction, onCancelEdit }: {
   transactions: Transaction[];
   selectedDate: Date;
   onSave: (t: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onEditTransaction: (t: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
+  editingTransaction?: Transaction | null;
+  onCancelEdit?: () => void;
 }) {
   const [exchangeType, setExchangeType] = useState<'upi_to_cash' | 'cash_to_upi'>('upi_to_cash');
   const [amount, setAmount] = useState('');
@@ -175,13 +207,26 @@ function ExchangeInlineEntry({ transactions, selectedDate, onSave, onEditTransac
 
   const exchangeTransactions = transactions.filter(t => t.section === 'exchange');
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingTransaction && editingTransaction.section === 'exchange') {
+      setAmount(editingTransaction.amount.toString());
+      // Determine type from payments
+      const hasCashPayment = editingTransaction.payments.some(p => p.mode === 'cash');
+      setExchangeType(hasCashPayment ? 'cash_to_upi' : 'upi_to_cash');
+    }
+  }, [editingTransaction]);
+
+  const resetForm = () => {
+    setAmount('');
+    setExchangeType('upi_to_cash');
+  };
+
   const handleSave = async () => {
     const amt = parseFloat(amount) || 0;
     if (amt <= 0) { toast.error('Amount required'); return; }
     setSaving(true);
     try {
-      // UPI to Cash: customer gives UPI, you give Cash → cashOut, upiIn
-      // Cash to UPI: customer gives Cash, you give UPI → cashIn, upiOut
       const payments: PaymentEntry[] = exchangeType === 'upi_to_cash'
         ? [{ id: uuidv4(), mode: 'upi' as PaymentMode, amount: amt }]
         : [{ id: uuidv4(), mode: 'cash' as PaymentMode, amount: amt }];
@@ -197,10 +242,16 @@ function ExchangeInlineEntry({ transactions, selectedDate, onSave, onEditTransac
         payments,
         giveBack,
       });
-      setAmount('');
-      toast.success('Saved');
+      resetForm();
+      onCancelEdit?.();
+      toast.success(editingTransaction ? 'Updated' : 'Saved');
     } catch { toast.error('Error'); }
     finally { setSaving(false); }
+  };
+
+  const handleCancel = () => {
+    resetForm();
+    onCancelEdit?.();
   };
 
   return (
@@ -210,7 +261,7 @@ function ExchangeInlineEntry({ transactions, selectedDate, onSave, onEditTransac
       {exchangeTransactions.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden divide-y divide-border/50">
           {exchangeTransactions.map(txn => (
-            <div key={txn.id} className="flex items-center gap-2 px-2 py-2 hover:bg-secondary/20 text-xs">
+            <div key={txn.id} className={cn("flex items-center gap-2 px-2 py-2 hover:bg-secondary/20 text-xs", editingTransaction?.id === txn.id && "bg-accent/10 ring-1 ring-accent/30")}>
               <span className="text-[10px] w-16 shrink-0 text-muted-foreground capitalize">{txn.type.replace(/_/g, ' ')}</span>
               <span className="font-medium flex-1">{formatINR(txn.amount)}</span>
               <div className="flex gap-0.5 shrink-0">
@@ -222,9 +273,14 @@ function ExchangeInlineEntry({ transactions, selectedDate, onSave, onEditTransac
         </div>
       )}
 
-      <div className="border border-accent/30 rounded-lg p-3 bg-accent/5 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-accent">
-          <Plus className="w-3.5 h-3.5" /> New Entry
+      <div className={cn("border rounded-lg p-3 space-y-2", editingTransaction ? "border-warning/50 bg-warning/5" : "border-accent/30 bg-accent/5")}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: editingTransaction ? 'hsl(var(--warning))' : 'hsl(var(--accent))' }}>
+            {editingTransaction ? <><Pencil className="w-3.5 h-3.5" /> Editing</> : <><Plus className="w-3.5 h-3.5" /> New Entry</>}
+          </div>
+          {editingTransaction && (
+            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={handleCancel}><X className="w-3 h-3 mr-1" /> Cancel</Button>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -243,7 +299,7 @@ function ExchangeInlineEntry({ transactions, selectedDate, onSave, onEditTransac
           </div>
         </div>
         <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save'}
+          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : editingTransaction ? 'Update' : 'Save'}
         </Button>
       </div>
     </div>
@@ -251,12 +307,14 @@ function ExchangeInlineEntry({ transactions, selectedDate, onSave, onEditTransac
 }
 
 // ========== EXPENSE SECTION ==========
-function ExpenseInlineEntry({ transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction }: {
+function ExpenseInlineEntry({ transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction, editingTransaction, onCancelEdit }: {
   transactions: Transaction[];
   selectedDate: Date;
   onSave: (t: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onEditTransaction: (t: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
+  editingTransaction?: Transaction | null;
+  onCancelEdit?: () => void;
 }) {
   const [categoryId, setCategoryId] = useState('');
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
@@ -274,6 +332,14 @@ function ExpenseInlineEntry({ transactions, selectedDate, onSave, onEditTransact
     });
   }, []);
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingTransaction && editingTransaction.section === 'expenses') {
+      setDetails(editingTransaction.reference || '');
+      setPayments(editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+    }
+  }, [editingTransaction]);
+
   const addCategory = async () => {
     if (!newCatName.trim()) return;
     const { data } = await supabase.from('expense_categories').insert({ name: newCatName.trim() }).select().single();
@@ -283,6 +349,12 @@ function ExpenseInlineEntry({ transactions, selectedDate, onSave, onEditTransact
     }
     setNewCatName('');
     setAddCatOpen(false);
+  };
+
+  const resetForm = () => {
+    setDetails('');
+    setCategoryId('');
+    setPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
   };
 
   const updatePayment = (i: number, field: 'mode' | 'amount', value: string) => {
@@ -310,12 +382,16 @@ function ExpenseInlineEntry({ transactions, selectedDate, onSave, onEditTransact
         payments: payments.filter(p => p.amount > 0),
         reference: details || undefined,
       });
-      setDetails('');
-      setCategoryId('');
-      setPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
-      toast.success('Saved');
+      resetForm();
+      onCancelEdit?.();
+      toast.success(editingTransaction ? 'Updated' : 'Saved');
     } catch { toast.error('Error'); }
     finally { setSaving(false); }
+  };
+
+  const handleCancel = () => {
+    resetForm();
+    onCancelEdit?.();
   };
 
   return (
@@ -333,7 +409,7 @@ function ExpenseInlineEntry({ transactions, selectedDate, onSave, onEditTransact
             const cashAmt = txn.payments.filter(p => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
             const upiAmt = txn.payments.filter(p => p.mode === 'upi').reduce((s, p) => s + p.amount, 0);
             return (
-              <div key={txn.id} className="flex items-center gap-2 px-2 py-2 hover:bg-secondary/20 text-xs">
+              <div key={txn.id} className={cn("flex items-center gap-2 px-2 py-2 hover:bg-secondary/20 text-xs", editingTransaction?.id === txn.id && "bg-accent/10 ring-1 ring-accent/30")}>
                 <span className="truncate flex-1">{txn.reference || txn.type.replace(/_/g, ' ')}</span>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {cashAmt > 0 && <span className="text-success flex items-center gap-0.5"><Wallet className="w-3 h-3" />{formatINR(cashAmt)}</span>}
@@ -349,9 +425,14 @@ function ExpenseInlineEntry({ transactions, selectedDate, onSave, onEditTransact
         </div>
       )}
 
-      <div className="border border-accent/30 rounded-lg p-3 bg-accent/5 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-accent">
-          <Plus className="w-3.5 h-3.5" /> New Entry
+      <div className={cn("border rounded-lg p-3 space-y-2", editingTransaction ? "border-warning/50 bg-warning/5" : "border-accent/30 bg-accent/5")}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: editingTransaction ? 'hsl(var(--warning))' : 'hsl(var(--accent))' }}>
+            {editingTransaction ? <><Pencil className="w-3.5 h-3.5" /> Editing</> : <><Plus className="w-3.5 h-3.5" /> New Entry</>}
+          </div>
+          {editingTransaction && (
+            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={handleCancel}><X className="w-3 h-3 mr-1" /> Cancel</Button>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -390,7 +471,7 @@ function ExpenseInlineEntry({ transactions, selectedDate, onSave, onEditTransact
           </div>
         </div>
         <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save'}
+          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : editingTransaction ? 'Update' : 'Save'}
         </Button>
       </div>
 
@@ -409,16 +490,16 @@ function ExpenseInlineEntry({ transactions, selectedDate, onSave, onEditTransact
 
 // ========== MAIN EXPORT ==========
 export function CategoryTransactionList({
-  categoryId, transactions, onAddTransaction, onEditTransaction, onDeleteTransaction, selectedDate, onSave,
+  categoryId, transactions, onAddTransaction, onEditTransaction, onDeleteTransaction, selectedDate, onSave, editingTransaction, onCancelEdit,
 }: CategoryTransactionListProps) {
   if (categoryId === 'home') {
-    return <HomeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={onSave} onEditTransaction={onEditTransaction} onDeleteTransaction={onDeleteTransaction} />;
+    return <HomeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={onSave} onEditTransaction={onEditTransaction} onDeleteTransaction={onDeleteTransaction} editingTransaction={editingTransaction} onCancelEdit={onCancelEdit} />;
   }
   if (categoryId === 'exchange') {
-    return <ExchangeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={onSave} onEditTransaction={onEditTransaction} onDeleteTransaction={onDeleteTransaction} />;
+    return <ExchangeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={onSave} onEditTransaction={onEditTransaction} onDeleteTransaction={onDeleteTransaction} editingTransaction={editingTransaction} onCancelEdit={onCancelEdit} />;
   }
   if (categoryId === 'expense') {
-    return <ExpenseInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={onSave} onEditTransaction={onEditTransaction} onDeleteTransaction={onDeleteTransaction} />;
+    return <ExpenseInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={onSave} onEditTransaction={onEditTransaction} onDeleteTransaction={onDeleteTransaction} editingTransaction={editingTransaction} onCancelEdit={onCancelEdit} />;
   }
   return null;
 }

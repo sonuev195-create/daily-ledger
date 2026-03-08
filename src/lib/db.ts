@@ -158,34 +158,169 @@ export async function getDB(): Promise<CashManagementDB> {
 }
 
 // Transaction operations
+const toDateKey = (value: Date | string) => {
+  if (value instanceof Date) return format(value, 'yyyy-MM-dd');
+  return value?.split('T')[0] || format(new Date(), 'yyyy-MM-dd');
+};
+
+const toSafeNumber = (value: unknown) => Number(value ?? 0) || 0;
+
+const normalizePayments = (raw: unknown): PaymentEntry[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry: any, index) => ({
+    id: String(entry?.id || `${index}-${entry?.mode || 'payment'}`),
+    mode: entry?.mode,
+    amount: toSafeNumber(entry?.amount),
+  })) as PaymentEntry[];
+};
+
+const normalizeGiveBack = (raw: unknown): GiveBackPayment[] | undefined => {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw.map((entry: any, index) => ({
+    id: String(entry?.id || `${index}-${entry?.mode || 'giveback'}`),
+    mode: entry?.mode,
+    amount: toSafeNumber(entry?.amount),
+  })) as GiveBackPayment[];
+};
+
+const buildTransactionPayload = (transaction: Transaction) => ({
+  id: transaction.id,
+  date: toDateKey(transaction.date),
+  section: transaction.section,
+  type: transaction.type,
+  amount: transaction.amount,
+  payments: transaction.payments as any,
+  give_back: (transaction.giveBack || []) as any,
+  bill_number: transaction.billNumber || null,
+  customer_id: transaction.customerId || null,
+  customer_name: transaction.customerName || null,
+  supplier_id: transaction.supplierId || null,
+  supplier_name: transaction.supplierName || null,
+  employee_id: transaction.employeeId || null,
+  welder_id: transaction.welderId || null,
+  due: transaction.due || null,
+  overpayment: transaction.overpayment || null,
+  adjusted_from_sales: transaction.adjustedFromSales || 0,
+  reference: transaction.reference || null,
+  bill_type: transaction.billType || null,
+  updated_at: transaction.updatedAt.toISOString(),
+  created_at: transaction.createdAt.toISOString(),
+});
+
+const mapTransactionFromRow = (row: any): Transaction => ({
+  id: row.id,
+  date: new Date(row.date),
+  section: row.section,
+  type: row.type,
+  amount: toSafeNumber(row.amount),
+  payments: normalizePayments(row.payments),
+  giveBack: normalizeGiveBack(row.give_back),
+  billNumber: row.bill_number || undefined,
+  customerId: row.customer_id || undefined,
+  customerName: row.customer_name || undefined,
+  supplierId: row.supplier_id || undefined,
+  supplierName: row.supplier_name || undefined,
+  employeeId: row.employee_id || undefined,
+  welderId: row.welder_id || undefined,
+  reference: row.reference || undefined,
+  billType: row.bill_type || undefined,
+  due: row.due != null ? toSafeNumber(row.due) : undefined,
+  overpayment: row.overpayment != null ? toSafeNumber(row.overpayment) : undefined,
+  adjustedFromSales: row.adjusted_from_sales != null ? toSafeNumber(row.adjusted_from_sales) : undefined,
+  createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+  updatedAt: row.updated_at ? new Date(row.updated_at) : new Date(),
+});
+
+async function syncPartyBalancesFromTransactions(): Promise<void> {
+  const [{ data: txRows, error: txError }, { data: customerRows, error: customerError }, { data: supplierRows, error: supplierError }] = await Promise.all([
+    supabase.from('transactions').select('section, type, amount, due, payments, bill_type, customer_id, customer_name, supplier_id, supplier_name'),
+    supabase.from('customers').select('id, name'),
+    supabase.from('suppliers').select('id, name'),
+  ]);
+
+  if (txError) throw txError;
+  if (customerError) throw customerError;
+  if (supplierError) throw supplierError;
+
+  const customers = customerRows || [];
+  const suppliers = supplierRows || [];
+
+  const customerByName = new Map(customers.map((c) => [String(c.name || '').trim().toLowerCase(), c.id]));
+  const supplierByName = new Map(suppliers.map((s) => [String(s.name || '').trim().toLowerCase(), s.id]));
+
+  const customerDue = new Map<string, number>(customers.map((c) => [c.id, 0]));
+  const customerAdvance = new Map<string, number>(customers.map((c) => [c.id, 0]));
+  const supplierBalance = new Map<string, number>(suppliers.map((s) => [s.id, 0]));
+
+  (txRows || []).forEach((tx: any) => {
+    const customerId = tx.customer_id || customerByName.get(String(tx.customer_name || '').trim().toLowerCase());
+    const supplierId = tx.supplier_id || supplierByName.get(String(tx.supplier_name || '').trim().toLowerCase());
+
+    if (tx.section === 'sale' && customerId) {
+      const amount = toSafeNumber(tx.amount);
+      const due = toSafeNumber(tx.due);
+      const payments = normalizePayments(tx.payments);
+      const advanceUsed = payments
+        .filter((payment) => payment.mode === 'advance')
+        .reduce((sum, payment) => sum + toSafeNumber(payment.amount), 0);
+
+      if (tx.type === 'sale') {
+        customerDue.set(customerId, (customerDue.get(customerId) || 0) + Math.max(0, due));
+        if (advanceUsed > 0) {
+          customerAdvance.set(customerId, (customerAdvance.get(customerId) || 0) - advanceUsed);
+        }
+      } else if (tx.type === 'customer_advance') {
+        customerAdvance.set(customerId, (customerAdvance.get(customerId) || 0) + amount);
+      } else if (tx.type === 'balance_paid') {
+        customerDue.set(customerId, (customerDue.get(customerId) || 0) - amount);
+      }
+    }
+
+    if (tx.section === 'purchase' && supplierId) {
+      const amount = toSafeNumber(tx.amount);
+      if (tx.type === 'purchase_bill' && tx.bill_type !== 'ng_bill') {
+        supplierBalance.set(supplierId, (supplierBalance.get(supplierId) || 0) + amount);
+      } else if (tx.type === 'purchase_return' || tx.type === 'purchase_payment') {
+        supplierBalance.set(supplierId, (supplierBalance.get(supplierId) || 0) - amount);
+      }
+    }
+  });
+
+  await Promise.all([
+    ...customers.map((customer) =>
+      supabase
+        .from('customers')
+        .update({
+          due_balance: Math.max(0, Number((customerDue.get(customer.id) || 0).toFixed(2))),
+          advance_balance: Math.max(0, Number((customerAdvance.get(customer.id) || 0).toFixed(2))),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', customer.id)
+    ),
+    ...suppliers.map((supplier) =>
+      supabase
+        .from('suppliers')
+        .update({
+          balance: Math.max(0, Number((supplierBalance.get(supplier.id) || 0).toFixed(2))),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', supplier.id)
+    ),
+  ]);
+}
+
 export async function addTransaction(transaction: Transaction): Promise<void> {
+  const payload = buildTransactionPayload(transaction);
+  const { error } = await supabase.from('transactions').upsert(payload);
+  if (error) throw error;
+
   const db = await getDB();
   await db.put('transactions', transaction);
-  
-  // Also sync to Supabase
+
   try {
-    await supabase.from('transactions').upsert({
-      id: transaction.id,
-      date: typeof transaction.date === 'string' ? transaction.date : format(transaction.date, 'yyyy-MM-dd'),
-      section: transaction.section,
-      type: transaction.type,
-      amount: transaction.amount,
-      payments: transaction.payments as any,
-      give_back: transaction.giveBack as any || [],
-      bill_number: transaction.billNumber || null,
-      customer_id: transaction.customerId || null,
-      customer_name: transaction.customerName || null,
-      supplier_id: transaction.supplierId || null,
-      supplier_name: transaction.supplierName || null,
-      employee_id: transaction.employeeId || null,
-      welder_id: transaction.welderId || null,
-      due: transaction.due || null,
-      overpayment: transaction.overpayment || null,
-      adjusted_from_sales: transaction.adjustedFromSales || 0,
-      reference: transaction.reference || null,
-    });
-  } catch (err) {
-    console.error('Supabase sync error:', err);
+    await syncPartyBalancesFromTransactions();
+  } catch (syncError) {
+    console.error('Balance sync warning after add:', syncError);
   }
 }
 
@@ -195,45 +330,136 @@ export async function getAllTransactions(): Promise<Transaction[]> {
 }
 
 export async function getTransactionsByDate(date: Date): Promise<Transaction[]> {
-  const db = await getDB();
-  const all = await db.getAll('transactions');
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
-  
-  return all.filter(t => {
-    const tDate = new Date(t.date);
-    return tDate >= startOfDay && tDate <= endOfDay;
-  }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const dateKey = toDateKey(date);
+
+  try {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('date', dateKey)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    const mapped = (data || []).map(mapTransactionFromRow);
+    const db = await getDB();
+    const localRows = await db.getAll('transactions');
+    const toDelete = localRows.filter((row) => toDateKey(row.date) === dateKey);
+
+    await Promise.all([
+      ...toDelete.map((row) => db.delete('transactions', row.id)),
+      ...mapped.map((row) => db.put('transactions', row)),
+    ]);
+
+    return mapped;
+  } catch (err) {
+    console.error('Failed to load from backend, using local cache:', err);
+
+    const db = await getDB();
+    const all = await db.getAll('transactions');
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return all
+      .filter((t) => {
+        const tDate = new Date(t.date);
+        return tDate >= startOfDay && tDate <= endOfDay;
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
 }
 
 export async function getTransactionsByDateRange(startDate: Date, endDate: Date): Promise<Transaction[]> {
-  const db = await getDB();
-  const all = await db.getAll('transactions');
-  const start = new Date(startDate);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(endDate);
-  end.setHours(23, 59, 59, 999);
-  
-  return all.filter(t => {
-    const tDate = new Date(t.date);
-    return tDate >= start && tDate <= end;
-  }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  try {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .gte('date', toDateKey(startDate))
+      .lte('date', toDateKey(endDate))
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return (data || []).map(mapTransactionFromRow);
+  } catch (err) {
+    console.error('Failed to load range from backend, using local cache:', err);
+
+    const db = await getDB();
+    const all = await db.getAll('transactions');
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    return all
+      .filter((t) => {
+        const tDate = new Date(t.date);
+        return tDate >= start && tDate <= end;
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
 }
 
 export async function updateTransaction(transaction: Transaction): Promise<void> {
+  const updatedTransaction: Transaction = {
+    ...transaction,
+    updatedAt: new Date(),
+  };
+
+  const payload = buildTransactionPayload(updatedTransaction);
+  const { error } = await supabase.from('transactions').upsert(payload);
+  if (error) throw error;
+
   const db = await getDB();
-  transaction.updatedAt = new Date();
-  await db.put('transactions', transaction);
+  await db.put('transactions', updatedTransaction);
+
+  try {
+    await syncPartyBalancesFromTransactions();
+  } catch (syncError) {
+    console.error('Balance sync warning after update:', syncError);
+  }
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
+  const { data: relatedBills, error: relatedBillsError } = await supabase
+    .from('bills')
+    .select('id')
+    .eq('transaction_id', id);
+
+  if (relatedBillsError) throw relatedBillsError;
+
+  const billIds = (relatedBills || []).map((bill) => bill.id);
+  if (billIds.length > 0) {
+    const { error: billItemsError } = await supabase
+      .from('bill_items')
+      .delete()
+      .in('bill_id', billIds);
+    if (billItemsError) throw billItemsError;
+
+    const { error: billsDeleteError } = await supabase
+      .from('bills')
+      .delete()
+      .in('id', billIds);
+    if (billsDeleteError) throw billsDeleteError;
+  }
+
+  const { error: transactionDeleteError } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', id);
+
+  if (transactionDeleteError) throw transactionDeleteError;
+
   const db = await getDB();
   await db.delete('transactions', id);
-}
 
-// Customer operations
+  try {
+    await syncPartyBalancesFromTransactions();
+  } catch (syncError) {
+    console.error('Balance sync warning after delete:', syncError);
+  }
+}
 export async function addCustomer(customer: Customer): Promise<void> {
   const db = await getDB();
   await db.put('customers', customer);

@@ -552,6 +552,8 @@ export function CustomerInlineEntry({
 
       setEntry(createEmptyRow());
       setExtractedBillItems([]);
+      setGiveBackPayments([]);
+      setSaveAsAdvance(false);
       if (editingTransaction) onCancelEdit?.();
       toast.success('Saved');
     } catch (err) {

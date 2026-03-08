@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useNavigate } from 'react-router-dom';
 import { useItems } from '@/hooks/useSupabaseData';
+import { usePaymentMethods } from '@/hooks/usePaymentMethods';
 
 type CustomerSubType = 'sale' | 'sales_return' | 'balance_paid' | 'customer_advance';
 
@@ -90,6 +91,7 @@ export function CustomerInlineEntry({
 }: CustomerInlineEntryProps) {
   const navigate = useNavigate();
   const { items: allItems } = useItems();
+  const { selectableMethods } = usePaymentMethods();
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
   const [customerResults, setCustomerResults] = useState<CustomerResult[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -470,10 +472,14 @@ export function CustomerInlineEntry({
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-16 text-[10px]">
-                  {cashAmt > 0 && <span className="text-success">💵{formatINR(cashAmt)}</span>}
-                  {upiAmt > 0 && <span className="text-info">📱{formatINR(upiAmt)}</span>}
-                  {chequeAmt > 0 && <span className="text-warning">📄{formatINR(chequeAmt)}</span>}
-                  {advAmt > 0 && <span className="text-primary">🔄Adv:{formatINR(advAmt)}</span>}
+                {txn.payments.filter(p => p.amount > 0).map((p, pi) => (
+                    <span key={pi} className={cn(
+                      p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : p.mode === 'cheque' ? 'text-warning' : p.mode === 'advance' ? 'text-primary' : 'text-muted-foreground'
+                    )}>
+                      {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : p.mode === 'cheque' ? '📄' : p.mode === 'advance' ? '🔄' : '💳'}
+                      {p.mode === 'advance' ? `Adv:${formatINR(p.amount)}` : formatINR(p.amount)}
+                    </span>
+                  ))}
                   {txn.due != null && txn.due > 0 && <span className="text-warning font-medium">⚠️Due:{formatINR(txn.due)}</span>}
                 </div>
               </div>
@@ -565,9 +571,9 @@ export function CustomerInlineEntry({
                   <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
                     <SelectTrigger className="h-7 text-[10px] w-20"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cash" className="text-xs">Cash</SelectItem>
-                      <SelectItem value="upi" className="text-xs">UPI</SelectItem>
-                      <SelectItem value="cheque" className="text-xs">Cheque</SelectItem>
+                      {selectableMethods.map(m => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Input type="number" inputMode="numeric" value={p.amount || ''}

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Check, X, Pencil, Trash2 } from 'lucide-react';
 import { Transaction, TransactionSection, PaymentEntry, PaymentMode } from '@/types';
+import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/integrations/supabase/client';
 import { formatINR } from '@/lib/format';
@@ -10,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { usePaymentMethods } from '@/hooks/usePaymentMethods';
 
 interface EmployeeResult {
   id: string;
@@ -54,6 +56,7 @@ export function EmployeeInlineEntry({
 }: EmployeeInlineEntryProps) {
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
   const [employees, setEmployees] = useState<EmployeeResult[]>([]);
+  const { selectableMethods } = usePaymentMethods();
   const [categories, setCategories] = useState<SalaryCategory[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -241,8 +244,13 @@ export function EmployeeInlineEntry({
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-4 text-[10px]">
-                  {cashAmt > 0 && <span className="text-success">💵{formatINR(cashAmt)}</span>}
-                  {upiAmt > 0 && <span className="text-info">📱{formatINR(upiAmt)}</span>}
+                  {txn.payments.filter(p => p.amount > 0).map((p, pi) => (
+                    <span key={pi} className={cn(
+                      p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : 'text-muted-foreground'
+                    )}>
+                      {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : '💳'}{formatINR(p.amount)}
+                    </span>
+                  ))}
                 </div>
               </div>
             );
@@ -305,7 +313,7 @@ export function EmployeeInlineEntry({
 
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-[10px] text-muted-foreground mb-0.5 block">Salary</label>
+            <label className="text-[10px] text-muted-foreground mb-0.5 block">Day Salary</label>
             <Input type="number" inputMode="numeric" value={entry.salary}
               onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
           </div>
@@ -317,8 +325,9 @@ export function EmployeeInlineEntry({
                   <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
                     <SelectTrigger className="h-7 text-[10px] w-16"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cash" className="text-xs">Cash</SelectItem>
-                      <SelectItem value="upi" className="text-xs">UPI</SelectItem>
+                      {selectableMethods.map(m => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Input type="number" inputMode="numeric" value={p.amount || ''}

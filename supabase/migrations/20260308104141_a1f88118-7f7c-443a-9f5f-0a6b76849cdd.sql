@@ -1,0 +1,1 @@
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS conversion_type text NOT NULL DEFAULT 'permanent';

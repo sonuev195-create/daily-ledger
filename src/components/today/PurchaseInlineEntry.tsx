@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useItems, saveBillToSupabase, createBatchFromPurchase } from '@/hooks/useSupabaseData';
+import { usePaymentMethods } from '@/hooks/usePaymentMethods';
 
 type PurchaseSubType = 'purchase_payment' | 'purchase_bill_a' | 'purchase_bill_b' | 'purchase_bill_c' | 'purchase_delivered' | 'purchase_return_a' | 'purchase_return_b' | 'purchase_expenses';
 
@@ -81,6 +82,7 @@ export function PurchaseInlineEntry({
   editingTransaction, onCancelEdit,
 }: PurchaseInlineEntryProps) {
   const { items: allItems } = useItems();
+  const { selectableMethods } = usePaymentMethods();
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
   const [supplierResults, setSupplierResults] = useState<SupplierResult[]>([]);
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
@@ -404,8 +406,13 @@ export function PurchaseInlineEntry({
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-[68px] text-[10px]">
-                    {cashAmt > 0 && <span className="text-success">💵{formatINR(cashAmt)}</span>}
-                    {upiAmt > 0 && <span className="text-info">📱{formatINR(upiAmt)}</span>}
+                    {txn.payments.filter(p => p.amount > 0).map((p, pi) => (
+                      <span key={pi} className={cn(
+                        p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : 'text-muted-foreground'
+                      )}>
+                        {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : '💳'}{formatINR(p.amount)}
+                      </span>
+                    ))}
                     {txn.due != null && txn.due > 0 && <span className="text-warning font-medium">⚠️Due:{formatINR(txn.due)}</span>}
                     {txn.billType && <span className="text-muted-foreground">[{txn.billType === 'g_bill' ? 'A' : txn.billType === 'n_bill' ? 'B' : 'C'}]</span>}
                   </div>
@@ -524,8 +531,9 @@ export function PurchaseInlineEntry({
                 <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
                   <SelectTrigger className="h-7 text-[10px] w-20"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cash" className="text-xs">Cash</SelectItem>
-                    <SelectItem value="upi" className="text-xs">UPI</SelectItem>
+                    {selectableMethods.map(m => (
+                      <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Input type="number" inputMode="numeric" value={p.amount || ''}

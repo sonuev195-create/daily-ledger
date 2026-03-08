@@ -477,6 +477,7 @@ export type Database = {
           batch_preference: string
           category_id: string | null
           conversion_rate: number | null
+          conversion_type: string
           created_at: string
           id: string
           name: string
@@ -489,6 +490,7 @@ export type Database = {
           batch_preference?: string
           category_id?: string | null
           conversion_rate?: number | null
+          conversion_type?: string
           created_at?: string
           id?: string
           name: string
@@ -501,6 +503,7 @@ export type Database = {
           batch_preference?: string
           category_id?: string | null
           conversion_rate?: number | null
+          conversion_type?: string
           created_at?: string
           id?: string
           name?: string

@@ -273,12 +273,14 @@ export function EmployeeInlineEntry({
       {employeeTransactions.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden divide-y divide-border/50">
           {employeeTransactions.map(txn => {
-            const cashAmt = txn.payments.filter(p => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
-            const upiAmt = txn.payments.filter(p => p.mode === 'upi').reduce((s, p) => s + p.amount, 0);
+            const empName = txn.employeeId ? employeeNames[txn.employeeId] : undefined;
+            const catName = txn.reference ? getCategoryName(txn.reference) : undefined;
+            const totalPaid = txn.payments.reduce((s, p) => s + p.amount, 0);
             return (
               <div key={txn.id} className="px-2 py-2 hover:bg-secondary/20 space-y-0.5">
                 <div className="flex items-center gap-1.5 text-xs">
-                  <span className="font-medium truncate flex-1">{txn.employeeName || txn.reference || '-'}</span>
+                  <span className="font-medium truncate flex-1">{empName || txn.employeeName || '-'}</span>
+                  {catName && catName !== 'Unknown' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{catName}</span>}
                   {txn.billNumber && <span className="text-[10px] text-muted-foreground">#{txn.billNumber}</span>}
                   <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
                   <div className="flex gap-0.5 shrink-0">
@@ -294,6 +296,8 @@ export function EmployeeInlineEntry({
                       {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : '💳'}{formatINR(p.amount)}
                     </span>
                   ))}
+                  {totalPaid > 0 && <span className="text-muted-foreground">Paid:{formatINR(totalPaid)}</span>}
+                  {txn.amount > 0 && totalPaid < txn.amount && <span className="text-warning">Due:{formatINR(txn.amount - totalPaid)}</span>}
                 </div>
               </div>
             );

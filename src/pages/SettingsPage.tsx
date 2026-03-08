@@ -760,6 +760,7 @@ function PaymentMethodSettings() {
   const save = (updated: any[]) => {
     setMethods(updated);
     localStorage.setItem('payment-methods', JSON.stringify(updated));
+    window.dispatchEvent(new Event('payment-methods-changed'));
     toast.success('Payment methods saved');
   };
 

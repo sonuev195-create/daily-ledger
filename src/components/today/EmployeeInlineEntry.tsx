@@ -241,7 +241,8 @@ export function EmployeeInlineEntry({
       }
 
       setEntry(createEmptyRow());
-      toast.success('Saved');
+      onCancelEdit?.();
+      toast.success(editingTransaction ? 'Updated' : 'Saved');
     } catch (err) {
       toast.error('Error saving');
       console.error(err);

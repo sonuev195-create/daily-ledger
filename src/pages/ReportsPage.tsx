@@ -7,6 +7,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { formatINR } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { generateDetailedDailyPDF, generateFullMonthlyPDF } from '@/lib/reportExport';
+import { useAuth } from '@/contexts/AuthContext';
 
 type ReportTab = 'daily' | 'monthly' | 'customer' | 'supplier' | 'inventory' | 'drawer';
 

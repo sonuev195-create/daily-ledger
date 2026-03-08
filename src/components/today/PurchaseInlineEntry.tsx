@@ -82,6 +82,7 @@ export function PurchaseInlineEntry({
   editingTransaction, onCancelEdit,
 }: PurchaseInlineEntryProps) {
   const { items: allItems } = useItems();
+  const { selectableMethods } = usePaymentMethods();
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
   const [supplierResults, setSupplierResults] = useState<SupplierResult[]>([]);
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);

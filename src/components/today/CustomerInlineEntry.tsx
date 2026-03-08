@@ -109,6 +109,28 @@ export function CustomerInlineEntry({
     supabase.from('welders').select('id, name').order('name').then(({ data }) => setWelders(data || []));
   }, []);
 
+  // Populate entry from editingTransaction
+  useEffect(() => {
+    if (editingTransaction) {
+      const typeMap: Record<string, CustomerSubType> = {
+        sale: 'sale', sales_return: 'sales_return', balance_paid: 'balance_paid', customer_advance: 'customer_advance',
+      };
+      setEntry({
+        type: typeMap[editingTransaction.type] || 'sale',
+        billNumber: editingTransaction.billNumber || '',
+        customerQuery: editingTransaction.customerName || '',
+        customerId: editingTransaction.customerId,
+        customerAdvance: 0,
+        amount: editingTransaction.amount?.toString() || '',
+        payments: editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }],
+        useAdvance: '',
+        selectedBills: [],
+        dueBills: [],
+        welderId: editingTransaction.welderId,
+      });
+    }
+  }, [editingTransaction]);
+
   const generateBillNumber = async (type: CustomerSubType) => {
     const prefixMap: Record<CustomerSubType, string> = {
       sale: 'S', sales_return: 'SR', balance_paid: 'BP', customer_advance: 'CA',

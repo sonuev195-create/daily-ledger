@@ -89,19 +89,24 @@ function DailyReport() {
   const [data, setData] = useState<any[]>([]);
   const [drawerData, setDrawerData] = useState<{ opening: any; closing: any }>({ opening: null, closing: null });
   const [loading, setLoading] = useState(true);
+  const [empMap, setEmpMap] = useState<Record<string, string>>({});
 
   useEffect(() => { fetchData(); }, [date]);
 
   const fetchData = async () => {
     setLoading(true);
     const dateStr = format(date, 'yyyy-MM-dd');
-    const [{ data: txns }, { data: opening }, { data: closing }] = await Promise.all([
+    const [{ data: txns }, { data: opening }, { data: closing }, { data: employees }] = await Promise.all([
       supabase.from('transactions').select('*').eq('date', dateStr).order('created_at'),
       supabase.from('drawer_openings').select('*').eq('date', dateStr).maybeSingle(),
       supabase.from('drawer_closings').select('*').eq('date', dateStr).maybeSingle(),
+      supabase.from('employees').select('id, name'),
     ]);
     setData(txns || []);
     setDrawerData({ opening, closing });
+    const map: Record<string, string> = {};
+    (employees || []).forEach(e => { map[e.id] = e.name; });
+    setEmpMap(map);
     setLoading(false);
   };
 
@@ -136,16 +141,29 @@ function DailyReport() {
     await generateDetailedDailyPDF(date, data, drawerData.opening, drawerData.closing);
   };
 
-  // Overall summary
-  const overallBill = data.filter(t => t.section === 'sale').reduce((s, t) => s + Number(t.amount), 0);
-  const overallPaid = data.filter(t => t.section === 'sale').reduce((s, t) => {
+  const handleExportCSV = () => {
+    const header = ['Type', 'Section', 'Name', 'Bill#', 'Bill Type', 'Amount', 'Cash', 'UPI', 'Cheque', 'Advance', 'Due'];
+    const rows = data.map((t: any) => {
+      const payments = Array.isArray(t.payments) ? t.payments : [];
+      const modeSum = (m: string) => payments.filter((p: any) => p.mode === m).reduce((s: number, p: any) => s + Number(p.amount), 0);
+      return [t.type, t.section, getResolvedName(t, empMap), t.bill_number || '', t.bill_type || '', String(t.amount), String(modeSum('cash')), String(modeSum('upi')), String(modeSum('cheque')), String(modeSum('advance')), String(t.due || 0)];
+    });
+    downloadCSV([header, ...rows], `Daily_Report_${format(date, 'yyyy-MM-dd')}.csv`);
+  };
+
+  // Overall summary - include overpayment as advance
+  const saleTxns = data.filter(t => t.section === 'sale');
+  const overallBill = saleTxns.reduce((s, t) => s + Number(t.amount), 0);
+  const overallPaid = saleTxns.reduce((s, t) => {
     const payments = Array.isArray(t.payments) ? t.payments : [];
     return s + payments.reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
   }, 0);
-  const overallDue = data.filter(t => t.section === 'sale').reduce((s, t) => s + (Number(t.due) || 0), 0);
-  const overallAdvance = data.filter(t => t.section === 'sale').reduce((s, t) => {
+  const overallDue = saleTxns.reduce((s, t) => s + (Number(t.due) || 0), 0);
+  const overallAdvance = saleTxns.reduce((s, t) => {
     const payments = Array.isArray(t.payments) ? t.payments : [];
-    return s + payments.filter((p: any) => p.mode === 'advance').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
+    const advPay = payments.filter((p: any) => p.mode === 'advance').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
+    const overpay = Number(t.overpayment) || 0;
+    return s + advPay + overpay;
   }, 0);
 
   return (
@@ -157,6 +175,9 @@ function DailyReport() {
           <button onClick={() => { const d = new Date(date); d.setDate(d.getDate() + 1); setDate(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading}>
             <Download className="w-3 h-3" /> PDF
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportCSV} disabled={loading}>
+            <FileSpreadsheet className="w-3 h-3" /> CSV
           </Button>
         </div>
       </div>

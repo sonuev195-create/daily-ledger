@@ -463,6 +463,32 @@ export default function ItemsPage() {
                       />
                     </div>
                     <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-2 block">Conversion Type</label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setConversionType('permanent')}
+                          className={cn(
+                            "flex-1 py-2 rounded-lg text-xs font-medium transition-all",
+                            conversionType === 'permanent' ? "bg-primary text-primary-foreground" : "bg-secondary/50 text-muted-foreground"
+                          )}
+                        >
+                          Permanent
+                        </button>
+                        <button
+                          onClick={() => setConversionType('batch_wise')}
+                          className={cn(
+                            "flex-1 py-2 rounded-lg text-xs font-medium transition-all",
+                            conversionType === 'batch_wise' ? "bg-primary text-primary-foreground" : "bg-secondary/50 text-muted-foreground"
+                          )}
+                        >
+                          Batch-wise
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {conversionType === 'permanent' && (
+                    <div>
                       <label className="text-sm font-medium text-muted-foreground mb-2 block">Conversion Rate</label>
                       <input
                         type="number"
@@ -472,7 +498,13 @@ export default function ItemsPage() {
                         className="input-field"
                       />
                     </div>
-                  </div>
+                  )}
+
+                  {conversionType === 'batch_wise' && (
+                    <div className="bg-info/10 rounded-xl p-3 text-xs text-info">
+                      Conversion rate will be auto-calculated from each batch's primary & secondary quantities.
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>

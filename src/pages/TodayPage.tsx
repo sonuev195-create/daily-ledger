@@ -85,7 +85,14 @@ export default function TodayPage() {
   const goToPreviousDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d); };
   const goToNextDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d); };
 
-  const isToday = format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const selectedStr = format(selectedDate, 'yyyy-MM-dd');
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const isToday = selectedStr === todayStr;
+  const isYesterday = selectedStr === format(yesterday, 'yyyy-MM-dd');
+  const isTomorrow = selectedStr === format(tomorrow, 'yyyy-MM-dd');
+  const dayLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : isTomorrow ? 'Tomorrow' : format(selectedDate, 'EEEE');
 
   const handleDayClickFromMonth = (date: Date) => { setSelectedDate(date); setViewMode('day'); };
   const handleMonthClickFromYear = (date: Date) => { setSelectedDate(date); setViewMode('month'); };
@@ -139,7 +146,7 @@ export default function TodayPage() {
             {/* Desktop header */}
             <div className="hidden lg:flex items-center justify-between mb-8">
               <div>
-                <h1 className="text-2xl font-bold text-foreground">{isToday ? 'Today' : format(selectedDate, 'EEEE')}</h1>
+                <h1 className="text-2xl font-bold text-foreground">{dayLabel}</h1>
                 <p className="text-muted-foreground">{format(selectedDate, 'MMMM d, yyyy')}</p>
               </div>
               <div className="flex items-center gap-2">
@@ -153,7 +160,7 @@ export default function TodayPage() {
             <div className="flex items-center justify-between mb-4 lg:hidden">
               <button onClick={goToPreviousDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronLeft className="w-5 h-5" /></button>
               <button onClick={() => setSelectedDate(new Date())} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary">
-                <Calendar className="w-4 h-4" /><span className="text-sm font-medium">{format(selectedDate, 'MMM d')}</span>
+                <Calendar className="w-4 h-4" /><span className="text-sm font-medium">{isToday ? 'Today' : isYesterday ? 'Yesterday' : isTomorrow ? 'Tomorrow' : format(selectedDate, 'MMM d')}</span>
               </button>
               <button onClick={goToNextDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronRight className="w-5 h-5" /></button>
             </div>

@@ -41,9 +41,15 @@ const menuItems = [
 export function Sidebar({ isCollapsed, onToggle, isMobileOpen, onMobileClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const handleNavigation = (path: string) => {
     navigate(path);
+    onMobileClose();
+  };
+
+  const handleLogout = () => {
+    logout();
     onMobileClose();
   };
 

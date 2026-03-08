@@ -8,8 +8,10 @@ import { formatINR } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { generateDetailedDailyPDF, generateFullMonthlyPDF } from '@/lib/reportExport';
 import { useAuth } from '@/contexts/AuthContext';
+import { EmployeeReport } from '@/components/reports/EmployeeReport';
+import { SupplierReport } from '@/components/reports/SupplierReport';
 
-type ReportTab = 'daily' | 'monthly' | 'customer' | 'supplier' | 'inventory' | 'drawer';
+type ReportTab = 'daily' | 'monthly' | 'employee' | 'supplier_detail' | 'customer' | 'supplier' | 'inventory' | 'drawer';
 
 // CSV export helper
 function downloadCSV(rows: string[][], filename: string) {

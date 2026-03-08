@@ -55,7 +55,7 @@ interface EmployeeInlineEntryProps {
 }
 
 export function EmployeeInlineEntry({
-  transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction,
+  transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction, editingTransaction, onCancelEdit,
 }: EmployeeInlineEntryProps) {
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
   const [employees, setEmployees] = useState<EmployeeResult[]>([]);

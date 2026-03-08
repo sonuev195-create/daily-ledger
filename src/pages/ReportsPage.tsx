@@ -55,6 +55,25 @@ export default function ReportsPage() {
   );
 }
 
+// Helper to resolve employee names for display
+function ResolvedName({ txn }: { txn: any }) {
+  const [name, setName] = useState<string | null>(null);
+  
+  useEffect(() => {
+    if (txn.customer_name || txn.supplier_name || txn.reference) {
+      setName(txn.customer_name || txn.supplier_name || txn.reference);
+    } else if (txn.employee_id) {
+      supabase.from('employees').select('name').eq('id', txn.employee_id).maybeSingle().then(({ data }) => {
+        setName(data?.name || txn.employee_id?.slice(0, 8));
+      });
+    } else {
+      setName('-');
+    }
+  }, [txn]);
+
+  return <>{name || '-'}</>;
+}
+
 // ====== Helper to get bill type label ======
 function billTypeLabel(bt: string | null | undefined) {
   if (!bt) return '';
@@ -112,8 +131,8 @@ function DailyReport() {
     return { section: s, label: sectionLabels[s], count: txns.length, total, cashIn, upiIn, chequeIn, advanceUsed, totalPaid, totalDue };
   });
 
-  const handleExportPDF = () => {
-    generateDetailedDailyPDF(date, data, drawerData.opening, drawerData.closing);
+  const handleExportPDF = async () => {
+    await generateDetailedDailyPDF(date, data, drawerData.opening, drawerData.closing);
   };
 
   // Overall summary
@@ -185,7 +204,7 @@ function DailyReport() {
                   return (
                     <div key={t.id} className="flex items-center gap-2 text-[11px] py-1 border-t border-border/30">
                       <span className="text-muted-foreground capitalize w-16 truncate">{t.type.replace(/_/g, ' ')}</span>
-                      <span className="truncate flex-1">{t.customer_name || t.supplier_name || t.reference || '-'}</span>
+                      <span className="truncate flex-1"><ResolvedName txn={t} /></span>
                       {t.bill_number && <span className="text-muted-foreground">#{t.bill_number}</span>}
                       <span className="font-medium">{formatINR(Number(t.amount))}</span>
                       <div className="flex gap-1">

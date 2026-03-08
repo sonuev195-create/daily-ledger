@@ -55,6 +55,25 @@ export default function ReportsPage() {
   );
 }
 
+// Helper to resolve employee names for display
+function ResolvedName({ txn }: { txn: any }) {
+  const [name, setName] = useState<string | null>(null);
+  
+  useEffect(() => {
+    if (txn.customer_name || txn.supplier_name || txn.reference) {
+      setName(txn.customer_name || txn.supplier_name || txn.reference);
+    } else if (txn.employee_id) {
+      supabase.from('employees').select('name').eq('id', txn.employee_id).maybeSingle().then(({ data }) => {
+        setName(data?.name || txn.employee_id?.slice(0, 8));
+      });
+    } else {
+      setName('-');
+    }
+  }, [txn]);
+
+  return <>{name || '-'}</>;
+}
+
 // ====== Helper to get bill type label ======
 function billTypeLabel(bt: string | null | undefined) {
   if (!bt) return '';

@@ -146,15 +146,15 @@ export function CategoryAccordion({
             <button
               onClick={() => onToggle(cat.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 lg:px-5 lg:py-4 transition-colors",
+                "w-full flex items-center gap-3 px-4 py-3 lg:px-6 lg:py-5 transition-colors",
                 isExpanded ? "bg-secondary/70" : "hover:bg-secondary/30"
               )}
             >
-              <div className={cn("w-9 h-9 lg:w-11 lg:h-11 rounded-lg flex items-center justify-center shrink-0", cat.bgClass)}>
+              <div className={cn("w-9 h-9 lg:w-12 lg:h-12 rounded-lg flex items-center justify-center shrink-0", cat.bgClass)}>
                 <Icon className={cn("w-5 h-5 lg:w-6 lg:h-6", cat.colorClass)} />
               </div>
               <div className="flex-1 text-left min-w-0">
-                <span className="text-sm lg:text-base font-semibold text-foreground">{cat.label}</span>
+                <span className="text-sm lg:text-lg font-semibold text-foreground">{cat.label}</span>
                 {/* Per-section flow summary */}
                 {flow && flow.count > 0 && (
                   <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">

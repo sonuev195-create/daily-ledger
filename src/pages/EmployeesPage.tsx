@@ -279,14 +279,6 @@ export default function EmployeesPage() {
               <Plus className="w-4 h-4" />
               Add
             </Button>
-            <Button 
-              variant="outline"
-              onClick={() => setIsPaymentOpen(true)}
-              className="gap-2"
-            >
-              <Banknote className="w-4 h-4" />
-              Pay
-            </Button>
           </div>
         </div>
 

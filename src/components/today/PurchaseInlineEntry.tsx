@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Check, X, Pencil, Trash2, Camera, Upload, Loader2 } from 'lucide-react';
+import { Plus, Check, X, Pencil, Trash2, Camera, Upload, Loader2, Settings } from 'lucide-react';
 import { Transaction, TransactionSection, PaymentEntry, PaymentMode } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
@@ -93,6 +93,7 @@ export function PurchaseInlineEntry({
   const billCameraRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedBillItems, setExtractedBillItems] = useState<any[]>([]);
+  const [showColumnConfig, setShowColumnConfig] = useState(false);
 
   const purchaseTransactions = transactions.filter(t => t.section === 'purchase');
 
@@ -100,11 +101,11 @@ export function PurchaseInlineEntry({
   useEffect(() => {
     if (entry.supplierId) { setShowSupplierDropdown(false); return; }
     const timer = setTimeout(async () => {
-      if (entry.supplierId) return; // guard against race
+      if (entry.supplierId) return;
       if (entry.supplierQuery.length >= 2) {
         const { data } = await supabase.from('suppliers').select('*')
           .ilike('name', `%${entry.supplierQuery}%`).order('name').limit(10);
-        if (entry.supplierId) return; // guard after async
+        if (entry.supplierId) return;
         setSupplierResults((data || []).map(s => ({ id: s.id, name: s.name, balance: Number(s.balance) })));
         setShowSupplierDropdown(true);
       } else {
@@ -228,12 +229,15 @@ export function PurchaseInlineEntry({
         if (i.paperBillName) acc[i.name] = i.paperBillName;
         return acc;
       }, {});
-      const { data: configData } = await supabase.from('bill_format_config').select('*').eq('config_name', 'default').maybeSingle();
-      const columnMapping = configData ? {
-        totalColumns: configData.total_columns, itemNameColumn: configData.item_name_column,
-        quantityColumn: configData.quantity_column, quantityType: configData.quantity_type,
-        rateColumn: configData.has_rate ? configData.rate_column : null,
-        amountColumn: configData.amount_column, hasRate: configData.has_rate, hasAmount: configData.has_amount,
+      // Use purchase-specific config if available, fallback to default
+      const { data: configData } = await supabase.from('bill_format_config').select('*')
+        .in('config_name', ['purchase', 'default']).order('config_name', { ascending: false });
+      const config = configData?.find(c => c.config_name === 'purchase') || configData?.find(c => c.config_name === 'default');
+      const columnMapping = config ? {
+        totalColumns: config.total_columns, itemNameColumn: config.item_name_column,
+        quantityColumn: config.quantity_column, quantityType: config.quantity_type,
+        rateColumn: config.has_rate ? config.rate_column : null,
+        amountColumn: config.amount_column, hasRate: config.has_rate, hasAmount: config.has_amount,
       } : undefined;
       const { data, error } = await supabase.functions.invoke('extract-bill-items', {
         body: { imageBase64: base64, itemNames, paperBillNames, columnMapping },
@@ -243,7 +247,14 @@ export function PurchaseInlineEntry({
       if (items.length === 0) { toast.error('No items found'); return; }
       const enriched = items.map((ext: any) => {
         const masterItem = allItems.find(i => i.name.toLowerCase() === (ext.matchedName || ext.extractedName)?.toLowerCase());
-        return { ...ext, selectedItemId: masterItem?.id || null, confirmed: !!masterItem };
+        return {
+          ...ext,
+          selectedItemId: masterItem?.id || null,
+          confirmed: !!masterItem,
+          primaryQty: ext.quantity || 0,
+          secondaryQty: 0,
+          rate: ext.rate || (ext.amount && ext.quantity ? ext.amount / ext.quantity : 0),
+        };
       });
       setExtractedBillItems(enriched);
       const total = enriched.reduce((s: number, i: any) => s + (i.amount || 0), 0);
@@ -254,6 +265,12 @@ export function PurchaseInlineEntry({
     } finally {
       setIsExtracting(false);
     }
+  };
+
+  const getItemSecondaryUnit = (itemId: string | null) => {
+    if (!itemId) return null;
+    const item = allItems.find(i => i.id === itemId);
+    return item?.secondaryUnit || null;
   };
 
   const handleSave = async () => {
@@ -270,7 +287,6 @@ export function PurchaseInlineEntry({
 
     setSaving(true);
     try {
-      // Map type to actual DB type and bill_type
       let dbType = 'purchase_bill';
       let billType: string | undefined;
       if (entry.type === 'purchase_bill_a') { dbType = 'purchase_bill'; billType = 'g_bill'; }
@@ -310,9 +326,9 @@ export function PurchaseInlineEntry({
               itemId: i.selectedItemId,
               batchId: undefined as string | undefined,
               itemName: masterItem?.name || i.extractedName,
-              primaryQty: i.quantity || 0,
-              secondaryQty: 0,
-              rate: i.amount && i.quantity ? i.amount / i.quantity : 0,
+              primaryQty: i.primaryQty || i.quantity || 0,
+              secondaryQty: i.secondaryQty || 0,
+              rate: i.rate || (i.amount && i.primaryQty ? i.amount / i.primaryQty : 0),
               total: i.amount || 0,
             };
           });
@@ -347,7 +363,6 @@ export function PurchaseInlineEntry({
           if (supplier) {
             await supabase.from('suppliers').update({ balance: Number(supplier.balance) - totalPayments }).eq('id', entry.supplierId);
           }
-          // Update individual bill dues
           let remaining = totalPayments;
           for (const billId of entry.selectedBills) {
             const bill = entry.dueBills.find(b => b.id === billId);
@@ -390,35 +405,31 @@ export function PurchaseInlineEntry({
       {purchaseTransactions.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="divide-y divide-border/50">
-            {purchaseTransactions.map((txn) => {
-              const cashAmt = txn.payments.filter(p => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
-              const upiAmt = txn.payments.filter(p => p.mode === 'upi').reduce((s, p) => s + p.amount, 0);
-              return (
-                <div key={txn.id} className="px-2 py-2 hover:bg-secondary/20 space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-[10px] font-medium text-muted-foreground capitalize w-16 shrink-0 truncate">{txn.type.replace(/_/g, ' ')}</span>
-                    <span className="font-medium truncate flex-1">{txn.supplierName || '-'}</span>
-                    {txn.billNumber && <span className="text-[10px] text-muted-foreground">#{txn.billNumber}</span>}
-                    <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
-                    <div className="flex gap-0.5 shrink-0">
-                      <button onClick={() => onEditTransaction(txn)} className="p-0.5 hover:text-accent"><Pencil className="w-3 h-3" /></button>
-                      <button onClick={() => onDeleteTransaction(txn.id)} className="p-0.5 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-[68px] text-[10px]">
-                    {txn.payments.filter(p => p.amount > 0).map((p, pi) => (
-                      <span key={pi} className={cn(
-                        p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : 'text-muted-foreground'
-                      )}>
-                        {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : '💳'}{formatINR(p.amount)}
-                      </span>
-                    ))}
-                    {txn.due != null && txn.due > 0 && <span className="text-warning font-medium">⚠️Due:{formatINR(txn.due)}</span>}
-                    {txn.billType && <span className="text-muted-foreground">[{txn.billType === 'g_bill' ? 'A' : txn.billType === 'n_bill' ? 'B' : 'C'}]</span>}
+            {purchaseTransactions.map((txn) => (
+              <div key={txn.id} className="px-2 py-2 hover:bg-secondary/20 space-y-0.5">
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-[10px] font-medium text-muted-foreground capitalize w-16 shrink-0 truncate">{txn.type.replace(/_/g, ' ')}</span>
+                  <span className="font-medium truncate flex-1">{txn.supplierName || '-'}</span>
+                  {txn.billNumber && <span className="text-[10px] text-muted-foreground">#{txn.billNumber}</span>}
+                  <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
+                  <div className="flex gap-0.5 shrink-0">
+                    <button onClick={() => onEditTransaction(txn)} className="p-0.5 hover:text-accent"><Pencil className="w-3 h-3" /></button>
+                    <button onClick={() => onDeleteTransaction(txn.id)} className="p-0.5 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
                   </div>
                 </div>
-              );
-            })}
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-[68px] text-[10px]">
+                  {txn.payments.filter(p => p.amount > 0).map((p, pi) => (
+                    <span key={pi} className={cn(
+                      p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : 'text-muted-foreground'
+                    )}>
+                      {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : '💳'}{formatINR(p.amount)}
+                    </span>
+                  ))}
+                  {txn.due != null && txn.due > 0 && <span className="text-warning font-medium">⚠️Due:{formatINR(txn.due)}</span>}
+                  {txn.billType && <span className="text-muted-foreground">[{txn.billType === 'g_bill' ? 'A' : txn.billType === 'n_bill' ? 'B' : 'C'}]</span>}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -431,7 +442,6 @@ export function PurchaseInlineEntry({
 
         {/* Supplier + Type row */}
         <div className="grid grid-cols-2 gap-2">
-          {/* Supplier search */}
           <div className="relative">
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Supplier</label>
             <Input ref={supplierInputRef} value={entry.supplierQuery}
@@ -542,14 +552,13 @@ export function PurchaseInlineEntry({
                   <button onClick={() => removePayment(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
                 )}
               </div>
-            ))
-            }
+            ))}
             <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add payment mode</button>
           </div>
         </div>
         )}
 
-        {/* Bill capture for purchase bills */}
+        {/* Bill capture + Manual item entry for purchase bills */}
         {isBillType && (
           <div className="space-y-2">
             <div className="flex gap-1">
@@ -559,40 +568,110 @@ export function PurchaseInlineEntry({
               <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1" onClick={() => billFileRef.current?.click()} disabled={isExtracting}>
                 {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Upload
               </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                setExtractedBillItems(prev => [...prev, {
+                  extractedName: '', matchedName: null, primaryQty: 0, secondaryQty: 0, quantity: 0,
+                  rate: 0, amount: 0, selectedItemId: null, confirmed: false
+                }]);
+              }}>
+                <Plus className="w-3 h-3" /> Item
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowColumnConfig(!showColumnConfig)}
+                title="Column config">
+                <Settings className="w-3 h-3 text-muted-foreground" />
+              </Button>
               <input ref={billCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleBillCapture} />
               <input ref={billFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleBillCapture} />
             </div>
+
+            {/* Inline column config */}
+            {showColumnConfig && (
+              <ColumnConfigInline configName="purchase" onClose={() => setShowColumnConfig(false)} />
+            )}
+
             {extractedBillItems.length > 0 && (
               <div className="border border-border rounded-lg overflow-hidden">
                 <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
-                  Extracted Items ({extractedBillItems.length}) — {extractedBillItems.filter(i => i.selectedItemId).length} matched
+                  Items ({extractedBillItems.length}) — {extractedBillItems.filter(i => i.selectedItemId).length} matched
                 </div>
                 <div className="max-h-60 overflow-y-auto divide-y divide-border/30">
-                  {extractedBillItems.map((item, idx) => (
-                    <div key={idx} className="px-2 py-1.5 space-y-1">
-                      <div className="flex items-center gap-1 text-xs">
-                        <span className="text-muted-foreground text-[10px] truncate max-w-[80px]">{item.extractedName}</span>
-                        <select
-                          value={item.selectedItemId || ''}
-                          onChange={(e) => updateExtractedItemMatch(idx, e.target.value)}
-                          className={cn(
-                            "flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
-                            !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground"
+                  {extractedBillItems.map((item, idx) => {
+                    const secUnit = getItemSecondaryUnit(item.selectedItemId);
+                    return (
+                      <div key={idx} className="px-2 py-1.5 space-y-1">
+                        <div className="flex items-center gap-1 text-xs">
+                          <input
+                            type="text"
+                            value={item.extractedName}
+                            onChange={(e) => {
+                              const updated = [...extractedBillItems];
+                              updated[idx] = { ...updated[idx], extractedName: e.target.value };
+                              setExtractedBillItems(updated);
+                            }}
+                            placeholder="Item name"
+                            className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
+                          />
+                          <select
+                            value={item.selectedItemId || ''}
+                            onChange={(e) => updateExtractedItemMatch(idx, e.target.value)}
+                            className={cn(
+                              "flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
+                              !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground"
+                            )}
+                          >
+                            <option value="">No match</option>
+                            {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs">
+                          <input type="number" value={item.primaryQty || item.quantity || ''} onChange={(e) => {
+                            const updated = [...extractedBillItems];
+                            const qty = parseFloat(e.target.value) || 0;
+                            updated[idx] = { ...updated[idx], primaryQty: qty, quantity: qty };
+                            if (updated[idx].rate && qty > 0) {
+                              updated[idx].amount = qty * updated[idx].rate;
+                            }
+                            setExtractedBillItems(updated);
+                          }} placeholder="Pri Qty" className="w-16 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
+                          {secUnit && (
+                            <input type="number" value={item.secondaryQty || ''} onChange={(e) => {
+                              const updated = [...extractedBillItems];
+                              updated[idx] = { ...updated[idx], secondaryQty: parseFloat(e.target.value) || 0 };
+                              setExtractedBillItems(updated);
+                            }} placeholder={secUnit} className="w-16 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
                           )}
-                        >
-                          <option value="">No match</option>
-                          {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                        </select>
-                        <span className="text-muted-foreground text-[10px]">×{item.quantity}</span>
-                        <span className="font-medium text-[11px]">{formatINR(item.amount)}</span>
-                        <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
-                          className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                          <input type="number" value={item.rate || ''} onChange={(e) => {
+                            const updated = [...extractedBillItems];
+                            const rate = parseFloat(e.target.value) || 0;
+                            updated[idx] = { ...updated[idx], rate };
+                            if (rate > 0 && (updated[idx].primaryQty || updated[idx].quantity) > 0) {
+                              updated[idx].amount = (updated[idx].primaryQty || updated[idx].quantity) * rate;
+                            }
+                            setExtractedBillItems(updated);
+                          }} placeholder="Rate" className="w-14 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
+                          <input type="number" value={item.amount || ''} onChange={(e) => {
+                            const updated = [...extractedBillItems];
+                            const amount = parseFloat(e.target.value) || 0;
+                            updated[idx] = { ...updated[idx], amount };
+                            const qty = updated[idx].primaryQty || updated[idx].quantity;
+                            if (qty > 0) updated[idx].rate = amount / qty;
+                            setExtractedBillItems(updated);
+                          }} placeholder="₹" className="w-16 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
+                          <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
+                            className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-                <div className="px-2 py-1 bg-accent/10 text-xs font-medium text-accent text-right">
-                  Total: {formatINR(extractedBillItems.reduce((s, i) => s + i.amount, 0))}
+                <div className="px-2 py-1 bg-accent/10 flex justify-between text-xs font-medium text-accent">
+                  <button onClick={() => {
+                    setExtractedBillItems(prev => [...prev, {
+                      extractedName: '', matchedName: null, primaryQty: 0, secondaryQty: 0, quantity: 0,
+                      rate: 0, amount: 0, selectedItemId: null, confirmed: false
+                    }]);
+                  }} className="text-[10px] hover:underline">+ Add Item</button>
+                  <span>Total: {formatINR(extractedBillItems.reduce((s, i) => s + (i.amount || 0), 0))}</span>
                 </div>
               </div>
             )}
@@ -610,6 +689,100 @@ export function PurchaseInlineEntry({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Inline column config component for OCR settings
+function ColumnConfigInline({ configName, onClose }: { configName: string; onClose: () => void }) {
+  const [totalCols, setTotalCols] = useState(4);
+  const [itemCol, setItemCol] = useState(1);
+  const [qtyCol, setQtyCol] = useState(2);
+  const [rateCol, setRateCol] = useState<number | null>(null);
+  const [amtCol, setAmtCol] = useState(3);
+  const [hasRate, setHasRate] = useState(false);
+  const [qtyType, setQtyType] = useState('primary');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('bill_format_config').select('*')
+        .eq('config_name', configName).maybeSingle();
+      if (data) {
+        setTotalCols(data.total_columns);
+        setItemCol(data.item_name_column);
+        setQtyCol(data.quantity_column);
+        setRateCol(data.has_rate ? data.rate_column : null);
+        setAmtCol(data.amount_column);
+        setHasRate(data.has_rate);
+        setQtyType(data.quantity_type);
+      }
+      setLoaded(true);
+    })();
+  }, [configName]);
+
+  const handleSaveConfig = async () => {
+    await supabase.from('bill_format_config').upsert({
+      config_name: configName,
+      total_columns: totalCols,
+      item_name_column: itemCol,
+      quantity_column: qtyCol,
+      rate_column: hasRate ? rateCol : null,
+      amount_column: amtCol,
+      has_rate: hasRate,
+      has_amount: true,
+      quantity_type: qtyType,
+    }, { onConflict: 'config_name' });
+    toast.success('Column config saved');
+    onClose();
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="border border-border rounded-lg p-2 bg-secondary/10 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-medium text-muted-foreground">Column Order ({configName})</span>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        <div>
+          <label className="text-[9px] text-muted-foreground">Total Cols</label>
+          <Input type="number" value={totalCols} onChange={e => setTotalCols(parseInt(e.target.value) || 4)} className="h-6 text-[10px]" />
+        </div>
+        <div>
+          <label className="text-[9px] text-muted-foreground">Item Col</label>
+          <Input type="number" value={itemCol} onChange={e => setItemCol(parseInt(e.target.value) || 1)} className="h-6 text-[10px]" />
+        </div>
+        <div>
+          <label className="text-[9px] text-muted-foreground">Qty Col</label>
+          <Input type="number" value={qtyCol} onChange={e => setQtyCol(parseInt(e.target.value) || 2)} className="h-6 text-[10px]" />
+        </div>
+        <div>
+          <label className="text-[9px] text-muted-foreground">Amt Col</label>
+          <Input type="number" value={amtCol} onChange={e => setAmtCol(parseInt(e.target.value) || 3)} className="h-6 text-[10px]" />
+        </div>
+      </div>
+      <div className="flex items-center gap-3 text-[10px]">
+        <label className="flex items-center gap-1">
+          <Checkbox checked={hasRate} onCheckedChange={(v) => { setHasRate(!!v); if (v && !rateCol) setRateCol(3); }} />
+          Has Rate
+        </label>
+        {hasRate && (
+          <div className="flex items-center gap-1">
+            <label className="text-[9px] text-muted-foreground">Rate Col</label>
+            <Input type="number" value={rateCol || ''} onChange={e => setRateCol(parseInt(e.target.value) || null)} className="h-6 w-10 text-[10px]" />
+          </div>
+        )}
+        <Select value={qtyType} onValueChange={setQtyType}>
+          <SelectTrigger className="h-6 text-[10px] w-20"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="primary" className="text-xs">Primary</SelectItem>
+            <SelectItem value="secondary" className="text-xs">Secondary</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <Button size="sm" className="h-6 text-[10px] w-full" onClick={handleSaveConfig}>Save Config</Button>
     </div>
   );
 }

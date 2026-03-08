@@ -101,6 +101,7 @@ export function useItems() {
   }, [fetchItems]);
 
   const addItem = async (item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const maxOrder = items.length > 0 ? Math.max(...items.map(i => i.sortOrder || 0)) : 0;
     const { data, error } = await supabase.from('items').insert({
       name: item.name,
       paper_bill_name: item.paperBillName || null,
@@ -109,6 +110,7 @@ export function useItems() {
       selling_price: item.sellingPrice,
       secondary_unit: item.secondaryUnit || null,
       conversion_rate: item.conversionRate || null,
+      sort_order: maxOrder + 1,
     } as any).select().single();
     if (!error && data) { await fetchItems(); return data.id; }
     return null;
@@ -133,7 +135,15 @@ export function useItems() {
     await fetchItems();
   };
 
-  return { items, loading, addItem, updateItem, deleteItem, refetch: fetchItems };
+  const reorderItems = async (reordered: Item[]) => {
+    setItems(reordered);
+    await Promise.all(reordered.map((item, i) =>
+      supabase.from('items').update({ sort_order: i + 1 } as any).eq('id', item.id)
+    ));
+    await fetchItems();
+  };
+
+  return { items, loading, addItem, updateItem, deleteItem, reorderItems, refetch: fetchItems };
 }
 
 // Batches

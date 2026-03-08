@@ -474,9 +474,9 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     if (!currentSale || billItems.length === 0) return;
     setSaving(true);
     try {
-      // If editing existing bill, delete old items first
+      // If editing existing bill, restore inventory first then delete old items
       if (editingBillId) {
-        await supabase.from('bill_items').delete().eq('bill_id', editingBillId);
+        await restoreInventoryForBillItems(currentSale.transactionId);
       }
 
       const billItemsData = billItems.filter(i => i.selectedItemId || i.extractedName.trim()).map(i => ({
@@ -488,10 +488,10 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       const totalAmt = billItems.reduce((s, i) => s + i.amount, 0);
       await saveBillToSupabase(currentSale.transactionId, currentSale.billNumber, 'sale', totalAmt, currentSale.customerName, undefined, billItemsData);
 
-      // Deduct inventory only for new items
-      const newItems = billItems.filter(i => i.isNew && i.selectedItemId);
-      if (newItems.length > 0) {
-        await deductInventoryForItems(newItems.map(i => ({
+      // Deduct inventory for ALL items (since we restored everything above)
+      const itemsToDeduct = billItems.filter(i => i.selectedItemId);
+      if (itemsToDeduct.length > 0) {
+        await deductInventoryForItems(itemsToDeduct.map(i => ({
           itemId: i.selectedItemId!, primaryQty: i.quantity, secondaryQty: i.secondaryQty,
         })));
       }

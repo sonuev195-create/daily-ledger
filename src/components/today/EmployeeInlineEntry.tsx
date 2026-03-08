@@ -4,6 +4,7 @@ import { Plus, Check, X, Pencil, Trash2 } from 'lucide-react';
 import { Transaction, TransactionSection, PaymentEntry, PaymentMode } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
+import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
@@ -71,10 +72,53 @@ export function EmployeeInlineEntry({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const employeeTransactions = transactions.filter(t => t.section === 'employee');
+  const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({});
+  const [previousDue, setPreviousDue] = useState<number>(0);
 
   useEffect(() => {
     supabase.from('salary_categories').select('*').order('name').then(({ data }) => setCategories(data || []));
   }, []);
+
+  // Fetch employee names for existing transactions
+  useEffect(() => {
+    const empIds = [...new Set(employeeTransactions.map(t => t.employeeId).filter(Boolean))];
+    if (empIds.length === 0) return;
+    supabase.from('employees').select('id, name').in('id', empIds as string[]).then(({ data }) => {
+      const map: Record<string, string> = {};
+      (data || []).forEach(e => { map[e.id] = e.name; });
+      setEmployeeNames(map);
+    });
+  }, [transactions]);
+
+  // Calculate previous month due when "Previous" category is selected
+  useEffect(() => {
+    const prevCat = categories.find(c => c.name.toLowerCase() === 'previous');
+    if (entry.employeeId && entry.categoryId && prevCat && entry.categoryId === prevCat.id) {
+      (async () => {
+        const now = new Date();
+        const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastMonth = new Date(firstOfMonth);
+        lastMonth.setDate(lastMonth.getDate() - 1);
+        const firstOfLastMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
+        
+        const { data } = await supabase.from('transactions')
+          .select('amount, payments')
+          .eq('employee_id', entry.employeeId!)
+          .eq('section', 'employee')
+          .gte('date', format(firstOfLastMonth, 'yyyy-MM-dd'))
+          .lte('date', format(lastMonth, 'yyyy-MM-dd'));
+        
+        let totalSalary = 0;
+        let totalPaid = 0;
+        (data || []).forEach(t => {
+          totalSalary += Number(t.amount);
+          const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
+          totalPaid += payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+        });
+        setPreviousDue(Math.max(0, totalSalary - totalPaid));
+      })();
+    }
+  }, [entry.employeeId, entry.categoryId, categories]);
 
   useEffect(() => {
     if (entry.employeeId) { setShowDropdown(false); return; }
@@ -212,6 +256,10 @@ export function EmployeeInlineEntry({
   };
 
   const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || 'Unknown';
+  const isPreviousCategory = (() => {
+    const prevCat = categories.find(c => c.name.toLowerCase() === 'previous');
+    return prevCat ? entry.categoryId === prevCat.id : false;
+  })();
 
   return (
     <div className="space-y-3">
@@ -230,12 +278,14 @@ export function EmployeeInlineEntry({
       {employeeTransactions.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden divide-y divide-border/50">
           {employeeTransactions.map(txn => {
-            const cashAmt = txn.payments.filter(p => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
-            const upiAmt = txn.payments.filter(p => p.mode === 'upi').reduce((s, p) => s + p.amount, 0);
+            const empName = txn.employeeId ? employeeNames[txn.employeeId] : undefined;
+            const catName = txn.reference ? getCategoryName(txn.reference) : undefined;
+            const totalPaid = txn.payments.reduce((s, p) => s + p.amount, 0);
             return (
               <div key={txn.id} className="px-2 py-2 hover:bg-secondary/20 space-y-0.5">
                 <div className="flex items-center gap-1.5 text-xs">
-                  <span className="font-medium truncate flex-1">{txn.employeeName || txn.reference || '-'}</span>
+                  <span className="font-medium truncate flex-1">{empName || txn.employeeName || '-'}</span>
+                  {catName && catName !== 'Unknown' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{catName}</span>}
                   {txn.billNumber && <span className="text-[10px] text-muted-foreground">#{txn.billNumber}</span>}
                   <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
                   <div className="flex gap-0.5 shrink-0">
@@ -251,6 +301,8 @@ export function EmployeeInlineEntry({
                       {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : '💳'}{formatINR(p.amount)}
                     </span>
                   ))}
+                  {totalPaid > 0 && <span className="text-muted-foreground">Paid:{formatINR(totalPaid)}</span>}
+                  {txn.amount > 0 && totalPaid < txn.amount && <span className="text-warning">Due:{formatINR(txn.amount - totalPaid)}</span>}
                 </div>
               </div>
             );
@@ -311,12 +363,26 @@ export function EmployeeInlineEntry({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-[10px] text-muted-foreground mb-0.5 block">Day Salary</label>
-            <Input type="number" inputMode="numeric" value={entry.salary}
-              onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
+        {isPreviousCategory && previousDue > 0 && (
+          <div className="bg-warning/10 border border-warning/30 rounded-lg p-2">
+            <span className="text-xs font-medium text-warning">Previous Month Due: {formatINR(previousDue)}</span>
           </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          {!isPreviousCategory ? (
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Day Salary</label>
+              <Input type="number" inputMode="numeric" value={entry.salary}
+                onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
+            </div>
+          ) : (
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Due Amount</label>
+              <Input type="number" inputMode="numeric" value={entry.salary || (previousDue > 0 ? previousDue.toString() : '')}
+                onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
+            </div>
+          )}
           <div>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
             <div className="space-y-1">

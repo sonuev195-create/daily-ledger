@@ -9,14 +9,17 @@ import { CustomerInlineEntry } from '@/components/today/CustomerInlineEntry';
 import { PurchaseInlineEntry } from '@/components/today/PurchaseInlineEntry';
 import { EmployeeInlineEntry } from '@/components/today/EmployeeInlineEntry';
 import { BillDetailsSheet } from '@/components/bills/BillDetailsSheet';
+import { MonthView, YearView } from '@/components/today/MonthYearView';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useDrawer } from '@/hooks/useDrawer';
 import { Transaction, TransactionSection, Bill } from '@/types';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 
 export default function TodayPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<'day' | 'month' | 'year'>('day');
   const [selectedDate, setSelectedDate] = useState(() => {
     if (location.state?.date) return new Date(location.state.date);
     return new Date();
@@ -36,7 +39,6 @@ export default function TodayPage() {
       const txn = transactions.find(t => t.id === location.state.editTransactionId);
       if (txn) {
         setEditingTransaction(txn);
-        // Expand the right category
         const categoryMap: Record<string, CategoryId> = { sale: 'customer', purchase: 'purchase', employee: 'employee', expenses: 'expense', home: 'home', exchange: 'exchange' };
         setExpandedCategory(categoryMap[txn.section] || null);
       }
@@ -59,7 +61,6 @@ export default function TodayPage() {
 
   const handleEdit = (transaction: Transaction) => {
     setEditingTransaction(transaction);
-    // Expand the right category
     const categoryMap: Record<string, CategoryId> = { sale: 'customer', purchase: 'purchase', employee: 'employee', expenses: 'expense', home: 'home', exchange: 'exchange' };
     setExpandedCategory(categoryMap[transaction.section] || null);
   };
@@ -68,9 +69,7 @@ export default function TodayPage() {
     if (confirm('Delete this transaction?')) await remove(id);
   };
 
-  const handleAddTransaction = (section: TransactionSection, type: string) => {
-    // No-op now, handled inline
-  };
+  const handleAddTransaction = (section: TransactionSection, type: string) => {};
 
   const handleToggleCategory = (id: CategoryId) => {
     setExpandedCategory(expandedCategory === id ? null : id);
@@ -80,6 +79,9 @@ export default function TodayPage() {
   const goToNextDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d); };
 
   const isToday = format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+
+  const handleDayClickFromMonth = (date: Date) => { setSelectedDate(date); setViewMode('day'); };
+  const handleMonthClickFromYear = (date: Date) => { setSelectedDate(date); setViewMode('month'); };
 
   const renderCategoryContent = (categoryId: CategoryId) => {
     if (categoryId === 'drawer') {
@@ -104,33 +106,60 @@ export default function TodayPage() {
   return (
     <AppLayout title="Today">
       <div className="max-w-3xl mx-auto px-4 py-6 pb-24 lg:py-8">
-        <div className="hidden lg:flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">{isToday ? 'Today' : format(selectedDate, 'EEEE')}</h1>
-            <p className="text-muted-foreground">{format(selectedDate, 'MMMM d, yyyy')}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={goToPreviousDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronLeft className="w-5 h-5" /></button>
-            <button onClick={() => setSelectedDate(new Date())} className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors text-sm font-medium">Today</button>
-            <button onClick={goToNextDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronRight className="w-5 h-5" /></button>
-          </div>
+        {/* View Mode Tabs */}
+        <div className="flex bg-secondary rounded-xl p-1 mb-4 gap-1">
+          {(['day', 'month', 'year'] as const).map(mode => (
+            <button key={mode} onClick={() => setViewMode(mode)}
+              className={cn(
+                "flex-1 py-2 rounded-lg text-sm font-medium transition-all",
+                viewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}>
+              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-center justify-between mb-4 lg:hidden">
-          <button onClick={goToPreviousDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronLeft className="w-5 h-5" /></button>
-          <button onClick={() => setSelectedDate(new Date())} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary">
-            <Calendar className="w-4 h-4" /><span className="text-sm font-medium">{format(selectedDate, 'MMM d')}</span>
-          </button>
-          <button onClick={goToNextDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronRight className="w-5 h-5" /></button>
-        </div>
+        {viewMode === 'day' && (
+          <>
+            {/* Desktop header */}
+            <div className="hidden lg:flex items-center justify-between mb-8">
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">{isToday ? 'Today' : format(selectedDate, 'EEEE')}</h1>
+                <p className="text-muted-foreground">{format(selectedDate, 'MMMM d, yyyy')}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={goToPreviousDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronLeft className="w-5 h-5" /></button>
+                <button onClick={() => setSelectedDate(new Date())} className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors text-sm font-medium">Today</button>
+                <button onClick={goToNextDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronRight className="w-5 h-5" /></button>
+              </div>
+            </div>
 
-        {loading ? (
-          <div className="space-y-2">{Array.from({ length: 7 }).map((_, i) => (<div key={i} className="h-14 rounded-xl bg-secondary/50 animate-pulse" />))}</div>
-        ) : (
-          <CategoryAccordion transactions={transactions} summary={summary} expandedCategory={expandedCategory}
-            onToggle={handleToggleCategory} renderContent={renderCategoryContent}
-            drawerCash={closing ? (closing.manualCoin + closing.manualCash) : currentCash}
-            drawerUpi={closing ? closing.systemUpi : currentUpi} />
+            {/* Mobile nav */}
+            <div className="flex items-center justify-between mb-4 lg:hidden">
+              <button onClick={goToPreviousDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronLeft className="w-5 h-5" /></button>
+              <button onClick={() => setSelectedDate(new Date())} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary">
+                <Calendar className="w-4 h-4" /><span className="text-sm font-medium">{format(selectedDate, 'MMM d')}</span>
+              </button>
+              <button onClick={goToNextDay} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary transition-colors"><ChevronRight className="w-5 h-5" /></button>
+            </div>
+
+            {loading ? (
+              <div className="space-y-2">{Array.from({ length: 7 }).map((_, i) => (<div key={i} className="h-14 rounded-xl bg-secondary/50 animate-pulse" />))}</div>
+            ) : (
+              <CategoryAccordion transactions={transactions} summary={summary} expandedCategory={expandedCategory}
+                onToggle={handleToggleCategory} renderContent={renderCategoryContent}
+                drawerCash={closing ? (closing.manualCoin + closing.manualCash) : currentCash}
+                drawerUpi={closing ? closing.systemUpi : currentUpi} />
+            )}
+          </>
+        )}
+
+        {viewMode === 'month' && (
+          <MonthView initialMonth={selectedDate} onDayClick={handleDayClickFromMonth} />
+        )}
+
+        {viewMode === 'year' && (
+          <YearView initialYear={selectedDate.getFullYear()} onMonthClick={handleMonthClickFromYear} />
         )}
       </div>
 

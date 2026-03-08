@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { EmployeePaymentSheet } from '@/components/employees/EmployeePaymentSheet';
+
 
 interface Employee {
   id: string;
@@ -45,7 +45,7 @@ export default function EmployeesPage() {
   const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [categories, setCategories] = useState<SalaryCategory[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
@@ -278,14 +278,6 @@ export default function EmployeesPage() {
             <Button onClick={() => setIsAddOpen(true)} className="gap-2">
               <Plus className="w-4 h-4" />
               Add
-            </Button>
-            <Button 
-              variant="outline"
-              onClick={() => setIsPaymentOpen(true)}
-              className="gap-2"
-            >
-              <Banknote className="w-4 h-4" />
-              Pay
             </Button>
           </div>
         </div>
@@ -588,18 +580,6 @@ export default function EmployeesPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Employee Payment Sheet */}
-      <EmployeePaymentSheet
-        isOpen={isPaymentOpen}
-        onClose={() => setIsPaymentOpen(false)}
-        onSuccess={() => {
-          fetchEmployees();
-          if (selectedEmployee) {
-            fetchEmployeeTransactions(selectedEmployee.id);
-          }
-        }}
-        selectedDate={new Date()}
-      />
     </AppLayout>
   );
 }

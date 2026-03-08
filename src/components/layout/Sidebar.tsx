@@ -2,7 +2,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Calendar, 
-  CalendarDays, 
   Receipt, 
   Package, 
   Users, 

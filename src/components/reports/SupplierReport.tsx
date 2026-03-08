@@ -359,7 +359,7 @@ export function SupplierReport() {
                     <div key={t.id} className="bg-card border border-border rounded-xl p-3">
                       <div className="flex justify-between items-start text-xs">
                         <div>
-                          <p className="font-medium">{format(parseISO(t.date), 'dd MMM, EEE')}</p>
+                          <p className="font-medium">{format(parseISO(t.date), 'dd MMM yyyy, EEE')}</p>
                           <p className="text-muted-foreground">
                             {typeLabel(t.type)}
                             {t.bill_number ? ` #${t.bill_number}` : ''}

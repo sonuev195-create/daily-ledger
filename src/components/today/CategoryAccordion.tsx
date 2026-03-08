@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ChevronDown, Wallet, CreditCard, ShoppingCart, Users, Home, ArrowLeftRight, Banknote, TrendingUp, TrendingDown,
+  ChevronDown, Wallet, CreditCard, ShoppingCart, Users, Home, ArrowLeftRight, Banknote, TrendingUp, TrendingDown, FileSpreadsheet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatINR } from '@/lib/format';

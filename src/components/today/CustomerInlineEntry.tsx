@@ -166,6 +166,7 @@ export function CustomerInlineEntry({
   };
 
   useEffect(() => {
+    if (entry.customerId) { setShowCustomerDropdown(false); return; }
     const timer = setTimeout(async () => {
       if (entry.customerQuery.length >= 2) {
         const results = await searchCustomers(entry.customerQuery);
@@ -177,7 +178,7 @@ export function CustomerInlineEntry({
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [entry.customerQuery]);
+  }, [entry.customerQuery, entry.customerId]);
 
   useEffect(() => {
     if (entry.type === 'balance_paid' && entry.customerQuery.length >= 2) {

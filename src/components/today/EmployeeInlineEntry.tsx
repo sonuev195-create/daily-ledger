@@ -359,11 +359,27 @@ export function EmployeeInlineEntry({
           </div>
         )}
 
+        {isPreviousCategory && previousDue > 0 && (
+          <div className="bg-warning/10 border border-warning/30 rounded-lg p-2">
+            <span className="text-xs font-medium text-warning">Previous Month Due: {formatINR(previousDue)}</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-[10px] text-muted-foreground mb-0.5 block">Day Salary</label>
-            <Input type="number" inputMode="numeric" value={entry.salary}
-              onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
+          {!isPreviousCategory && (
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Day Salary</label>
+              <Input type="number" inputMode="numeric" value={entry.salary}
+                onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
+            </div>
+          )}
+          {isPreviousCategory && (
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Due Amount</label>
+              <Input type="number" inputMode="numeric" value={entry.salary || (previousDue > 0 ? previousDue.toString() : '')}
+                onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
+            </div>
+          )}
           </div>
           <div>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>

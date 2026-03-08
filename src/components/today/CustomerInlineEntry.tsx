@@ -168,8 +168,10 @@ export function CustomerInlineEntry({
   useEffect(() => {
     if (entry.customerId) { setShowCustomerDropdown(false); return; }
     const timer = setTimeout(async () => {
+      if (entry.customerId) return; // guard against race
       if (entry.customerQuery.length >= 2) {
         const results = await searchCustomers(entry.customerQuery);
+        if (entry.customerId) return; // guard after async
         setCustomerResults(results);
         setShowCustomerDropdown(true);
       } else {

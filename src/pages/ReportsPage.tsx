@@ -372,6 +372,24 @@ function MonthlyReport() {
     generateFullMonthlyPDF(month, data);
   };
 
+  const handleExportCSV = () => {
+    const header = ['Category', 'Amount'];
+    const rows = [
+      ['SALES', String(totalSales)], ['RETURN', String(totalReturn)],
+      ['BALANCE PAID', String(totalBalancePaid)], ['CUSTOMER ADVANCE', String(totalCustAdvance)],
+      ['BILL A', String(totalBillA)], ['BILL B', String(totalBillB)], ['BILL C', String(totalBillC)],
+      ['RETURN A', String(totalReturnA)], ['RETURN B', String(totalReturnB)], ['RETURN C', String(totalReturnC)],
+      ['NET BILL A', String(netBillA)], ['NET BILL B', String(netBillB)],
+      ['PURCHASE PAID', String(totalPurchasePayment)], ['PURCHASE EXPENSE', String(totalPurchaseExpenses)],
+      ['TOTAL SALARY PAID', String(totalSalaryPaid)], ['TO EXPENSES', String(totalExpenses)],
+      ['', ''],
+      ['CREDIT CASH', String(totalCreditCash)], ['CREDIT UPI', String(totalCreditUpi)],
+      ['DEBIT CASH', String(totalDebitCash)], ['DEBIT UPI', String(totalDebitUpi)],
+      ['NET CASH', String(netCash)], ['NET UPI', String(netUpi)], ['NET AMOUNT', String(netAmount)],
+    ];
+    downloadCSV([header, ...rows], `Monthly_Report_${format(month, 'yyyy-MM')}.csv`);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -381,6 +399,9 @@ function MonthlyReport() {
           <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() + 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading}>
             <Download className="w-3 h-3" /> PDF
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportCSV} disabled={loading}>
+            <FileSpreadsheet className="w-3 h-3" /> CSV
           </Button>
         </div>
       </div>

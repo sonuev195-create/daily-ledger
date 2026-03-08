@@ -336,9 +336,14 @@ export function EmployeeInlineEntry({
         </div>
       )}
 
-      <div className="border border-accent/30 rounded-lg p-3 bg-accent/5 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-accent">
-          <Plus className="w-3.5 h-3.5" /> New Entry
+      <div className={cn("border rounded-lg p-3 space-y-2", editingTransaction ? "border-warning/50 bg-warning/5" : "border-accent/30 bg-accent/5")}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: editingTransaction ? 'hsl(var(--warning))' : 'hsl(var(--accent))' }}>
+            {editingTransaction ? <><Pencil className="w-3.5 h-3.5" /> Editing</> : <><Plus className="w-3.5 h-3.5" /> New Entry</>}
+          </div>
+          {editingTransaction && (
+            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => { setEntry(createEmptyRow()); onCancelEdit?.(); }}><X className="w-3 h-3 mr-1" /> Cancel</Button>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2">

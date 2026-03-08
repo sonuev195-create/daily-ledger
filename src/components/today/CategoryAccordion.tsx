@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { formatINR } from '@/lib/format';
 import { DailySummary, Transaction } from '@/types';
 
-export type CategoryId = 'drawer' | 'customer' | 'purchase' | 'employee' | 'expense' | 'exchange' | 'home';
+export type CategoryId = 'drawer' | 'customer' | 'purchase' | 'employee' | 'expense' | 'exchange' | 'home' | 'fullday';
 
 interface CategoryConfig {
   id: CategoryId;

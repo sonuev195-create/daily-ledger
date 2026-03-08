@@ -215,6 +215,26 @@ export function CustomerInlineEntry({
         dueBills: [],
         welderId: editingTransaction.welderId,
       });
+      // Load existing bill items for editing
+      if (editingTransaction.type === 'sale' || editingTransaction.type === 'sales_return') {
+        getBillItemsForTransaction(editingTransaction.id).then(result => {
+          if (result && result.items.length > 0) {
+            const items = result.items.map(i => ({
+              extractedName: i.itemName,
+              matchedName: i.itemName,
+              selectedItemId: i.itemId,
+              quantity: i.primaryQty,
+              primaryQty: i.primaryQty,
+              secondaryQty: i.secondaryQty,
+              rate: i.rate,
+              amount: i.amount,
+              confirmed: !!i.itemId,
+              batchId: i.batchId,
+            }));
+            setExtractedBillItems(items);
+          }
+        });
+      }
     }
   }, [editingTransaction]);
 

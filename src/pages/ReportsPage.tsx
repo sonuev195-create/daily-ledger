@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'; // v2
-import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download, FileSpreadsheet } from 'lucide-react';
+import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download, FileSpreadsheet, UserCheck } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,8 +7,11 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { formatINR } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { generateDetailedDailyPDF, generateFullMonthlyPDF } from '@/lib/reportExport';
+import { useAuth } from '@/contexts/AuthContext';
+import { EmployeeReport } from '@/components/reports/EmployeeReport';
+import { SupplierReport } from '@/components/reports/SupplierReport';
 
-type ReportTab = 'daily' | 'monthly' | 'customer' | 'supplier' | 'inventory' | 'drawer';
+type ReportTab = 'daily' | 'monthly' | 'employee' | 'supplier_detail' | 'customer' | 'supplier' | 'inventory' | 'drawer';
 
 // CSV export helper
 function downloadCSV(rows: string[][], filename: string) {
@@ -24,8 +27,10 @@ function downloadCSV(rows: string[][], filename: string) {
 const reportTabs: { id: ReportTab; label: string; icon: any }[] = [
   { id: 'daily', label: 'Daily', icon: FileText },
   { id: 'monthly', label: 'Monthly', icon: BarChart3 },
+  { id: 'employee', label: 'Employee', icon: UserCheck },
+  { id: 'supplier_detail', label: 'Supplier', icon: Truck },
   { id: 'customer', label: 'Customers', icon: Users },
-  { id: 'supplier', label: 'Suppliers', icon: Truck },
+  { id: 'supplier', label: 'Ledger', icon: Truck },
   { id: 'inventory', label: 'Inventory', icon: Package },
   { id: 'drawer', label: 'Drawer', icon: ArrowLeftRight },
 ];
@@ -57,6 +62,8 @@ export default function ReportsPage() {
 
         {activeTab === 'daily' && <DailyReport />}
         {activeTab === 'monthly' && <MonthlyReport />}
+        {activeTab === 'employee' && <EmployeeReport />}
+        {activeTab === 'supplier_detail' && <SupplierReport />}
         {activeTab === 'customer' && <CustomerLedger />}
         {activeTab === 'supplier' && <SupplierLedger />}
         {activeTab === 'inventory' && <InventoryReport />}
@@ -256,6 +263,7 @@ function DailyReport() {
 
 // ====== MONTHLY REPORT (matching image layout) ======
 function MonthlyReport() {
+  const { isAdmin } = useAuth();
   const [month, setMonth] = useState(new Date());
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -440,56 +448,59 @@ function MonthlyReport() {
               <div className="font-semibold underline mt-2">EMPLOYEE</div>
               <Row label="TOTAL SALARY PAID" value={totalSalaryPaid} />
 
-              <div className="border-t-2 border-border mt-3 pt-2 space-y-1">
-                <Row label="CREDIT" value={totalCredit} bold />
-                <Row label="DEBIT" value={totalDebit} bold />
-                <Row label="NET AMOUNT" value={netAmount} bold accent />
+              {isAdmin && (
+                <div className="border-t-2 border-border mt-3 pt-2 space-y-1">
+                  <Row label="CREDIT" value={totalCredit} bold />
+                  <Row label="DEBIT" value={totalDebit} bold />
+                  <Row label="NET AMOUNT" value={netAmount} bold accent />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {isAdmin && (
+            <div className="bg-card border border-border rounded-xl p-4">
+              <h3 className="text-sm font-bold mb-3 text-center">CASH / UPI BREAKDOWN</h3>
+              <div className="grid grid-cols-3 gap-1 text-[11px]">
+                <div className="font-semibold">CREDIT</div>
+                <div className="font-semibold text-right">CASH</div>
+                <div className="font-semibold text-right">UPI</div>
+
+                <div className="font-semibold text-muted-foreground mt-1" style={{ gridColumn: '1 / -1' }}>CUSTOMER</div>
+                <div>SALE</div><div className="text-right">{formatINR(saleCash)}</div><div className="text-right">{formatINR(saleUpi)}</div>
+                <div>BALANCE PAID</div><div className="text-right">{formatINR(bpCash)}</div><div className="text-right">{formatINR(bpUpi)}</div>
+                <div>CUSTOMER ADVANCE</div><div className="text-right">{formatINR(caCash)}</div><div className="text-right">{formatINR(caUpi)}</div>
+                <div className="border-t border-border pt-1 font-semibold">Total Credit</div>
+                <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalCreditCash)}</div>
+                <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalCreditUpi)}</div>
+                <div className="text-right font-bold" style={{ gridColumn: '1 / -1' }}>NET CREDIT: {formatINR(totalCreditCash + totalCreditUpi)}</div>
+
+                <div className="font-semibold mt-3" style={{ gridColumn: '1 / -1' }}>DEBIT</div>
+                <div className="font-semibold text-muted-foreground">CUSTOMER</div><div /><div />
+                <div>SALES RETURN</div><div className="text-right">{formatINR(returnCash)}</div><div className="text-right">{formatINR(returnUpi)}</div>
+
+                <div className="font-semibold text-muted-foreground mt-1">SUPPLIER</div><div /><div />
+                <div>PAID</div><div className="text-right">{formatINR(suppPaidCash)}</div><div className="text-right">{formatINR(suppPaidUpi)}</div>
+                <div>EXPENSES</div><div className="text-right">{formatINR(suppExpCash)}</div><div className="text-right">{formatINR(suppExpUpi)}</div>
+
+                <div className="font-semibold text-muted-foreground mt-1">EMPLOYEE</div><div /><div />
+                <div>SALARY</div><div className="text-right">{formatINR(empCash)}</div><div className="text-right">{formatINR(empUpi)}</div>
+
+                <div className="font-semibold text-muted-foreground mt-1">EXPENSES</div><div /><div />
+                <div>OTHER EXPENSES</div><div className="text-right">{formatINR(expCash)}</div><div className="text-right">{formatINR(expUpi)}</div>
+
+                <div className="border-t border-border pt-1 font-semibold">Total Debit</div>
+                <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalDebitCash)}</div>
+                <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalDebitUpi)}</div>
+                <div className="text-right font-bold" style={{ gridColumn: '1 / -1' }}>NET DEBIT: {formatINR(totalDebitCash + totalDebitUpi)}</div>
+
+                <div className="border-t-2 border-border mt-2 pt-2 font-bold">NET AMOUNT</div>
+                <div className="border-t-2 border-border mt-2 pt-2 text-right font-bold">{formatINR(netCash)}</div>
+                <div className="border-t-2 border-border mt-2 pt-2 text-right font-bold">{formatINR(netUpi)}</div>
+                <div className="text-right font-bold text-primary" style={{ gridColumn: '1 / -1' }}>{formatINR(netAmount)}</div>
               </div>
             </div>
-          </div>
-
-          {/* Cash/UPI Mode Breakdown */}
-          <div className="bg-card border border-border rounded-xl p-4">
-            <h3 className="text-sm font-bold mb-3 text-center">CASH / UPI BREAKDOWN</h3>
-            <div className="grid grid-cols-3 gap-1 text-[11px]">
-              <div className="font-semibold">CREDIT</div>
-              <div className="font-semibold text-right">CASH</div>
-              <div className="font-semibold text-right">UPI</div>
-
-              <div className="font-semibold text-muted-foreground mt-1" style={{ gridColumn: '1 / -1' }}>CUSTOMER</div>
-              <div>SALE</div><div className="text-right">{formatINR(saleCash)}</div><div className="text-right">{formatINR(saleUpi)}</div>
-              <div>BALANCE PAID</div><div className="text-right">{formatINR(bpCash)}</div><div className="text-right">{formatINR(bpUpi)}</div>
-              <div>CUSTOMER ADVANCE</div><div className="text-right">{formatINR(caCash)}</div><div className="text-right">{formatINR(caUpi)}</div>
-              <div className="border-t border-border pt-1 font-semibold">Total Credit</div>
-              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalCreditCash)}</div>
-              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalCreditUpi)}</div>
-              <div className="text-right font-bold" style={{ gridColumn: '1 / -1' }}>NET CREDIT: {formatINR(totalCreditCash + totalCreditUpi)}</div>
-
-              <div className="font-semibold mt-3" style={{ gridColumn: '1 / -1' }}>DEBIT</div>
-              <div className="font-semibold text-muted-foreground">CUSTOMER</div><div /><div />
-              <div>SALES RETURN</div><div className="text-right">{formatINR(returnCash)}</div><div className="text-right">{formatINR(returnUpi)}</div>
-
-              <div className="font-semibold text-muted-foreground mt-1">SUPPLIER</div><div /><div />
-              <div>PAID</div><div className="text-right">{formatINR(suppPaidCash)}</div><div className="text-right">{formatINR(suppPaidUpi)}</div>
-              <div>EXPENSES</div><div className="text-right">{formatINR(suppExpCash)}</div><div className="text-right">{formatINR(suppExpUpi)}</div>
-
-              <div className="font-semibold text-muted-foreground mt-1">EMPLOYEE</div><div /><div />
-              <div>SALARY</div><div className="text-right">{formatINR(empCash)}</div><div className="text-right">{formatINR(empUpi)}</div>
-
-              <div className="font-semibold text-muted-foreground mt-1">EXPENSES</div><div /><div />
-              <div>OTHER EXPENSES</div><div className="text-right">{formatINR(expCash)}</div><div className="text-right">{formatINR(expUpi)}</div>
-
-              <div className="border-t border-border pt-1 font-semibold">Total Debit</div>
-              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalDebitCash)}</div>
-              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalDebitUpi)}</div>
-              <div className="text-right font-bold" style={{ gridColumn: '1 / -1' }}>NET DEBIT: {formatINR(totalDebitCash + totalDebitUpi)}</div>
-
-              <div className="border-t-2 border-border mt-2 pt-2 font-bold">NET AMOUNT</div>
-              <div className="border-t-2 border-border mt-2 pt-2 text-right font-bold">{formatINR(netCash)}</div>
-              <div className="border-t-2 border-border mt-2 pt-2 text-right font-bold">{formatINR(netUpi)}</div>
-              <div className="text-right font-bold text-primary" style={{ gridColumn: '1 / -1' }}>{formatINR(netAmount)}</div>
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>

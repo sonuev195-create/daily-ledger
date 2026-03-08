@@ -13,6 +13,7 @@ import { BillDetailsSheet } from '@/components/bills/BillDetailsSheet';
 import { MonthView, YearView } from '@/components/today/MonthYearView';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useDrawer } from '@/hooks/useDrawer';
+import { useCanEdit } from '@/hooks/useCanEdit';
 import { Transaction, TransactionSection, Bill } from '@/types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -60,13 +61,18 @@ export default function TodayPage() {
     setEditingTransaction(null);
   };
 
+  const { canEdit } = useCanEdit();
+  const dateEditable = canEdit(selectedDate);
+
   const handleEdit = (transaction: Transaction) => {
+    if (!dateEditable) return;
     setEditingTransaction(transaction);
     const categoryMap: Record<string, CategoryId> = { sale: 'customer', purchase: 'purchase', employee: 'employee', expenses: 'expense', home: 'home', exchange: 'exchange' };
     setExpandedCategory(categoryMap[transaction.section] || null);
   };
 
   const handleDelete = async (id: string) => {
+    if (!dateEditable) return;
     if (confirm('Delete this transaction?')) await remove(id);
   };
 
@@ -84,25 +90,28 @@ export default function TodayPage() {
   const handleDayClickFromMonth = (date: Date) => { setSelectedDate(date); setViewMode('day'); };
   const handleMonthClickFromYear = (date: Date) => { setSelectedDate(date); setViewMode('month'); };
 
+  const editFn = dateEditable ? handleEdit : undefined;
+  const deleteFn = dateEditable ? handleDelete : undefined;
+
   const renderCategoryContent = (categoryId: CategoryId) => {
     if (categoryId === 'drawer') {
       return <DrawerAccordionContent opening={opening} closing={closing} previousClosing={previousClosing} summary={summary} onSaveOpening={updateOpening} onSaveClosing={updateClosing} />;
     }
     if (categoryId === 'fullday') {
-      return <FullDayBillContent transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onDeleteTransaction={handleDelete} />;
+      return <FullDayBillContent transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onDeleteTransaction={deleteFn || (() => {})} />;
     }
     if (categoryId === 'customer') {
-      return <CustomerInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} editingTransaction={editingTransaction?.section === 'sale' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
+      return <CustomerInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})} editingTransaction={editingTransaction?.section === 'sale' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
     }
     if (categoryId === 'purchase') {
-      return <PurchaseInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} editingTransaction={editingTransaction?.section === 'purchase' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
+      return <PurchaseInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})} editingTransaction={editingTransaction?.section === 'purchase' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
     }
     if (categoryId === 'employee') {
-      return <EmployeeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />;
+      return <EmployeeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})} />;
     }
     return (
       <CategoryTransactionList categoryId={categoryId as any} transactions={transactions}
-        onAddTransaction={handleAddTransaction} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete}
+        onAddTransaction={handleAddTransaction} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})}
         selectedDate={selectedDate} onSave={handleSave} />
     );
   };

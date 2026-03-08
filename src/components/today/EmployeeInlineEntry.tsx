@@ -313,7 +313,7 @@ export function EmployeeInlineEntry({
 
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-[10px] text-muted-foreground mb-0.5 block">Salary</label>
+            <label className="text-[10px] text-muted-foreground mb-0.5 block">Day Salary</label>
             <Input type="number" inputMode="numeric" value={entry.salary}
               onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
           </div>

@@ -57,12 +57,12 @@ const createEmptyRow = (): EntryRow => ({
 
 const SUB_TYPES: { value: PurchaseSubType; label: string }[] = [
   { value: 'purchase_payment', label: 'Payment' },
-  { value: 'purchase_bill_a', label: 'Bill A (G)' },
-  { value: 'purchase_bill_b', label: 'Bill B (N)' },
-  { value: 'purchase_bill_c', label: 'Bill C (N/G)' },
+  { value: 'purchase_bill_a', label: 'Bill A' },
+  { value: 'purchase_bill_b', label: 'Bill B' },
+  { value: 'purchase_bill_c', label: 'Bill C' },
   { value: 'purchase_delivered', label: 'Delivered' },
-  { value: 'purchase_return_a', label: 'Return A (G)' },
-  { value: 'purchase_return_b', label: 'Return B (N)' },
+  { value: 'purchase_return_a', label: 'Return A' },
+  { value: 'purchase_return_b', label: 'Return B' },
   { value: 'purchase_expenses', label: 'Expenses' },
 ];
 
@@ -98,9 +98,11 @@ export function PurchaseInlineEntry({
   useEffect(() => {
     if (entry.supplierId) { setShowSupplierDropdown(false); return; }
     const timer = setTimeout(async () => {
+      if (entry.supplierId) return; // guard against race
       if (entry.supplierQuery.length >= 2) {
         const { data } = await supabase.from('suppliers').select('*')
           .ilike('name', `%${entry.supplierQuery}%`).order('name').limit(10);
+        if (entry.supplierId) return; // guard after async
         setSupplierResults((data || []).map(s => ({ id: s.id, name: s.name, balance: Number(s.balance) })));
         setShowSupplierDropdown(true);
       } else {
@@ -405,7 +407,7 @@ export function PurchaseInlineEntry({
                     {cashAmt > 0 && <span className="text-success">💵{formatINR(cashAmt)}</span>}
                     {upiAmt > 0 && <span className="text-info">📱{formatINR(upiAmt)}</span>}
                     {txn.due != null && txn.due > 0 && <span className="text-warning font-medium">⚠️Due:{formatINR(txn.due)}</span>}
-                    {txn.billType && <span className="text-muted-foreground">[{txn.billType === 'g_bill' ? 'G' : txn.billType === 'n_bill' ? 'N' : 'N/G'}]</span>}
+                    {txn.billType && <span className="text-muted-foreground">[{txn.billType === 'g_bill' ? 'A' : txn.billType === 'n_bill' ? 'B' : 'C'}]</span>}
                   </div>
                 </div>
               );

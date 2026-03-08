@@ -168,8 +168,10 @@ export function CustomerInlineEntry({
   useEffect(() => {
     if (entry.customerId) { setShowCustomerDropdown(false); return; }
     const timer = setTimeout(async () => {
+      if (entry.customerId) return; // guard against race
       if (entry.customerQuery.length >= 2) {
         const results = await searchCustomers(entry.customerQuery);
+        if (entry.customerId) return; // guard after async
         setCustomerResults(results);
         setShowCustomerDropdown(true);
       } else {
@@ -635,7 +637,7 @@ export function CustomerInlineEntry({
           </div>
         )}
 
-        {/* Bill Capture for sale/return - connects with inventory */}
+        {/* Bill Capture + Manual Item Entry for sale/return */}
         {(entry.type === 'sale' || entry.type === 'sales_return') && (
           <div className="space-y-2">
             <div className="flex gap-1">
@@ -645,19 +647,34 @@ export function CustomerInlineEntry({
               <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1" onClick={() => billFileRef.current?.click()} disabled={isExtracting}>
                 {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Upload Bill
               </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                setExtractedBillItems(prev => [...prev, { extractedName: '', matchedName: null, quantity: 1, amount: 0, selectedItemId: null, confirmed: false }]);
+              }}>
+                <Plus className="w-3 h-3" /> Item
+              </Button>
               <input ref={billCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleBillCapture} />
               <input ref={billFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleBillCapture} />
             </div>
             {extractedBillItems.length > 0 && (
               <div className="border border-border rounded-lg overflow-hidden">
                 <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
-                  Extracted Items ({extractedBillItems.length}) — {extractedBillItems.filter(i => i.selectedItemId).length} matched
+                  Items ({extractedBillItems.length}) — {extractedBillItems.filter(i => i.selectedItemId).length} matched
                 </div>
                 <div className="max-h-60 overflow-y-auto divide-y divide-border/30">
                   {extractedBillItems.map((item, idx) => (
                     <div key={idx} className="px-2 py-1.5 space-y-1">
                       <div className="flex items-center gap-1 text-xs">
-                        <span className="text-muted-foreground text-[10px] truncate max-w-[80px]">{item.extractedName}</span>
+                        <input
+                          type="text"
+                          value={item.extractedName}
+                          onChange={(e) => {
+                            const updated = [...extractedBillItems];
+                            updated[idx] = { ...updated[idx], extractedName: e.target.value };
+                            setExtractedBillItems(updated);
+                          }}
+                          placeholder="Item name"
+                          className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
+                        />
                         <select
                           value={item.selectedItemId || ''}
                           onChange={(e) => updateExtractedItemMatch(idx, e.target.value)}
@@ -669,16 +686,27 @@ export function CustomerInlineEntry({
                           <option value="">No match</option>
                           {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                         </select>
-                        <span className="text-muted-foreground text-[10px]">×{item.quantity}</span>
-                        <span className="font-medium text-[11px]">{formatINR(item.amount)}</span>
+                        <input type="number" value={item.quantity || ''} onChange={(e) => {
+                          const updated = [...extractedBillItems];
+                          updated[idx] = { ...updated[idx], quantity: parseFloat(e.target.value) || 0 };
+                          setExtractedBillItems(updated);
+                        }} placeholder="Qty" className="w-12 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
+                        <input type="number" value={item.amount || ''} onChange={(e) => {
+                          const updated = [...extractedBillItems];
+                          updated[idx] = { ...updated[idx], amount: parseFloat(e.target.value) || 0 };
+                          setExtractedBillItems(updated);
+                        }} placeholder="₹" className="w-16 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
                         <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
                           className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="px-2 py-1 bg-accent/10 text-xs font-medium text-accent text-right">
-                  Total: {formatINR(extractedBillItems.reduce((s, i) => s + i.amount, 0))}
+                <div className="px-2 py-1 bg-accent/10 flex justify-between text-xs font-medium text-accent">
+                  <button onClick={() => {
+                    setExtractedBillItems(prev => [...prev, { extractedName: '', matchedName: null, quantity: 1, amount: 0, selectedItemId: null, confirmed: false }]);
+                  }} className="text-[10px] hover:underline">+ Add Item</button>
+                  <span>Total: {formatINR(extractedBillItems.reduce((s, i) => s + i.amount, 0))}</span>
                 </div>
               </div>
             )}

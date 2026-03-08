@@ -76,9 +76,11 @@ export function EmployeeInlineEntry({
   useEffect(() => {
     if (entry.employeeId) { setShowDropdown(false); return; }
     const timer = setTimeout(async () => {
+      if (entry.employeeId) return; // guard against race
       if (entry.employeeQuery.length >= 1) {
         const { data } = await supabase.from('employees').select('id, name, advance_balance, salary')
           .ilike('name', `%${entry.employeeQuery}%`).order('name').limit(10);
+        if (entry.employeeId) return; // guard after async
         setEmployees((data || []).map(e => ({ id: e.id, name: e.name, advance_balance: Number(e.advance_balance), salary: Number(e.salary) })));
         setShowDropdown(true);
       } else {

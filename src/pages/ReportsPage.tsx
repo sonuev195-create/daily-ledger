@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, Calendar, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { formatINR } from '@/lib/format';
+import { Button } from '@/components/ui/button';
+import { generateDetailedDailyPDF, generateFullMonthlyPDF } from '@/lib/reportExport';
 
 type ReportTab = 'daily' | 'monthly' | 'customer' | 'supplier' | 'inventory' | 'drawer';
 
@@ -29,7 +30,6 @@ export default function ReportsPage() {
           <p className="text-muted-foreground">Business reports and analytics</p>
         </div>
 
-        {/* Tab bar */}
         <div className="flex gap-1 bg-secondary rounded-xl p-1 mb-6 overflow-x-auto">
           {reportTabs.map(tab => {
             const Icon = tab.icon;
@@ -55,9 +55,19 @@ export default function ReportsPage() {
   );
 }
 
+// ====== Helper to get bill type label ======
+function billTypeLabel(bt: string | null | undefined) {
+  if (!bt) return '';
+  if (bt === 'g_bill') return 'A';
+  if (bt === 'n_bill') return 'B';
+  return 'C';
+}
+
+// ====== DAILY REPORT ======
 function DailyReport() {
   const [date, setDate] = useState(new Date());
   const [data, setData] = useState<any[]>([]);
+  const [drawerData, setDrawerData] = useState<{ opening: any; closing: any }>({ opening: null, closing: null });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchData(); }, [date]);
@@ -65,8 +75,13 @@ function DailyReport() {
   const fetchData = async () => {
     setLoading(true);
     const dateStr = format(date, 'yyyy-MM-dd');
-    const { data: txns } = await supabase.from('transactions').select('*').eq('date', dateStr).order('created_at');
+    const [{ data: txns }, { data: opening }, { data: closing }] = await Promise.all([
+      supabase.from('transactions').select('*').eq('date', dateStr).order('created_at'),
+      supabase.from('drawer_openings').select('*').eq('date', dateStr).maybeSingle(),
+      supabase.from('drawer_closings').select('*').eq('date', dateStr).maybeSingle(),
+    ]);
     setData(txns || []);
+    setDrawerData({ opening, closing });
     setLoading(false);
   };
 
@@ -87,12 +102,21 @@ function DailyReport() {
     return { section: s, label: sectionLabels[s], count: txns.length, total, cashIn, upiIn };
   });
 
+  const handleExportPDF = () => {
+    generateDetailedDailyPDF(date, data, drawerData.opening, drawerData.closing);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <button onClick={() => { const d = new Date(date); d.setDate(d.getDate() - 1); setDate(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronLeft className="w-4 h-4" /></button>
         <span className="text-sm font-medium">{format(date, 'EEEE, MMM d, yyyy')}</span>
-        <button onClick={() => { const d = new Date(date); d.setDate(d.getDate() + 1); setDate(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => { const d = new Date(date); d.setDate(d.getDate() + 1); setDate(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading}>
+            <Download className="w-3 h-3" /> PDF
+          </Button>
+        </div>
       </div>
 
       {loading ? <div className="h-32 bg-secondary/50 animate-pulse rounded-xl" /> : (
@@ -109,7 +133,6 @@ function DailyReport() {
                 <div><span className="text-info">UPI</span><p className="font-semibold text-info">{formatINR(s.upiIn)}</p></div>
               </div>
 
-              {/* Individual transactions */}
               <div className="mt-2 space-y-1">
                 {data.filter(t => t.section === s.section).map(t => {
                   const payments = Array.isArray(t.payments) ? t.payments : [];
@@ -127,7 +150,7 @@ function DailyReport() {
                         ))}
                       </div>
                       {t.due > 0 && <span className="text-warning text-[9px]">Due:{formatINR(Number(t.due))}</span>}
-                      {t.bill_type && <span className="text-[9px] text-muted-foreground">[{t.bill_type === 'g_bill' ? 'G' : t.bill_type === 'n_bill' ? 'N' : 'N/G'}]</span>}
+                      {t.bill_type && <span className="text-[9px] text-muted-foreground">[{billTypeLabel(t.bill_type)}]</span>}
                     </div>
                   );
                 })}
@@ -143,6 +166,7 @@ function DailyReport() {
   );
 }
 
+// ====== MONTHLY REPORT (matching image layout) ======
 function MonthlyReport() {
   const [month, setMonth] = useState(new Date());
   const [data, setData] = useState<any[]>([]);
@@ -159,54 +183,203 @@ function MonthlyReport() {
     setLoading(false);
   };
 
-  const totalSales = data.filter(t => t.section === 'sale' && t.type === 'sale').reduce((s, t) => s + Number(t.amount), 0);
-  const totalBillA = data.filter(t => t.type === 'purchase_bill' && t.bill_type === 'g_bill').reduce((s, t) => s + Number(t.amount), 0);
-  const totalBillB = data.filter(t => t.type === 'purchase_bill' && t.bill_type === 'n_bill').reduce((s, t) => s + Number(t.amount), 0);
-  const totalBillC = data.filter(t => t.type === 'purchase_bill' && t.bill_type === 'ng_bill').reduce((s, t) => s + Number(t.amount), 0);
-  const totalReturnA = data.filter(t => t.type === 'purchase_return' && t.bill_type === 'g_bill').reduce((s, t) => s + Number(t.amount), 0);
-  const totalReturnB = data.filter(t => t.type === 'purchase_return' && t.bill_type === 'n_bill').reduce((s, t) => s + Number(t.amount), 0);
-  const totalExpenses = data.filter(t => t.section === 'expenses').reduce((s, t) => s + Number(t.amount), 0);
-  const totalEmployee = data.filter(t => t.section === 'employee').reduce((s, t) => s + Number(t.amount), 0);
+  // Helpers
+  const bySection = (s: string) => data.filter(t => t.section === s);
+  const byType = (type: string) => data.filter(t => t.type === type);
+  const byBillType = (type: string, bt: string) => data.filter(t => t.type === type && t.bill_type === bt);
+  const sum = (arr: any[]) => arr.reduce((s, t) => s + Number(t.amount), 0);
+
+  const cashSum = (arr: any[]) => arr.reduce((s, t) => {
+    const p = Array.isArray(t.payments) ? t.payments : [];
+    return s + p.filter((x: any) => x.mode === 'cash').reduce((s2: number, x: any) => s2 + Number(x.amount), 0);
+  }, 0);
+  const upiSum = (arr: any[]) => arr.reduce((s, t) => {
+    const p = Array.isArray(t.payments) ? t.payments : [];
+    return s + p.filter((x: any) => x.mode === 'upi').reduce((s2: number, x: any) => s2 + Number(x.amount), 0);
+  }, 0);
+
+  // CREDIT/DEBIT totals
+  const sales = byType('sale');
+  const salesReturn = byType('sales_return');
+  const balancePaid = byType('balance_paid');
+  const customerAdvance = byType('customer_advance');
+
+  const totalSales = sum(sales);
+  const totalReturn = sum(salesReturn);
+  const totalBalancePaid = sum(balancePaid);
+  const totalCustAdvance = sum(customerAdvance);
+
+  // Purchase
+  const billA = byBillType('purchase_bill', 'g_bill');
+  const billB = byBillType('purchase_bill', 'n_bill');
+  const billC = byBillType('purchase_bill', 'ng_bill');
+  const returnA = data.filter(t => t.type === 'purchase_return' && t.bill_type === 'g_bill');
+  const returnB = data.filter(t => t.type === 'purchase_return' && t.bill_type === 'n_bill');
+  const returnC = data.filter(t => t.type === 'purchase_return' && t.bill_type === 'ng_bill');
+  const purchasePayment = byType('purchase_payment');
+  const purchaseExpenses = byType('purchase_expenses');
+
+  const totalBillA = sum(billA);
+  const totalBillB = sum(billB);
+  const totalBillC = sum(billC);
+  const totalReturnA = sum(returnA);
+  const totalReturnB = sum(returnB);
+  const totalReturnC = sum(returnC);
+  const totalPurchasePayment = sum(purchasePayment);
+  const totalPurchaseExpenses = sum(purchaseExpenses);
+
+  // Net Bill A = Bill A - Return A + Bill C - Return C
+  const netBillA = totalBillA - totalReturnA + totalBillC - totalReturnC;
+  // Net Bill B = Bill B - Return B - Bill C + Return C
+  const netBillB = totalBillB - totalReturnB - totalBillC + totalReturnC;
+
+  // Employee
+  const empTxns = bySection('employee');
+  const totalSalaryPaid = sum(empTxns);
+
+  // Expenses
+  const expTxns = bySection('expenses');
+  const totalExpenses = sum(expTxns);
+
+  // Home
+  const homeTxns = bySection('home');
+  const homeCredit = homeTxns.filter(t => t.type === 'home_credit');
+  const homeDebit = homeTxns.filter(t => t.type === 'home_debit');
+
+  // Exchange
+  const exchTxns = bySection('exchange');
+
+  // Cash/UPI breakdown
+  const saleCash = cashSum(sales);
+  const saleUpi = upiSum(sales);
+  const bpCash = cashSum(balancePaid);
+  const bpUpi = upiSum(balancePaid);
+  const caCash = cashSum(customerAdvance);
+  const caUpi = upiSum(customerAdvance);
+  const totalCreditCash = saleCash + bpCash + caCash;
+  const totalCreditUpi = saleUpi + bpUpi + caUpi;
+
+  const returnCash = cashSum(salesReturn);
+  const returnUpi = upiSum(salesReturn);
+  const suppPaidCash = cashSum(purchasePayment);
+  const suppPaidUpi = upiSum(purchasePayment);
+  const suppExpCash = cashSum(purchaseExpenses);
+  const suppExpUpi = upiSum(purchaseExpenses);
+  const empCash = cashSum(empTxns);
+  const empUpi = upiSum(empTxns);
+  const expCash = cashSum(expTxns);
+  const expUpi = upiSum(expTxns);
+
+  const totalDebitCash = returnCash + suppPaidCash + suppExpCash + empCash + expCash;
+  const totalDebitUpi = returnUpi + suppPaidUpi + suppExpUpi + empUpi + expUpi;
+
+  const netCash = totalCreditCash - totalDebitCash;
+  const netUpi = totalCreditUpi - totalDebitUpi;
+  const netAmount = netCash + netUpi;
+
+  // Credits & Debits summary
+  const totalCredit = totalSales + totalBalancePaid + totalCustAdvance;
+  const totalDebit = totalExpenses + totalSalaryPaid + totalPurchasePayment + totalPurchaseExpenses + totalReturn;
+
+  const handleExportPDF = () => {
+    generateFullMonthlyPDF(month, data);
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() - 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronLeft className="w-4 h-4" /></button>
         <span className="text-sm font-medium">{format(month, 'MMMM yyyy')}</span>
-        <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() + 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() + 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading}>
+            <Download className="w-3 h-3" /> PDF
+          </Button>
+        </div>
       </div>
 
       {loading ? <div className="h-32 bg-secondary/50 animate-pulse rounded-xl" /> : (
         <div className="space-y-3">
-          <div className="bg-card border border-border rounded-xl p-4 space-y-2">
-            <h3 className="text-sm font-semibold mb-2">Monthly Summary</h3>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-success/10 rounded-lg p-3"><span className="text-muted-foreground">Total Sales</span><p className="text-lg font-bold text-success">{formatINR(totalSales)}</p></div>
-              <div className="bg-destructive/10 rounded-lg p-3"><span className="text-muted-foreground">Expenses</span><p className="text-lg font-bold text-destructive">{formatINR(totalExpenses)}</p></div>
+          {/* Credits & Debits Summary */}
+          <div className="bg-card border border-border rounded-xl p-4">
+            <h3 className="text-sm font-bold mb-3 text-center underline">CREDITS AND DEBITS</h3>
+            <div className="space-y-1 text-xs">
+              <div className="font-semibold underline">BUSINESS</div>
+              <Row label="SALES" value={totalSales} />
+              <Row label="RETURN" value={totalReturn} />
+              <Row label="BALANCE PAID" value={totalBalancePaid} />
+              <Row label="CUSTOMER ADVANCE" value={totalCustAdvance} />
+              <Divider />
+              
+              <div className="font-semibold underline mt-2">EXPENSES</div>
+              {expTxns.length > 0 && <Row label="TO EXPENSES" value={totalExpenses} />}
+
+              <div className="font-semibold underline mt-2">PURCHASE</div>
+              <Row label="BILL A" value={totalBillA} />
+              <Row label="BILL B" value={totalBillB} />
+              <Row label="BILL C" value={totalBillC} />
+              <Row label="RETURN A" value={totalReturnA} negative />
+              <Row label="RETURN B" value={totalReturnB} negative />
+              <Row label="RETURN C" value={totalReturnC} negative />
+              <div className="border-t border-border pt-1 mt-1">
+                <Row label="NET BILL A" value={netBillA} bold />
+                <Row label="NET BILL B" value={netBillB} bold />
+              </div>
+              <Row label="PURCHASE PAID" value={totalPurchasePayment} />
+              <Row label="PURCHASE EXPENSE" value={totalPurchaseExpenses} />
+
+              <div className="font-semibold underline mt-2">EMPLOYEE</div>
+              <Row label="TOTAL SALARY PAID" value={totalSalaryPaid} />
+
+              <div className="border-t-2 border-border mt-3 pt-2 space-y-1">
+                <Row label="CREDIT" value={totalCredit} bold />
+                <Row label="DEBIT" value={totalDebit} bold />
+                <Row label="NET AMOUNT" value={netAmount} bold accent />
+              </div>
             </div>
           </div>
 
+          {/* Cash/UPI Mode Breakdown */}
           <div className="bg-card border border-border rounded-xl p-4">
-            <h3 className="text-sm font-semibold mb-3">Purchase Breakdown</h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between"><span>Bill A (G Bill)</span><span className="font-semibold">{formatINR(totalBillA)}</span></div>
-              <div className="flex justify-between"><span>Bill B (N Bill)</span><span className="font-semibold">{formatINR(totalBillB)}</span></div>
-              <div className="flex justify-between text-muted-foreground"><span>Bill C (N/G Bill - report only)</span><span>{formatINR(totalBillC)}</span></div>
-              <div className="flex justify-between text-success"><span>Return A (G)</span><span>-{formatINR(totalReturnA)}</span></div>
-              <div className="flex justify-between text-success"><span>Return B (N)</span><span>-{formatINR(totalReturnB)}</span></div>
-              <div className="border-t border-border pt-2 flex justify-between font-semibold">
-                <span>Net Bill A (G)</span><span>{formatINR(totalBillA + totalBillC - totalReturnA)}</span>
-              </div>
-              <div className="flex justify-between font-semibold">
-                <span>Net Bill B (N)</span><span>{formatINR(totalBillB - totalBillC - totalReturnB)}</span>
-              </div>
-            </div>
-          </div>
+            <h3 className="text-sm font-bold mb-3 text-center">CASH / UPI BREAKDOWN</h3>
+            <div className="grid grid-cols-3 gap-1 text-[11px]">
+              <div className="font-semibold">CREDIT</div>
+              <div className="font-semibold text-right">CASH</div>
+              <div className="font-semibold text-right">UPI</div>
 
-          <div className="bg-card border border-border rounded-xl p-4">
-            <h3 className="text-sm font-semibold mb-2">Employee</h3>
-            <p className="text-lg font-bold">{formatINR(totalEmployee)}</p>
-            <p className="text-xs text-muted-foreground">{data.filter(t => t.section === 'employee').length} payments</p>
+              <div className="font-semibold text-muted-foreground mt-1" style={{ gridColumn: '1 / -1' }}>CUSTOMER</div>
+              <div>SALE</div><div className="text-right">{formatINR(saleCash)}</div><div className="text-right">{formatINR(saleUpi)}</div>
+              <div>BALANCE PAID</div><div className="text-right">{formatINR(bpCash)}</div><div className="text-right">{formatINR(bpUpi)}</div>
+              <div>CUSTOMER ADVANCE</div><div className="text-right">{formatINR(caCash)}</div><div className="text-right">{formatINR(caUpi)}</div>
+              <div className="border-t border-border pt-1 font-semibold">Total Credit</div>
+              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalCreditCash)}</div>
+              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalCreditUpi)}</div>
+              <div className="text-right font-bold" style={{ gridColumn: '1 / -1' }}>NET CREDIT: {formatINR(totalCreditCash + totalCreditUpi)}</div>
+
+              <div className="font-semibold mt-3" style={{ gridColumn: '1 / -1' }}>DEBIT</div>
+              <div className="font-semibold text-muted-foreground">CUSTOMER</div><div /><div />
+              <div>SALES RETURN</div><div className="text-right">{formatINR(returnCash)}</div><div className="text-right">{formatINR(returnUpi)}</div>
+
+              <div className="font-semibold text-muted-foreground mt-1">SUPPLIER</div><div /><div />
+              <div>PAID</div><div className="text-right">{formatINR(suppPaidCash)}</div><div className="text-right">{formatINR(suppPaidUpi)}</div>
+              <div>EXPENSES</div><div className="text-right">{formatINR(suppExpCash)}</div><div className="text-right">{formatINR(suppExpUpi)}</div>
+
+              <div className="font-semibold text-muted-foreground mt-1">EMPLOYEE</div><div /><div />
+              <div>SALARY</div><div className="text-right">{formatINR(empCash)}</div><div className="text-right">{formatINR(empUpi)}</div>
+
+              <div className="font-semibold text-muted-foreground mt-1">EXPENSES</div><div /><div />
+              <div>OTHER EXPENSES</div><div className="text-right">{formatINR(expCash)}</div><div className="text-right">{formatINR(expUpi)}</div>
+
+              <div className="border-t border-border pt-1 font-semibold">Total Debit</div>
+              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalDebitCash)}</div>
+              <div className="border-t border-border pt-1 text-right font-semibold">{formatINR(totalDebitUpi)}</div>
+              <div className="text-right font-bold" style={{ gridColumn: '1 / -1' }}>NET DEBIT: {formatINR(totalDebitCash + totalDebitUpi)}</div>
+
+              <div className="border-t-2 border-border mt-2 pt-2 font-bold">NET AMOUNT</div>
+              <div className="border-t-2 border-border mt-2 pt-2 text-right font-bold">{formatINR(netCash)}</div>
+              <div className="border-t-2 border-border mt-2 pt-2 text-right font-bold">{formatINR(netUpi)}</div>
+              <div className="text-right font-bold text-primary" style={{ gridColumn: '1 / -1' }}>{formatINR(netAmount)}</div>
+            </div>
           </div>
         </div>
       )}
@@ -214,6 +387,20 @@ function MonthlyReport() {
   );
 }
 
+// Row helper components
+function Row({ label, value, bold, negative, accent }: { label: string; value: number; bold?: boolean; negative?: boolean; accent?: boolean }) {
+  return (
+    <div className={cn("flex justify-between py-0.5", bold && "font-semibold", accent && "text-primary")}>
+      <span>{label}</span>
+      <span>{negative ? '-' : ''}{formatINR(Math.abs(value))}</span>
+    </div>
+  );
+}
+function Divider() {
+  return <div className="border-t border-border my-1" />;
+}
+
+// ====== CUSTOMER LEDGER ======
 function CustomerLedger() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -251,6 +438,7 @@ function CustomerLedger() {
   );
 }
 
+// ====== SUPPLIER LEDGER ======
 function SupplierLedger() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -288,6 +476,7 @@ function SupplierLedger() {
   );
 }
 
+// ====== INVENTORY ======
 function InventoryReport() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -296,7 +485,6 @@ function InventoryReport() {
     (async () => {
       const { data: itemsData } = await supabase.from('items').select('*').order('name');
       const { data: batchesData } = await supabase.from('batches').select('*');
-
       const enriched = (itemsData || []).map(item => {
         const itemBatches = (batchesData || []).filter(b => b.item_id === item.id);
         const totalQty = itemBatches.reduce((s, b) => s + Number(b.primary_quantity), 0);
@@ -304,7 +492,6 @@ function InventoryReport() {
         const value = totalQty * avgRate;
         return { ...item, totalQty, avgRate, value, batchCount: itemBatches.length };
       });
-
       setItems(enriched);
       setLoading(false);
     })();
@@ -343,6 +530,7 @@ function InventoryReport() {
   );
 }
 
+// ====== DRAWER ======
 function DrawerReport() {
   const [month, setMonth] = useState(new Date());
   const [closings, setClosings] = useState<any[]>([]);

@@ -4,6 +4,7 @@ import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { CategoryAccordion, CategoryId } from '@/components/today/CategoryAccordion';
 import { DrawerAccordionContent } from '@/components/today/DrawerAccordionContent';
+import { FullDayBillContent } from '@/components/today/FullDayBillContent';
 import { CategoryTransactionList } from '@/components/today/CategoryTransactionList';
 import { CustomerInlineEntry } from '@/components/today/CustomerInlineEntry';
 import { PurchaseInlineEntry } from '@/components/today/PurchaseInlineEntry';
@@ -86,6 +87,9 @@ export default function TodayPage() {
   const renderCategoryContent = (categoryId: CategoryId) => {
     if (categoryId === 'drawer') {
       return <DrawerAccordionContent opening={opening} closing={closing} previousClosing={previousClosing} summary={summary} onSaveOpening={updateOpening} onSaveClosing={updateClosing} />;
+    }
+    if (categoryId === 'fullday') {
+      return <FullDayBillContent transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onDeleteTransaction={handleDelete} />;
     }
     if (categoryId === 'customer') {
       return <CustomerInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} editingTransaction={editingTransaction?.section === 'sale' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;

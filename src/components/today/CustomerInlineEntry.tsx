@@ -694,12 +694,31 @@ export function CustomerInlineEntry({
                         </select>
                         <input type="number" value={item.quantity || ''} onChange={(e) => {
                           const updated = [...extractedBillItems];
-                          updated[idx] = { ...updated[idx], quantity: parseFloat(e.target.value) || 0 };
+                          const qty = parseFloat(e.target.value) || 0;
+                          updated[idx] = { ...updated[idx], quantity: qty };
+                          // Auto-calc amount from rate if rate exists
+                          if (updated[idx].rate && qty > 0) {
+                            updated[idx].amount = qty * updated[idx].rate;
+                          }
                           setExtractedBillItems(updated);
                         }} placeholder="Qty" className="w-12 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
+                        <input type="number" value={item.rate || ''} onChange={(e) => {
+                          const updated = [...extractedBillItems];
+                          const rate = parseFloat(e.target.value) || 0;
+                          updated[idx] = { ...updated[idx], rate };
+                          if (rate > 0 && updated[idx].quantity > 0) {
+                            updated[idx].amount = updated[idx].quantity * rate;
+                          }
+                          setExtractedBillItems(updated);
+                        }} placeholder="Rate" className="w-14 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
                         <input type="number" value={item.amount || ''} onChange={(e) => {
                           const updated = [...extractedBillItems];
-                          updated[idx] = { ...updated[idx], amount: parseFloat(e.target.value) || 0 };
+                          const amount = parseFloat(e.target.value) || 0;
+                          updated[idx] = { ...updated[idx], amount };
+                          // Auto-calc rate from amount if qty exists
+                          if (updated[idx].quantity > 0) {
+                            updated[idx].rate = amount / updated[idx].quantity;
+                          }
                           setExtractedBillItems(updated);
                         }} placeholder="₹" className="w-16 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
                         <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}

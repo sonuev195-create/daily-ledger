@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ChevronDown, Wallet, CreditCard, ShoppingCart, Users, Home, ArrowLeftRight, Banknote, TrendingUp, TrendingDown,
+  ChevronDown, Wallet, CreditCard, ShoppingCart, Users, Home, ArrowLeftRight, Banknote, TrendingUp, TrendingDown, FileSpreadsheet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatINR } from '@/lib/format';
 import { DailySummary, Transaction } from '@/types';
 
-export type CategoryId = 'drawer' | 'customer' | 'purchase' | 'employee' | 'expense' | 'exchange' | 'home';
+export type CategoryId = 'drawer' | 'customer' | 'purchase' | 'employee' | 'expense' | 'exchange' | 'home' | 'fullday';
 
 interface CategoryConfig {
   id: CategoryId;
@@ -25,6 +25,7 @@ export const CATEGORIES: CategoryConfig[] = [
   { id: 'expense', label: 'Expense', icon: Banknote, colorClass: 'text-destructive', bgClass: 'bg-destructive/10' },
   { id: 'exchange', label: 'Exchange', icon: ArrowLeftRight, colorClass: 'text-primary', bgClass: 'bg-primary/10' },
   { id: 'home', label: 'Home', icon: Home, colorClass: 'text-muted-foreground', bgClass: 'bg-secondary' },
+  { id: 'fullday', label: 'Full Day Bill', icon: FileSpreadsheet, colorClass: 'text-accent', bgClass: 'bg-accent/10' },
 ];
 
 interface SectionFlowData {
@@ -50,6 +51,7 @@ function getSectionFlow(categoryId: CategoryId, transactions: Transaction[]): Se
     expense: ['expenses'],
     exchange: ['exchange'],
     home: ['home'],
+    fullday: [],
   };
 
   const addIn = (payments: any[]) => {

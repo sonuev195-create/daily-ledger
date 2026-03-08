@@ -515,6 +515,39 @@ export function CustomerInlineEntry({
           }
           await updateCustomerBalance(finalCustomerId, -totalPayments, 0);
         }
+
+        // Auto-create Customer Advance transaction for overpayment saved as advance
+        if (entry.type === 'sale' && saveAsAdvance && due < 0) {
+          const overpaymentAmt = Math.abs(due);
+          const totalGivenBack = giveBackPayments.reduce((s, g) => s + g.amount, 0);
+          const advanceAmount = overpaymentAmt - totalGivenBack;
+          if (advanceAmount > 0) {
+            // Generate CA bill number
+            const { data: lastCA } = await supabase.from('transactions').select('bill_number')
+              .like('bill_number', 'CA%').order('created_at', { ascending: false }).limit(1);
+            let caNum = 1;
+            if (lastCA?.[0]?.bill_number) {
+              const n = parseInt(lastCA[0].bill_number.replace('CA', ''), 10);
+              if (!isNaN(n)) caNum = n + 1;
+            }
+            const caBillNumber = `CA${caNum.toString().padStart(4, '0')}`;
+
+            const advanceTxn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+              date: selectedDate,
+              section: 'sale' as TransactionSection,
+              type: 'customer_advance',
+              amount: advanceAmount,
+              payments: [{ id: uuidv4(), mode: 'cash' as PaymentMode, amount: advanceAmount }],
+              billNumber: caBillNumber,
+              customerId: finalCustomerId,
+              customerName: entry.customerQuery || undefined,
+              reference: `From sale overpayment ${entry.billNumber}`,
+            };
+            await onSave(advanceTxn);
+            await updateCustomerBalance(finalCustomerId, 0, advanceAmount);
+            toast.success(`₹${advanceAmount.toLocaleString('en-IN')} saved as Customer Advance (${caBillNumber})`);
+          }
+        }
       }
 
       setEntry(createEmptyRow());

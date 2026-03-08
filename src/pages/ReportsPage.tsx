@@ -27,8 +27,10 @@ function downloadCSV(rows: string[][], filename: string) {
 const reportTabs: { id: ReportTab; label: string; icon: any }[] = [
   { id: 'daily', label: 'Daily', icon: FileText },
   { id: 'monthly', label: 'Monthly', icon: BarChart3 },
+  { id: 'employee', label: 'Employee', icon: UserCheck },
+  { id: 'supplier_detail', label: 'Supplier', icon: Truck },
   { id: 'customer', label: 'Customers', icon: Users },
-  { id: 'supplier', label: 'Suppliers', icon: Truck },
+  { id: 'supplier', label: 'Ledger', icon: Truck },
   { id: 'inventory', label: 'Inventory', icon: Package },
   { id: 'drawer', label: 'Drawer', icon: ArrowLeftRight },
 ];

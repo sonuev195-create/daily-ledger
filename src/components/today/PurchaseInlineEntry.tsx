@@ -292,6 +292,39 @@ export function PurchaseInlineEntry({
 
       await onSave(transaction);
 
+      // Save bill items and create batches for purchase bills with extracted items
+      if (isBillType && extractedBillItems.length > 0) {
+        const { data: savedTxn } = await supabase.from('transactions')
+          .select('id').eq('bill_number', entry.billNumber).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        
+        if (savedTxn) {
+          const billItemsData = extractedBillItems.filter(i => i.selectedItemId).map(i => {
+            const masterItem = allItems.find(mi => mi.id === i.selectedItemId);
+            return {
+              itemId: i.selectedItemId,
+              batchId: undefined as string | undefined,
+              itemName: masterItem?.name || i.extractedName,
+              primaryQty: i.quantity || 0,
+              secondaryQty: 0,
+              rate: i.amount && i.quantity ? i.amount / i.quantity : 0,
+              total: i.amount || 0,
+            };
+          });
+
+          // Create batches for each item
+          for (const bi of billItemsData) {
+            if (bi.itemId) {
+              const batchId = await createBatchFromPurchase(
+                bi.itemId, bi.itemName, entry.billNumber, bi.rate, bi.primaryQty, bi.secondaryQty
+              );
+              if (batchId) bi.batchId = batchId;
+            }
+          }
+
+          await saveBillToSupabase(savedTxn.id, entry.billNumber, dbType, amountNum, undefined, entry.supplierQuery, billItemsData);
+        }
+      }
+
       // Update supplier balance for bill types and returns
       if (entry.supplierId) {
         const affectsDue = ['purchase_bill_a', 'purchase_bill_b', 'purchase_return_a', 'purchase_return_b'].includes(entry.type);
@@ -322,6 +355,8 @@ export function PurchaseInlineEntry({
       }
 
       setEntry(createEmptyRow());
+      setExtractedBillItems([]);
+      if (editingTransaction) onCancelEdit?.();
       toast.success('Saved');
     } catch (err) {
       toast.error('Error saving');

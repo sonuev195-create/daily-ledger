@@ -860,14 +860,16 @@ function ChangePasswordSection() {
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (isAdmin) {
+      supabase.from('app_users').select('id, username, role, display_name').eq('is_active', true).order('username').then(({ data }) => {
+        setAllUsers(data || []);
+      });
+    }
+  }, [isAdmin]);
+
   // Only admin can access this section
   if (!isAdmin) return null;
-
-  useEffect(() => {
-    supabase.from('app_users').select('id, username, role, display_name').eq('is_active', true).order('username').then(({ data }) => {
-      setAllUsers(data || []);
-    });
-  }, []);
 
   const selectedUser = allUsers.find(u => u.id === selectedUserId);
 

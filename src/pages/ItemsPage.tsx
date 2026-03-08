@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen, ArrowUp, ArrowDown, Tag } from 'lucide-react';
+import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen, Tag } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Item, Category } from '@/types';
 import { useItems, useCategories } from '@/hooks/useSupabaseData';
@@ -13,6 +13,9 @@ import { toast } from 'sonner';
 import { CategorySheet } from '@/components/items/CategorySheet';
 import { BatchList } from '@/components/items/BatchList';
 import { cn } from '@/lib/utils';
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { SortableItem } from '@/components/ui/sortable-item';
 
 export default function ItemsPage() {
   const { items: supabaseItems, loading: itemsLoading, addItem: addSupabaseItem, updateItem: updateSupabaseItem, deleteItem: deleteSupabaseItem, reorderItems, refetch: refetchItems } = useItems();
@@ -200,14 +203,18 @@ export default function ItemsPage() {
 
   const canReorder = !searchQuery && !selectedCategoryId;
 
-  const handleMoveItem = async (itemId: string, direction: 'up' | 'down') => {
-    const idx = items.findIndex(i => i.id === itemId);
-    if (idx < 0) return;
-    if (direction === 'up' && idx === 0) return;
-    if (direction === 'down' && idx === items.length - 1) return;
-    const reordered = [...items];
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = items.findIndex(i => i.id === active.id);
+    const newIndex = items.findIndex(i => i.id === over.id);
+    const reordered = arrayMove(items, oldIndex, newIndex);
+    setItems(reordered);
     await reorderItems(reordered);
   };
 
@@ -380,6 +387,44 @@ export default function ItemsPage() {
                 {searchQuery || selectedCategoryId ? 'Try a different filter' : 'Add your first item to get started'}
               </p>
             </div>
+          ) : canReorder ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={filteredItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                {filteredItems.map((item) => (
+                  <SortableItem key={item.id} id={item.id} className="transaction-card p-3 mb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-medium text-foreground truncate">{item.name}</h3>
+                          {item.categoryId && (
+                            <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium bg-accent/10 text-accent-foreground border border-accent/20">
+                              {getCategoryName(item.categoryId)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span>Qty: {item.primaryQuantity || 0}{item.secondaryQuantity ? ` / ${item.secondaryQuantity}` : ''}</span>
+                          <span>Rate: {fmt(item.purchaseRate || 0)}</span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-semibold text-foreground text-sm">{fmt(item.sellingPrice)}</p>
+                        <p className="text-[10px] text-muted-foreground">Val: {fmt(item.inventoryValue || 0)}</p>
+                      </div>
+                      <div className="flex items-center gap-0.5 ml-1">
+                        <button onClick={() => handleEdit(item)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary transition-colors">
+                          <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                        <button onClick={() => handleDelete(item)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                        </button>
+                      </div>
+                    </div>
+                    <BatchList item={item} onBatchesChange={loadItems} />
+                  </SortableItem>
+                ))}
+              </SortableContext>
+            </DndContext>
           ) : (
             filteredItems.map((item, index) => (
               <motion.div key={item.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.02 }}
@@ -405,18 +450,6 @@ export default function ItemsPage() {
                     <p className="text-[10px] text-muted-foreground">Val: {fmt(item.inventoryValue || 0)}</p>
                   </div>
                   <div className="flex items-center gap-0.5 ml-1">
-                    {canReorder && (
-                      <div className="flex flex-col">
-                        <button onClick={() => handleMoveItem(item.id, 'up')}
-                          className="w-6 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors">
-                          <ArrowUp className="w-3 h-3 text-muted-foreground" />
-                        </button>
-                        <button onClick={() => handleMoveItem(item.id, 'down')}
-                          className="w-6 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors">
-                          <ArrowDown className="w-3 h-3 text-muted-foreground" />
-                        </button>
-                      </div>
-                    )}
                     <button onClick={() => handleEdit(item)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary transition-colors">
                       <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
                     </button>

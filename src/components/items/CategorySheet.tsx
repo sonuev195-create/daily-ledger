@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Edit2, Trash2, FileSpreadsheet, ArrowUp, ArrowDown } from 'lucide-react';
+import { X, Plus, Edit2, Trash2, FileSpreadsheet } from 'lucide-react';
 import { Category } from '@/types';
 import { useCategories } from '@/hooks/useSupabaseData';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { SortableItem } from '@/components/ui/sortable-item';
 
 interface CategorySheetProps {
   isOpen: boolean;
@@ -19,6 +22,11 @@ export function CategorySheet({ isOpen, onClose, onCategoriesChange }: CategoryS
   const [isAdding, setIsAdding] = useState(false);
   const [activeTab, setActiveTab] = useState('list');
   const [bulkData, setBulkData] = useState('');
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+  );
 
   useEffect(() => {
     if (isOpen) { refetch(); setActiveTab('list'); }
@@ -54,18 +62,12 @@ export function CategorySheet({ isOpen, onClose, onCategoriesChange }: CategoryS
     resetForm();
   };
 
-  const handleMoveUp = async (index: number) => {
-    if (index === 0) return;
-    const reordered = [...categories];
-    [reordered[index - 1], reordered[index]] = [reordered[index], reordered[index - 1]];
-    await reorderCategories(reordered);
-    onCategoriesChange?.();
-  };
-
-  const handleMoveDown = async (index: number) => {
-    if (index === categories.length - 1) return;
-    const reordered = [...categories];
-    [reordered[index], reordered[index + 1]] = [reordered[index + 1], reordered[index]];
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = categories.findIndex(c => c.id === active.id);
+    const newIndex = categories.findIndex(c => c.id === over.id);
+    const reordered = arrayMove(categories, oldIndex, newIndex);
     await reorderCategories(reordered);
     onCategoriesChange?.();
   };
@@ -141,35 +143,29 @@ export function CategorySheet({ isOpen, onClose, onCategoriesChange }: CategoryS
                       <p className="text-muted-foreground">No categories yet</p>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {categories.map((category, index) => (
-                        <div key={category.id} className="flex items-center justify-between p-3 rounded-xl bg-secondary/30">
-                          <div className="flex items-center gap-2">
-                            <div className="flex flex-col">
-                              <button onClick={() => handleMoveUp(index)} disabled={index === 0}
-                                className="w-6 h-5 flex items-center justify-center rounded hover:bg-secondary disabled:opacity-30 transition-colors">
-                                <ArrowUp className="w-3 h-3 text-muted-foreground" />
-                              </button>
-                              <button onClick={() => handleMoveDown(index)} disabled={index === categories.length - 1}
-                                className="w-6 h-5 flex items-center justify-center rounded hover:bg-secondary disabled:opacity-30 transition-colors">
-                                <ArrowDown className="w-3 h-3 text-muted-foreground" />
-                              </button>
-                            </div>
-                            <p className="font-medium text-foreground">{category.name}</p>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleEdit(category)}
-                              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary transition-colors">
-                              <Edit2 className="w-4 h-4 text-muted-foreground" />
-                            </button>
-                            <button onClick={() => handleDelete(category)}
-                              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors">
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </button>
-                          </div>
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                      <SortableContext items={categories.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                        <div className="space-y-2">
+                          {categories.map((category) => (
+                            <SortableItem key={category.id} id={category.id} className="p-3 rounded-xl bg-secondary/30">
+                              <div className="flex items-center justify-between">
+                                <p className="font-medium text-foreground">{category.name}</p>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => handleEdit(category)}
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary transition-colors">
+                                    <Edit2 className="w-4 h-4 text-muted-foreground" />
+                                  </button>
+                                  <button onClick={() => handleDelete(category)}
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors">
+                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                  </button>
+                                </div>
+                              </div>
+                            </SortableItem>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </SortableContext>
+                    </DndContext>
                   )}
                 </div>
               )}

@@ -66,23 +66,13 @@ export default function ReportsPage() {
   );
 }
 
-// Helper to resolve employee names for display
-function ResolvedName({ txn }: { txn: any }) {
-  const [name, setName] = useState<string | null>(null);
-  
-  useEffect(() => {
-    if (txn.customer_name || txn.supplier_name || txn.reference) {
-      setName(txn.customer_name || txn.supplier_name || txn.reference);
-    } else if (txn.employee_id) {
-      supabase.from('employees').select('name').eq('id', txn.employee_id).maybeSingle().then(({ data }) => {
-        setName(data?.name || txn.employee_id?.slice(0, 8));
-      });
-    } else {
-      setName('-');
-    }
-  }, [txn]);
-
-  return <>{name || '-'}</>;
+// Helper to get name from pre-fetched map
+function getResolvedName(txn: any, empMap: Record<string, string>) {
+  if (txn.customer_name) return txn.customer_name;
+  if (txn.supplier_name) return txn.supplier_name;
+  if (txn.reference) return txn.reference;
+  if (txn.employee_id && empMap[txn.employee_id]) return empMap[txn.employee_id];
+  return '-';
 }
 
 // ====== Helper to get bill type label ======

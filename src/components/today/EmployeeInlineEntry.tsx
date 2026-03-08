@@ -130,7 +130,6 @@ export function EmployeeInlineEntry({
       })();
     }
   }, [entry.employeeId, entry.categoryId, categories]);
-  }, [entry.employeeId, entry.categoryId, categories]);
 
   useEffect(() => {
     if (entry.employeeId) { setShowDropdown(false); return; }

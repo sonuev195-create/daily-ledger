@@ -257,6 +257,7 @@ function DailyReport() {
 
 // ====== MONTHLY REPORT (matching image layout) ======
 function MonthlyReport() {
+  const { isAdmin } = useAuth();
   const [month, setMonth] = useState(new Date());
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

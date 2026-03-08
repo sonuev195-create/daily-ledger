@@ -71,7 +71,7 @@ export function useItems() {
   const [loading, setLoading] = useState(true);
 
   const fetchItems = useCallback(async () => {
-    const { data, error } = await supabase.from('items').select('*').order('name');
+    const { data, error } = await supabase.from('items').select('*').order('sort_order', { ascending: true });
     if (!error && data) {
       setItems(data.map(i => ({
         id: i.id,
@@ -83,6 +83,7 @@ export function useItems() {
         secondaryUnit: i.secondary_unit || undefined,
         conversionRate: i.conversion_rate ? Number(i.conversion_rate) : undefined,
         conversionType: i.conversion_type as 'permanent' | 'batch_wise' | undefined,
+        sortOrder: (i as any).sort_order ?? 0,
         createdAt: new Date(i.created_at),
         updatedAt: new Date(i.updated_at),
       })));

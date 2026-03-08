@@ -148,6 +148,7 @@ export interface Item {
   secondaryQuantity?: number;
   purchaseRate?: number;
   inventoryValue?: number;
+  sortOrder?: number;
   createdAt: Date;
   updatedAt: Date;
 }

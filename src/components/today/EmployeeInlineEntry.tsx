@@ -54,10 +54,13 @@ interface EmployeeInlineEntryProps {
   onCancelEdit?: () => void;
 }
 
+type EntryMode = 'this_month' | 'previous';
+
 export function EmployeeInlineEntry({
   transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction, editingTransaction, onCancelEdit,
 }: EmployeeInlineEntryProps) {
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
+  const [mode, setMode] = useState<EntryMode>('this_month');
   const [employees, setEmployees] = useState<EmployeeResult[]>([]);
   const { selectableMethods } = usePaymentMethods();
   const [categories, setCategories] = useState<SalaryCategory[]>([]);
@@ -76,6 +79,10 @@ export function EmployeeInlineEntry({
   const employeeTransactions = transactions.filter(t => t.section === 'employee');
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({});
   const [previousDue, setPreviousDue] = useState<number>(0);
+  const [thisMonthDue, setThisMonthDue] = useState<number>(0);
+
+  // Filter out "Previous" from categories for display
+  const filteredCategories = categories.filter(c => c.name.toLowerCase() !== 'previous');
 
   useEffect(() => {
     supabase.from('salary_categories').select('*').order('name').then(({ data }) => setCategories(data || []));
@@ -92,53 +99,76 @@ export function EmployeeInlineEntry({
     });
   }, [transactions]);
 
-  // Calculate previous month due when "Previous" category is selected
+  // Calculate previous month due when in previous mode
   useEffect(() => {
-    const prevCat = categories.find(c => c.name.toLowerCase() === 'previous');
-    if (entry.employeeId && entry.categoryId && prevCat && entry.categoryId === prevCat.id) {
-      (async () => {
-        const now = new Date();
-        const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const lastMonth = new Date(firstOfMonth);
-        lastMonth.setDate(lastMonth.getDate() - 1);
-        const firstOfLastMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
-        
-        const { data } = await supabase.from('transactions')
-          .select('amount, payments')
-          .eq('employee_id', entry.employeeId!)
-          .eq('section', 'employee')
-          .gte('date', format(firstOfLastMonth, 'yyyy-MM-dd'))
-          .lte('date', format(lastMonth, 'yyyy-MM-dd'));
-        
-        let totalSalary = 0;
-        let totalPaid = 0;
-        (data || []).forEach(t => {
-          totalSalary += Number(t.amount);
-          const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
-          totalPaid += payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-        });
-        const due = Math.max(0, totalSalary - totalPaid);
-        setPreviousDue(due);
-        // Auto-fill salary (due amount) and payment with the due value
-        if (due > 0) {
-          setEntry(prev => ({
-            ...prev,
-            salary: due.toString(),
-            payments: [{ id: uuidv4(), mode: prev.payments[0]?.mode || 'cash', amount: due }],
-          }));
-        }
-      })();
-    }
-  }, [entry.employeeId, entry.categoryId, categories]);
+    if (!entry.employeeId || mode !== 'previous') { setPreviousDue(0); return; }
+    (async () => {
+      const now = new Date();
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastMonth = new Date(firstOfMonth);
+      lastMonth.setDate(lastMonth.getDate() - 1);
+      const firstOfLastMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
+
+      const { data } = await supabase.from('transactions')
+        .select('amount, payments')
+        .eq('employee_id', entry.employeeId!)
+        .eq('section', 'employee')
+        .gte('date', format(firstOfLastMonth, 'yyyy-MM-dd'))
+        .lte('date', format(lastMonth, 'yyyy-MM-dd'));
+
+      let totalSalary = 0;
+      let totalPaid = 0;
+      (data || []).forEach(t => {
+        totalSalary += Number(t.amount);
+        const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
+        totalPaid += payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+      });
+      const due = Math.max(0, totalSalary - totalPaid);
+      setPreviousDue(due);
+      if (due > 0) {
+        setEntry(prev => ({
+          ...prev,
+          salary: due.toString(),
+          payments: [{ id: uuidv4(), mode: prev.payments[0]?.mode || 'cash', amount: due }],
+        }));
+      }
+    })();
+  }, [entry.employeeId, mode]);
+
+  // Calculate this month due
+  useEffect(() => {
+    if (!entry.employeeId || mode !== 'this_month') { setThisMonthDue(0); return; }
+    (async () => {
+      const now = new Date();
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+      const { data } = await supabase.from('transactions')
+        .select('amount, payments')
+        .eq('employee_id', entry.employeeId!)
+        .eq('section', 'employee')
+        .gte('date', format(firstOfMonth, 'yyyy-MM-dd'))
+        .lte('date', format(lastOfMonth, 'yyyy-MM-dd'));
+
+      let totalSalary = 0;
+      let totalPaid = 0;
+      (data || []).forEach(t => {
+        totalSalary += Number(t.amount);
+        const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
+        totalPaid += payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+      });
+      setThisMonthDue(Math.max(0, totalSalary - totalPaid));
+    })();
+  }, [entry.employeeId, mode]);
 
   useEffect(() => {
     if (entry.employeeId) { setShowDropdown(false); return; }
     const timer = setTimeout(async () => {
-      if (entry.employeeId) return; // guard against race
+      if (entry.employeeId) return;
       if (entry.employeeQuery.length >= 1) {
         const { data } = await supabase.from('employees').select('id, name, advance_balance, salary')
           .ilike('name', `%${entry.employeeQuery}%`).order('name').limit(10);
-        if (entry.employeeId) return; // guard after async
+        if (entry.employeeId) return;
         setEmployees((data || []).map(e => ({ id: e.id, name: e.name, advance_balance: Number(e.advance_balance), salary: Number(e.salary) })));
         setShowDropdown(true);
       } else {
@@ -180,8 +210,14 @@ export function EmployeeInlineEntry({
   // Pre-fill form when editing
   useEffect(() => {
     if (editingTransaction && editingTransaction.section === 'employee') {
-      // Find employee name
       const empId = editingTransaction.employeeId;
+      // Check if this is a "previous" category transaction
+      const prevCat = categories.find(c => c.name.toLowerCase() === 'previous');
+      if (prevCat && editingTransaction.reference === prevCat.id) {
+        setMode('previous');
+      } else {
+        setMode('this_month');
+      }
       if (empId) {
         supabase.from('employees').select('id, name, advance_balance, salary').eq('id', empId).single().then(({ data }) => {
           if (data) {
@@ -198,7 +234,7 @@ export function EmployeeInlineEntry({
         });
       }
     }
-  }, [editingTransaction]);
+  }, [editingTransaction, categories]);
 
   const selectEmployee = (e: EmployeeResult) => {
     setEntry(prev => ({ ...prev, employeeQuery: e.name, employeeId: e.id, employeeAdvance: e.advance_balance, salary: e.salary.toString() }));
@@ -217,12 +253,36 @@ export function EmployeeInlineEntry({
   const addPaymentMode = () => setEntry(prev => ({ ...prev, payments: [...prev.payments, { id: uuidv4(), mode: 'upi', amount: 0 }] }));
   const removePayment = (i: number) => { if (entry.payments.length > 1) setEntry(prev => ({ ...prev, payments: prev.payments.filter((_, idx) => idx !== i) })); };
 
+  const handleModeChange = (newMode: EntryMode) => {
+    setMode(newMode);
+    // Reset payment when switching modes
+    setEntry(prev => ({
+      ...prev,
+      categoryId: '',
+      salary: newMode === 'this_month' && prev.employeeId ? prev.salary : '',
+      payments: [{ id: uuidv4(), mode: 'cash', amount: 0 }],
+    }));
+  };
+
   const handleSave = async () => {
     if (!entry.employeeId) { toast.error('Select an employee'); return; }
-    if (!entry.categoryId) { toast.error('Select a category'); return; }
+    if (mode === 'this_month' && !entry.categoryId) { toast.error('Select a category'); return; }
     const totalPayments = entry.payments.reduce((s, p) => s + p.amount, 0);
     const salaryAmount = parseFloat(entry.salary) || 0;
-    // Allow zero salary (presence only) and zero payment (salary recorded, payment later)
+
+    // For previous mode, find/create the "Previous" category
+    let categoryId = entry.categoryId;
+    if (mode === 'previous') {
+      let prevCat = categories.find(c => c.name.toLowerCase() === 'previous');
+      if (!prevCat) {
+        const { data } = await supabase.from('salary_categories').insert({ name: 'Previous' }).select().single();
+        if (data) {
+          prevCat = data;
+          setCategories(prev => [...prev, data]);
+        }
+      }
+      categoryId = prevCat?.id || '';
+    }
 
     setSaving(true);
     try {
@@ -234,12 +294,11 @@ export function EmployeeInlineEntry({
         payments: entry.payments.filter(p => p.amount > 0),
         employeeId: entry.employeeId,
         billNumber: `EM${Date.now().toString().slice(-6)}`,
-        reference: entry.categoryId,
+        reference: categoryId,
       };
 
       await onSave(transaction);
 
-      // Only deduct advance if payment was actually made
       if (totalPayments > 0) {
         const { data: emp } = await supabase.from('employees').select('advance_balance').eq('id', entry.employeeId).single();
         if (emp && Number(emp.advance_balance) > 0) {
@@ -291,10 +350,6 @@ export function EmployeeInlineEntry({
   };
 
   const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || 'Unknown';
-  const isPreviousCategory = (() => {
-    const prevCat = categories.find(c => c.name.toLowerCase() === 'previous');
-    return prevCat ? entry.categoryId === prevCat.id : false;
-  })();
 
   return (
     <div className="space-y-3">
@@ -355,67 +410,63 @@ export function EmployeeInlineEntry({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="relative">
-            <label className="text-[10px] text-muted-foreground mb-0.5 block">Employee</label>
-            <Input ref={inputRef} value={entry.employeeQuery}
-              onChange={e => setEntry(prev => ({ ...prev, employeeQuery: e.target.value, employeeId: undefined, employeeAdvance: 0 }))}
-              placeholder="Employee name..." className="h-8 text-xs" />
-            {entry.employeeAdvance > 0 && (
-              <p className="text-[10px] text-warning mt-0.5">Advance: {formatINR(entry.employeeAdvance)}</p>
+        {/* Previous / This Month Toggle */}
+        <div className="flex rounded-lg overflow-hidden border border-border">
+          <button
+            onClick={() => handleModeChange('this_month')}
+            className={cn(
+              "flex-1 py-1.5 text-xs font-medium transition-colors",
+              mode === 'this_month' ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
             )}
-            <AnimatePresence>
-              {showDropdown && employees.length > 0 && (
-                <motion.div ref={dropdownRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                  {employees.map(e => (
-                    <button key={e.id} onClick={() => selectEmployee(e)}
-                      className="w-full px-3 py-2 text-left hover:bg-secondary/50 text-xs border-b border-border/30 last:border-0">
-                      <div className="flex justify-between">
-                        <span className="font-medium">{e.name}</span>
-                        {e.advance_balance > 0 && <span className="text-warning">Adv: {formatINR(e.advance_balance)}</span>}
-                      </div>
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div>
-            <label className="text-[10px] text-muted-foreground mb-0.5 block">Category</label>
-            <Select value={entry.categoryId} onValueChange={v => setEntry(prev => ({ ...prev, categoryId: v }))}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
-              <SelectContent>
-                {categories.map(c => <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          >
+            This Month
+          </button>
+          <button
+            onClick={() => handleModeChange('previous')}
+            className={cn(
+              "flex-1 py-1.5 text-xs font-medium transition-colors",
+              mode === 'previous' ? "bg-warning text-warning-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+            )}
+          >
+            Previous
+          </button>
         </div>
 
-        {entry.employeeId && Object.keys(categoryBalances).length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {Object.entries(categoryBalances).map(([catId, total]) => (
-              <span key={catId} className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-                {catId === 'uncategorized' ? 'Other' : getCategoryName(catId)}: {formatINR(total)}
-              </span>
-            ))}
-          </div>
-        )}
+        {/* Employee Search */}
+        <div className="relative">
+          <label className="text-[10px] text-muted-foreground mb-0.5 block">Employee</label>
+          <Input ref={inputRef} value={entry.employeeQuery}
+            onChange={e => setEntry(prev => ({ ...prev, employeeQuery: e.target.value, employeeId: undefined, employeeAdvance: 0 }))}
+            placeholder="Employee name..." className="h-8 text-xs" />
+          {entry.employeeAdvance > 0 && (
+            <p className="text-[10px] text-warning mt-0.5">Advance: {formatINR(entry.employeeAdvance)}</p>
+          )}
+          <AnimatePresence>
+            {showDropdown && employees.length > 0 && (
+              <motion.div ref={dropdownRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                {employees.map(e => (
+                  <button key={e.id} onClick={() => selectEmployee(e)}
+                    className="w-full px-3 py-2 text-left hover:bg-secondary/50 text-xs border-b border-border/30 last:border-0">
+                    <div className="flex justify-between">
+                      <span className="font-medium">{e.name}</span>
+                      {e.advance_balance > 0 && <span className="text-warning">Adv: {formatINR(e.advance_balance)}</span>}
+                    </div>
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-        {isPreviousCategory && previousDue > 0 && (
-          <div className="bg-warning/10 border border-warning/30 rounded-lg p-2">
-            <span className="text-xs font-medium text-warning">Previous Month Due: {formatINR(previousDue)}</span>
-          </div>
-        )}
-
-        {!isPreviousCategory && (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Day Salary</label>
-              <Input type="number" inputMode="numeric" value={entry.salary}
-                onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
-            </div>
+        {/* Previous Mode: Due + Payment only */}
+        {mode === 'previous' && (
+          <div className="space-y-2">
+            {entry.employeeId && (
+              <div className="bg-warning/10 border border-warning/30 rounded-lg p-2">
+                <span className="text-xs font-medium text-warning">Previous Month Due: {formatINR(previousDue)}</span>
+              </div>
+            )}
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
               <div className="space-y-1">
@@ -442,29 +493,67 @@ export function EmployeeInlineEntry({
           </div>
         )}
 
-        {isPreviousCategory && (
+        {/* This Month Mode: Category + Salary + Payment */}
+        {mode === 'this_month' && (
           <div className="space-y-2">
             <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
-              <div className="space-y-1">
-                {entry.payments.map((p, i) => (
-                  <div key={p.id} className="flex gap-1">
-                    <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
-                      <SelectTrigger className="h-7 text-[10px] w-16"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {selectableMethods.map(m => (
-                          <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input type="number" inputMode="numeric" value={p.amount || ''}
-                      onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
-                    {entry.payments.length > 1 && (
-                      <button onClick={() => removePayment(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
-                    )}
-                  </div>
-                ))}
-                <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add</button>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Category</label>
+              <Select value={entry.categoryId} onValueChange={v => setEntry(prev => ({ ...prev, categoryId: v }))}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectContent>
+                  {filteredCategories.map(c => <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {entry.employeeId && thisMonthDue > 0 && (
+              <div className="bg-accent/10 border border-accent/30 rounded-lg p-2">
+                <span className="text-xs font-medium text-accent">This Month Due: {formatINR(thisMonthDue)}</span>
+              </div>
+            )}
+
+            {entry.employeeId && Object.keys(categoryBalances).length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(categoryBalances).map(([catId, total]) => {
+                  const catName = catId === 'uncategorized' ? 'Other' : getCategoryName(catId);
+                  if (catName.toLowerCase() === 'previous') return null;
+                  return (
+                    <span key={catId} className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                      {catName}: {formatINR(total)}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-0.5 block">Day Salary</label>
+                <Input type="number" inputMode="numeric" value={entry.salary}
+                  onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
+                <div className="space-y-1">
+                  {entry.payments.map((p, i) => (
+                    <div key={p.id} className="flex gap-1">
+                      <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
+                        <SelectTrigger className="h-7 text-[10px] w-16"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {selectableMethods.map(m => (
+                            <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input type="number" inputMode="numeric" value={p.amount || ''}
+                        onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+                      {entry.payments.length > 1 && (
+                        <button onClick={() => removePayment(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                      )}
+                    </div>
+                  ))}
+                  <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add</button>
+                </div>
               </div>
             </div>
           </div>

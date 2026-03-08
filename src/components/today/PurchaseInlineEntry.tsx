@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Check, X, Pencil, Trash2, Camera, Upload, Loader2 } from 'lucide-react';
 import { Transaction, TransactionSection, PaymentEntry, PaymentMode } from '@/types';
+import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useItems } from '@/hooks/useSupabaseData';
+import { useItems, saveBillToSupabase, createBatchFromPurchase } from '@/hooks/useSupabaseData';
 
 type PurchaseSubType = 'purchase_payment' | 'purchase_bill_a' | 'purchase_bill_b' | 'purchase_bill_c' | 'purchase_delivered' | 'purchase_return_a' | 'purchase_return_b' | 'purchase_expenses';
 
@@ -71,10 +72,13 @@ interface PurchaseInlineEntryProps {
   onSave: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onEditTransaction: (transaction: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
+  editingTransaction?: Transaction | null;
+  onCancelEdit?: () => void;
 }
 
 export function PurchaseInlineEntry({
   transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction,
+  editingTransaction, onCancelEdit,
 }: PurchaseInlineEntryProps) {
   const { items: allItems } = useItems();
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
@@ -122,6 +126,39 @@ export function PurchaseInlineEntry({
       })();
     }
   }, [entry.type, entry.supplierId]);
+
+  // Populate entry from editingTransaction
+  useEffect(() => {
+    if (editingTransaction) {
+      const typeMap: Record<string, PurchaseSubType> = {
+        purchase_bill: 'purchase_bill_a', purchase_payment: 'purchase_payment',
+        purchase_return: 'purchase_return_a', purchase_delivered: 'purchase_delivered',
+        purchase_expenses: 'purchase_expenses',
+      };
+      let subType = typeMap[editingTransaction.type] || 'purchase_bill_a';
+      if (editingTransaction.billType === 'n_bill') subType = editingTransaction.type.includes('return') ? 'purchase_return_b' : 'purchase_bill_b';
+      if ((editingTransaction.billType as string) === 'ng_bill') subType = 'purchase_bill_c';
+      setEntry({
+        type: subType,
+        supplierId: editingTransaction.supplierId,
+        supplierQuery: editingTransaction.supplierName || '',
+        supplierBalance: 0,
+        billNumber: editingTransaction.billNumber || '',
+        amount: editingTransaction.amount?.toString() || '',
+        reference: editingTransaction.reference || '',
+        payments: editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }],
+        dueBills: [],
+        selectedBills: [],
+      });
+    }
+  }, [editingTransaction]);
+
+  const updateExtractedItemMatch = (index: number, itemId: string) => {
+    const updated = [...extractedBillItems];
+    const masterItem = allItems.find(i => i.id === itemId);
+    updated[index] = { ...updated[index], selectedItemId: itemId || null, matchedName: masterItem?.name || null, confirmed: !!itemId };
+    setExtractedBillItems(updated);
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -255,6 +292,39 @@ export function PurchaseInlineEntry({
 
       await onSave(transaction);
 
+      // Save bill items and create batches for purchase bills with extracted items
+      if (isBillType && extractedBillItems.length > 0) {
+        const { data: savedTxn } = await supabase.from('transactions')
+          .select('id').eq('bill_number', entry.billNumber).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        
+        if (savedTxn) {
+          const billItemsData = extractedBillItems.filter(i => i.selectedItemId).map(i => {
+            const masterItem = allItems.find(mi => mi.id === i.selectedItemId);
+            return {
+              itemId: i.selectedItemId,
+              batchId: undefined as string | undefined,
+              itemName: masterItem?.name || i.extractedName,
+              primaryQty: i.quantity || 0,
+              secondaryQty: 0,
+              rate: i.amount && i.quantity ? i.amount / i.quantity : 0,
+              total: i.amount || 0,
+            };
+          });
+
+          // Create batches for each item
+          for (const bi of billItemsData) {
+            if (bi.itemId) {
+              const batchId = await createBatchFromPurchase(
+                bi.itemId, bi.itemName, entry.billNumber, bi.rate, bi.primaryQty, bi.secondaryQty
+              );
+              if (batchId) bi.batchId = batchId;
+            }
+          }
+
+          await saveBillToSupabase(savedTxn.id, entry.billNumber, dbType, amountNum, undefined, entry.supplierQuery, billItemsData);
+        }
+      }
+
       // Update supplier balance for bill types and returns
       if (entry.supplierId) {
         const affectsDue = ['purchase_bill_a', 'purchase_bill_b', 'purchase_return_a', 'purchase_return_b'].includes(entry.type);
@@ -285,6 +355,8 @@ export function PurchaseInlineEntry({
       }
 
       setEntry(createEmptyRow());
+      setExtractedBillItems([]);
+      if (editingTransaction) onCancelEdit?.();
       toast.success('Saved');
     } catch (err) {
       toast.error('Error saving');
@@ -472,16 +544,29 @@ export function PurchaseInlineEntry({
             {extractedBillItems.length > 0 && (
               <div className="border border-border rounded-lg overflow-hidden">
                 <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
-                  Extracted Items ({extractedBillItems.length})
+                  Extracted Items ({extractedBillItems.length}) — {extractedBillItems.filter(i => i.selectedItemId).length} matched
                 </div>
-                <div className="max-h-40 overflow-y-auto divide-y divide-border/30">
+                <div className="max-h-60 overflow-y-auto divide-y divide-border/30">
                   {extractedBillItems.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-1 px-2 py-1.5 text-xs">
-                      <span className="flex-1 truncate font-medium">{item.matchedName || item.extractedName}</span>
-                      <span className="text-muted-foreground">×{item.quantity}</span>
-                      <span className="font-medium">{formatINR(item.amount)}</span>
-                      <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
-                        className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                    <div key={idx} className="px-2 py-1.5 space-y-1">
+                      <div className="flex items-center gap-1 text-xs">
+                        <span className="text-muted-foreground text-[10px] truncate max-w-[80px]">{item.extractedName}</span>
+                        <select
+                          value={item.selectedItemId || ''}
+                          onChange={(e) => updateExtractedItemMatch(idx, e.target.value)}
+                          className={cn(
+                            "flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
+                            !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground"
+                          )}
+                        >
+                          <option value="">No match</option>
+                          {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                        <span className="text-muted-foreground text-[10px]">×{item.quantity}</span>
+                        <span className="font-medium text-[11px]">{formatINR(item.amount)}</span>
+                        <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -493,9 +578,16 @@ export function PurchaseInlineEntry({
           </div>
         )}
 
-        <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save & Next'}
-        </Button>
+        <div className="flex gap-2">
+          {editingTransaction && (
+            <Button variant="outline" onClick={() => { onCancelEdit?.(); setEntry(createEmptyRow()); setExtractedBillItems([]); }} size="sm" className="h-8 text-xs">
+              Cancel
+            </Button>
+          )}
+          <Button onClick={handleSave} disabled={saving} size="sm" className="flex-1 h-8 text-xs gap-1">
+            <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : editingTransaction ? 'Update' : 'Save & Next'}
+          </Button>
+        </div>
       </div>
     </div>
   );

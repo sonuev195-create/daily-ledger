@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Pencil, Trash2, AlertTriangle, FileText, X, Check, Camera, Upload, Loader2 } from 'lucide-react';
 import { Transaction, TransactionSection, PaymentEntry, PaymentMode } from '@/types';
+import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
-import { searchCustomers, getDueBillsForCustomer, getOrCreateCustomer, updateCustomerBalance } from '@/hooks/useSupabaseData';
+import { searchCustomers, getDueBillsForCustomer, getOrCreateCustomer, updateCustomerBalance, saveBillToSupabase, deductFromBatch, getBatchesForItem } from '@/hooks/useSupabaseData';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -79,10 +80,13 @@ interface CustomerInlineEntryProps {
   onSave: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onEditTransaction: (transaction: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
+  editingTransaction?: Transaction | null;
+  onCancelEdit?: () => void;
 }
 
 export function CustomerInlineEntry({
   transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction,
+  editingTransaction, onCancelEdit,
 }: CustomerInlineEntryProps) {
   const navigate = useNavigate();
   const { items: allItems } = useItems();
@@ -105,6 +109,28 @@ export function CustomerInlineEntry({
   useEffect(() => {
     supabase.from('welders').select('id, name').order('name').then(({ data }) => setWelders(data || []));
   }, []);
+
+  // Populate entry from editingTransaction
+  useEffect(() => {
+    if (editingTransaction) {
+      const typeMap: Record<string, CustomerSubType> = {
+        sale: 'sale', sales_return: 'sales_return', balance_paid: 'balance_paid', customer_advance: 'customer_advance',
+      };
+      setEntry({
+        type: typeMap[editingTransaction.type] || 'sale',
+        billNumber: editingTransaction.billNumber || '',
+        customerQuery: editingTransaction.customerName || '',
+        customerId: editingTransaction.customerId,
+        customerAdvance: 0,
+        amount: editingTransaction.amount?.toString() || '',
+        payments: editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }],
+        useAdvance: '',
+        selectedBills: [],
+        dueBills: [],
+        welderId: editingTransaction.welderId,
+      });
+    }
+  }, [editingTransaction]);
 
   const generateBillNumber = async (type: CustomerSubType) => {
     const prefixMap: Record<CustomerSubType, string> = {
@@ -262,6 +288,13 @@ export function CustomerInlineEntry({
     }
   };
 
+  const updateExtractedItemMatch = (index: number, itemId: string) => {
+    const updated = [...extractedBillItems];
+    const masterItem = allItems.find(i => i.id === itemId);
+    updated[index] = { ...updated[index], selectedItemId: itemId || null, matchedName: masterItem?.name || null, confirmed: !!itemId };
+    setExtractedBillItems(updated);
+  };
+
   const handleSave = async () => {
     const totalPayments = entry.payments.reduce((s, p) => s + p.amount, 0);
 
@@ -309,6 +342,45 @@ export function CustomerInlineEntry({
 
       await onSave(transaction);
 
+      // Save bill items and deduct inventory for sale/sales_return with extracted items
+      if ((entry.type === 'sale' || entry.type === 'sales_return') && extractedBillItems.length > 0) {
+        // Get the transaction ID from the most recent transaction
+        const { data: savedTxn } = await supabase.from('transactions')
+          .select('id').eq('bill_number', entry.billNumber).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        
+        if (savedTxn) {
+          const billItemsData = extractedBillItems.filter(i => i.selectedItemId).map(i => {
+            const masterItem = allItems.find(mi => mi.id === i.selectedItemId);
+            return {
+              itemId: i.selectedItemId,
+              batchId: undefined as string | undefined,
+              itemName: masterItem?.name || i.extractedName,
+              primaryQty: i.quantity || 0,
+              secondaryQty: 0,
+              rate: i.amount && i.quantity ? i.amount / i.quantity : (masterItem?.sellingPrice || 0),
+              total: i.amount || 0,
+            };
+          });
+
+          // Auto-select batches and deduct for sales
+          if (entry.type === 'sale') {
+            for (const bi of billItemsData) {
+              if (bi.itemId) {
+                const batches = await getBatchesForItem(bi.itemId);
+                const withStock = batches.filter(b => b.primaryQuantity > 0)
+                  .sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
+                if (withStock.length > 0) {
+                  bi.batchId = withStock[0].id;
+                  await deductFromBatch(withStock[0].id, bi.primaryQty, bi.secondaryQty);
+                }
+              }
+            }
+          }
+
+          await saveBillToSupabase(savedTxn.id, entry.billNumber, entry.type, amountNum, entry.customerQuery, undefined, billItemsData);
+        }
+      }
+
       if (finalCustomerId) {
         if (due > 0) await updateCustomerBalance(finalCustomerId, due, 0);
         if (advanceUsed > 0) await updateCustomerBalance(finalCustomerId, 0, -advanceUsed);
@@ -326,6 +398,8 @@ export function CustomerInlineEntry({
       }
 
       setEntry(createEmptyRow());
+      setExtractedBillItems([]);
+      if (editingTransaction) onCancelEdit?.();
       toast.success('Saved');
     } catch (err) {
       toast.error('Error saving');
@@ -565,16 +639,29 @@ export function CustomerInlineEntry({
             {extractedBillItems.length > 0 && (
               <div className="border border-border rounded-lg overflow-hidden">
                 <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
-                  Extracted Items ({extractedBillItems.length})
+                  Extracted Items ({extractedBillItems.length}) — {extractedBillItems.filter(i => i.selectedItemId).length} matched
                 </div>
-                <div className="max-h-40 overflow-y-auto divide-y divide-border/30">
+                <div className="max-h-60 overflow-y-auto divide-y divide-border/30">
                   {extractedBillItems.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-1 px-2 py-1.5 text-xs">
-                      <span className="flex-1 truncate font-medium">{item.matchedName || item.extractedName}</span>
-                      <span className="text-muted-foreground">×{item.quantity}</span>
-                      <span className="font-medium">{formatINR(item.amount)}</span>
-                      <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
-                        className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                    <div key={idx} className="px-2 py-1.5 space-y-1">
+                      <div className="flex items-center gap-1 text-xs">
+                        <span className="text-muted-foreground text-[10px] truncate max-w-[80px]">{item.extractedName}</span>
+                        <select
+                          value={item.selectedItemId || ''}
+                          onChange={(e) => updateExtractedItemMatch(idx, e.target.value)}
+                          className={cn(
+                            "flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
+                            !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground"
+                          )}
+                        >
+                          <option value="">No match</option>
+                          {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                        <span className="text-muted-foreground text-[10px]">×{item.quantity}</span>
+                        <span className="font-medium text-[11px]">{formatINR(item.amount)}</span>
+                        <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -586,9 +673,16 @@ export function CustomerInlineEntry({
           </div>
         )}
 
-        <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-          <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save & Next'}
-        </Button>
+        <div className="flex gap-2">
+          {editingTransaction && (
+            <Button variant="outline" onClick={() => { onCancelEdit?.(); setEntry(createEmptyRow()); setExtractedBillItems([]); }} size="sm" className="h-8 text-xs">
+              Cancel
+            </Button>
+          )}
+          <Button onClick={handleSave} disabled={saving} size="sm" className="flex-1 h-8 text-xs gap-1">
+            <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : editingTransaction ? 'Update' : 'Save & Next'}
+          </Button>
+        </div>
       </div>
     </div>
   );

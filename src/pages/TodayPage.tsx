@@ -8,7 +8,6 @@ import { CategoryTransactionList } from '@/components/today/CategoryTransactionL
 import { CustomerInlineEntry } from '@/components/today/CustomerInlineEntry';
 import { PurchaseInlineEntry } from '@/components/today/PurchaseInlineEntry';
 import { EmployeeInlineEntry } from '@/components/today/EmployeeInlineEntry';
-import { AddTransactionSheet } from '@/components/transactions/AddTransactionSheet';
 import { BillDetailsSheet } from '@/components/bills/BillDetailsSheet';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useDrawer } from '@/hooks/useDrawer';
@@ -23,10 +22,7 @@ export default function TodayPage() {
     return new Date();
   });
   const [expandedCategory, setExpandedCategory] = useState<CategoryId | null>(null);
-  const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [selectedSection, setSelectedSection] = useState<TransactionSection | null>(null);
-  const [selectedType, setSelectedType] = useState<string | null>(null);
   const [viewingBill, setViewingBill] = useState<Bill | null>(null);
   const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null);
 
@@ -36,13 +32,17 @@ export default function TodayPage() {
 
   useEffect(() => {
     if (location.state?.date) setSelectedDate(new Date(location.state.date));
-    if (location.state?.openTransaction) {
-      setSelectedSection(location.state.section || null);
-      setSelectedType(location.state.type || null);
-      setIsAddOpen(true);
+    if (location.state?.editTransactionId) {
+      const txn = transactions.find(t => t.id === location.state.editTransactionId);
+      if (txn) {
+        setEditingTransaction(txn);
+        // Expand the right category
+        const categoryMap: Record<string, CategoryId> = { sale: 'customer', purchase: 'purchase', employee: 'employee', expenses: 'expense', home: 'home', exchange: 'exchange' };
+        setExpandedCategory(categoryMap[txn.section] || null);
+      }
       window.history.replaceState({}, document.title);
     }
-  }, [location.state]);
+  }, [location.state, transactions]);
 
   const openingCash = opening ? (opening.coin + opening.cash) : ((previousClosing?.manualCoin ?? 0) + (previousClosing?.manualCash ?? 0));
   const currentCash = openingCash + summary.cashIn - summary.cashOut;
@@ -55,13 +55,13 @@ export default function TodayPage() {
       await add(transaction);
     }
     setEditingTransaction(null);
-    setSelectedSection(null);
-    setSelectedType(null);
   };
 
   const handleEdit = (transaction: Transaction) => {
     setEditingTransaction(transaction);
-    setIsAddOpen(true);
+    // Expand the right category
+    const categoryMap: Record<string, CategoryId> = { sale: 'customer', purchase: 'purchase', employee: 'employee', expenses: 'expense', home: 'home', exchange: 'exchange' };
+    setExpandedCategory(categoryMap[transaction.section] || null);
   };
 
   const handleDelete = async (id: string) => {
@@ -69,10 +69,7 @@ export default function TodayPage() {
   };
 
   const handleAddTransaction = (section: TransactionSection, type: string) => {
-    setSelectedSection(section);
-    setSelectedType(type);
-    setEditingTransaction(null);
-    setIsAddOpen(true);
+    // No-op now, handled inline
   };
 
   const handleToggleCategory = (id: CategoryId) => {
@@ -89,10 +86,10 @@ export default function TodayPage() {
       return <DrawerAccordionContent opening={opening} closing={closing} previousClosing={previousClosing} summary={summary} onSaveOpening={updateOpening} onSaveClosing={updateClosing} />;
     }
     if (categoryId === 'customer') {
-      return <CustomerInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />;
+      return <CustomerInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} editingTransaction={editingTransaction?.section === 'sale' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
     }
     if (categoryId === 'purchase') {
-      return <PurchaseInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />;
+      return <PurchaseInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} editingTransaction={editingTransaction?.section === 'purchase' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
     }
     if (categoryId === 'employee') {
       return <EmployeeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />;
@@ -136,10 +133,6 @@ export default function TodayPage() {
             drawerUpi={closing ? closing.systemUpi : currentUpi} />
         )}
       </div>
-
-      <AddTransactionSheet isOpen={isAddOpen} onClose={() => { setIsAddOpen(false); setEditingTransaction(null); setSelectedSection(null); setSelectedType(null); }}
-        onSave={handleSave} editTransaction={editingTransaction} selectedDate={selectedDate}
-        initialSection={selectedSection} initialType={selectedType} />
 
       <BillDetailsSheet isOpen={!!viewingBill} onClose={() => { setViewingBill(null); setViewingTransaction(null); }}
         bill={viewingBill} transaction={viewingTransaction} />

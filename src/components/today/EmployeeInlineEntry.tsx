@@ -56,6 +56,7 @@ export function EmployeeInlineEntry({
 }: EmployeeInlineEntryProps) {
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
   const [employees, setEmployees] = useState<EmployeeResult[]>([]);
+  const { selectableMethods } = usePaymentMethods();
   const [categories, setCategories] = useState<SalaryCategory[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [saving, setSaving] = useState(false);

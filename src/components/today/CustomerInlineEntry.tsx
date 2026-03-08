@@ -453,20 +453,27 @@ export function CustomerInlineEntry({
 
       // Save bill items and deduct inventory for sale/sales_return with extracted items
       if ((entry.type === 'sale' || entry.type === 'sales_return') && extractedBillItems.length > 0) {
-        // Get the transaction ID from the most recent transaction
-        const { data: savedTxn } = await supabase.from('transactions')
-          .select('id').eq('bill_number', entry.billNumber).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        const txnId = editingTransaction?.id || null;
         
-        if (savedTxn) {
-          const billItemsData = extractedBillItems.filter(i => i.selectedItemId).map(i => {
+        // If editing, restore old inventory first
+        if (editingTransaction) {
+          await restoreInventoryForBillItems(editingTransaction.id);
+        }
+
+        // Get the transaction ID
+        const targetTxnId = txnId || (await supabase.from('transactions')
+          .select('id').eq('bill_number', entry.billNumber).order('created_at', { ascending: false }).limit(1).maybeSingle()).data?.id;
+        
+        if (targetTxnId) {
+          const billItemsData = extractedBillItems.filter(i => i.selectedItemId || i.extractedName?.trim()).map(i => {
             const masterItem = allItems.find(mi => mi.id === i.selectedItemId);
             return {
               itemId: i.selectedItemId,
               batchId: undefined as string | undefined,
               itemName: masterItem?.name || i.extractedName,
-              primaryQty: i.quantity || 0,
-              secondaryQty: 0,
-              rate: i.amount && i.quantity ? i.amount / i.quantity : (masterItem?.sellingPrice || 0),
+              primaryQty: i.quantity || i.primaryQty || 0,
+              secondaryQty: i.secondaryQty || 0,
+              rate: i.rate || (i.amount && i.quantity ? i.amount / i.quantity : (masterItem?.sellingPrice || 0)),
               total: i.amount || 0,
             };
           });
@@ -486,8 +493,11 @@ export function CustomerInlineEntry({
             }
           }
 
-          await saveBillToSupabase(savedTxn.id, entry.billNumber, entry.type, amountNum, entry.customerQuery, undefined, billItemsData);
+          await saveBillToSupabase(targetTxnId, entry.billNumber, entry.type, amountNum, entry.customerQuery, undefined, billItemsData);
         }
+      } else if (editingTransaction && (entry.type === 'sale' || entry.type === 'sales_return') && extractedBillItems.length === 0) {
+        // Editing but items cleared - restore inventory and remove bill
+        await restoreInventoryForBillItems(editingTransaction.id);
       }
 
       if (finalCustomerId) {

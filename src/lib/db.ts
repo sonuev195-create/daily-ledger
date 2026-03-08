@@ -1,12 +1,14 @@
 import { openDB, IDBPDatabase } from 'idb';
-import { 
-  Transaction, 
-  Customer, 
-  Supplier, 
-  Employee, 
-  Item, 
-  Bill, 
-  DrawerOpening, 
+import {
+  Transaction,
+  PaymentEntry,
+  GiveBackPayment,
+  Customer,
+  Supplier,
+  Employee,
+  Item,
+  Bill,
+  DrawerOpening,
   DrawerClosing,
   ExchangeTransaction,
   Category,

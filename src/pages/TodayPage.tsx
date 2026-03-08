@@ -13,6 +13,7 @@ import { BillDetailsSheet } from '@/components/bills/BillDetailsSheet';
 import { MonthView, YearView } from '@/components/today/MonthYearView';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useDrawer } from '@/hooks/useDrawer';
+import { useCanEdit } from '@/hooks/useCanEdit';
 import { Transaction, TransactionSection, Bill } from '@/types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';

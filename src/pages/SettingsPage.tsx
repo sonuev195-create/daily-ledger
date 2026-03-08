@@ -860,69 +860,89 @@ function ChangePasswordSection() {
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [createUsername, setCreateUsername] = useState('');
+  const [createPassword, setCreatePassword] = useState('');
+  const [createDisplayName, setCreateDisplayName] = useState('');
+  const [createRole, setCreateRole] = useState('employee');
+
   useEffect(() => {
-    if (isAdmin) {
-      supabase.from('app_users').select('id, username, role, display_name').eq('is_active', true).order('username').then(({ data }) => {
-        setAllUsers(data || []);
-      });
-    }
+    if (isAdmin) loadUsers();
   }, [isAdmin]);
 
-  // Only admin can access this section
+  const loadUsers = async () => {
+    const { data } = await supabase.functions.invoke('manage-users', {
+      body: { action: 'list' },
+    });
+    if (data?.users) setAllUsers(data.users);
+  };
+
   if (!isAdmin) return null;
 
   const selectedUser = allUsers.find(u => u.id === selectedUserId);
 
-  const handleChangeUsername = async () => {
-    if (!selectedUserId) { toast.error('Select a user'); return; }
-    if (!newUsername.trim()) { toast.error('Enter new username'); return; }
-    if (newUsername.trim().length < 3) { toast.error('Username must be at least 3 characters'); return; }
-
+  const handleCreateUser = async () => {
+    if (!createUsername.trim() || !createPassword.trim()) { toast.error('Username and password required'); return; }
+    if (createPassword.length < 6) { toast.error('Password must be at least 6 characters'); return; }
     setSaving(true);
     try {
-      // Check if username already taken
-      const { data: existing } = await supabase.from('app_users')
-        .select('id').eq('username', newUsername.trim()).neq('id', selectedUserId).maybeSingle();
-      if (existing) { toast.error('Username already taken'); setSaving(false); return; }
-
-      const { error } = await supabase.from('app_users')
-        .update({ username: newUsername.trim(), updated_at: new Date().toISOString() })
-        .eq('id', selectedUserId);
-
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'create', username: createUsername.trim(), password: createPassword, role: createRole, display_name: createDisplayName.trim() || createUsername.trim() },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success('User created successfully');
+      setCreateUsername(''); setCreatePassword(''); setCreateDisplayName(''); setCreateRole('employee'); setShowCreateUser(false);
+      loadUsers();
+    } catch (err: any) { toast.error(err.message || 'Failed to create user'); } finally { setSaving(false); }
+  };
+
+  const handleChangeUsername = async () => {
+    if (!selectedUserId) { toast.error('Select a user'); return; }
+    if (!newUsername.trim() || newUsername.trim().length < 3) { toast.error('Username must be at least 3 characters'); return; }
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'update-username', user_id: selectedUserId, username: newUsername.trim() },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       toast.success('Username changed successfully');
       setNewUsername('');
-      // Refresh users list
-      const { data } = await supabase.from('app_users').select('id, username, role, display_name').eq('is_active', true).order('username');
-      setAllUsers(data || []);
-    } catch (err) {
-      toast.error('Failed to change username');
-    } finally {
-      setSaving(false);
-    }
+      loadUsers();
+    } catch (err: any) { toast.error(err.message || 'Failed to change username'); } finally { setSaving(false); }
   };
 
   const handleChangePassword = async () => {
     if (!selectedUserId) { toast.error('Select a user'); return; }
     if (!newPassword.trim()) { toast.error('New password required'); return; }
     if (newPassword !== confirmPassword) { toast.error('Passwords do not match'); return; }
-    if (newPassword.length < 4) { toast.error('Password must be at least 4 characters'); return; }
-
+    if (newPassword.length < 6) { toast.error('Password must be at least 6 characters'); return; }
     setSaving(true);
     try {
-      const { error } = await supabase.from('app_users')
-        .update({ password: newPassword, updated_at: new Date().toISOString() })
-        .eq('id', selectedUserId);
-
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'update-password', user_id: selectedUserId, password: newPassword },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       toast.success('Password changed successfully');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (err) {
-      toast.error('Failed to change password');
-    } finally {
-      setSaving(false);
-    }
+      setNewPassword(''); setConfirmPassword('');
+    } catch (err: any) { toast.error(err.message || 'Failed to change password'); } finally { setSaving(false); }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUserId || selectedUserId === user?.id) { toast.error('Cannot delete your own account'); return; }
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'delete', user_id: selectedUserId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success('User deleted');
+      setSelectedUserId('');
+      loadUsers();
+    } catch (err: any) { toast.error(err.message || 'Failed to delete user'); } finally { setSaving(false); }
   };
 
   return (
@@ -932,29 +952,49 @@ function ChangePasswordSection() {
       transition={{ delay: 0.19 }}
       className="bg-secondary/30 rounded-2xl p-5 space-y-4"
     >
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-          <KeyRound className="w-5 h-5 text-primary" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <KeyRound className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-foreground">User Account Management</h2>
+            <p className="text-xs text-muted-foreground">Create, edit, or remove user accounts (Admin only)</p>
+          </div>
         </div>
-        <div>
-          <h2 className="font-semibold text-foreground">User Account Management</h2>
-          <p className="text-xs text-muted-foreground">Change username or password for any user (Admin only)</p>
-        </div>
+        <Button size="sm" variant="outline" onClick={() => setShowCreateUser(!showCreateUser)}>
+          {showCreateUser ? 'Cancel' : '+ New User'}
+        </Button>
       </div>
 
-      {/* Select User */}
+      {showCreateUser && (
+        <div className="bg-background/50 rounded-xl p-3 space-y-2 border border-primary/30">
+          <label className="text-xs font-semibold text-foreground block">Create New User</label>
+          <Input value={createDisplayName} onChange={e => setCreateDisplayName(e.target.value)} placeholder="Display name" className="h-9" />
+          <Input value={createUsername} onChange={e => setCreateUsername(e.target.value)} placeholder="Login username" className="h-9" />
+          <Input type="password" value={createPassword} onChange={e => setCreatePassword(e.target.value)} placeholder="Password (min 6 chars)" className="h-9" />
+          <Select value={createRole} onValueChange={setCreateRole}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="employee">Employee</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={handleCreateUser} disabled={saving} className="w-full h-9">
+            {saving ? 'Creating...' : 'Create User'}
+          </Button>
+        </div>
+      )}
+
       <div>
         <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Select User</label>
         <Select value={selectedUserId} onValueChange={(v) => {
           setSelectedUserId(v);
           const u = allUsers.find(u => u.id === v);
           setNewUsername(u?.username || '');
-          setNewPassword('');
-          setConfirmPassword('');
+          setNewPassword(''); setConfirmPassword('');
         }}>
-          <SelectTrigger className="h-10">
-            <SelectValue placeholder="Select user..." />
-          </SelectTrigger>
+          <SelectTrigger className="h-10"><SelectValue placeholder="Select user..." /></SelectTrigger>
           <SelectContent>
             {allUsers.map(u => (
               <SelectItem key={u.id} value={u.id}>
@@ -967,50 +1007,34 @@ function ChangePasswordSection() {
 
       {selectedUserId && (
         <>
-          {/* Change Username */}
           <div className="bg-background/50 rounded-xl p-3 space-y-2 border border-border">
             <label className="text-xs font-semibold text-foreground block">Change Username (Login ID)</label>
             <div className="flex gap-2">
-              <Input
-                value={newUsername}
-                onChange={e => setNewUsername(e.target.value)}
-                placeholder="New username"
-                className="h-9 flex-1"
-              />
-              <Button size="sm" onClick={handleChangeUsername} disabled={saving || newUsername === selectedUser?.username} className="h-9">
-                Update ID
-              </Button>
+              <Input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="New username" className="h-9 flex-1" />
+              <Button size="sm" onClick={handleChangeUsername} disabled={saving || newUsername === selectedUser?.username} className="h-9">Update ID</Button>
             </div>
           </div>
 
-          {/* Change Password */}
           <div className="bg-background/50 rounded-xl p-3 space-y-2 border border-border">
             <label className="text-xs font-semibold text-foreground block">Change Password</label>
             <div className="relative">
-              <Input
-                type={showNew ? 'text' : 'password'}
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="New password"
-                className="h-9 pr-10"
-              />
-              <button type="button" onClick={() => setShowNew(!showNew)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <Input type={showNew ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password (min 6 chars)" className="h-9 pr-10" />
+              <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <Input
-              type="password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              placeholder="Confirm new password"
-              className="h-9"
-            />
+            <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm new password" className="h-9" />
             <Button onClick={handleChangePassword} disabled={saving} className="w-full h-9 gap-2">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
               {saving ? 'Changing...' : 'Change Password'}
             </Button>
           </div>
+
+          {selectedUserId !== user?.id && (
+            <Button variant="destructive" size="sm" onClick={handleDeleteUser} disabled={saving} className="w-full h-9 gap-2">
+              <Trash2 className="w-4 h-4" /> Delete User
+            </Button>
+          )}
         </>
       )}
     </motion.div>

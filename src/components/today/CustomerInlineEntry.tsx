@@ -104,6 +104,13 @@ export function CustomerInlineEntry({
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedBillItems, setExtractedBillItems] = useState<any[]>([]);
   const [billImageBase64, setBillImageBase64] = useState<string | null>(null);
+  const [showColumnConfig, setShowColumnConfig] = useState(false);
+
+  const getItemSecondaryUnit = (itemId: string | null) => {
+    if (!itemId) return null;
+    const item = allItems.find(i => i.id === itemId);
+    return item?.secondaryUnit || null;
+  };
 
   const customerTransactions = transactions.filter(t => t.section === 'sale');
 

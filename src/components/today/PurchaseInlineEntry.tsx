@@ -137,7 +137,7 @@ export function PurchaseInlineEntry({
       };
       let subType = typeMap[editingTransaction.type] || 'purchase_bill_a';
       if (editingTransaction.billType === 'n_bill') subType = editingTransaction.type.includes('return') ? 'purchase_return_b' : 'purchase_bill_b';
-      if (editingTransaction.billType === 'ng_bill') subType = 'purchase_bill_c';
+      if ((editingTransaction.billType as string) === 'ng_bill') subType = 'purchase_bill_c';
       setEntry({
         type: subType,
         supplierId: editingTransaction.supplierId,

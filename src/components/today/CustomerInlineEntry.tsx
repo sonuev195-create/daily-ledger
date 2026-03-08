@@ -75,6 +75,83 @@ const SUB_TYPES: { value: CustomerSubType; label: string }[] = [
   { value: 'customer_advance', label: 'Customer Advance' },
 ];
 
+// Expandable transaction row showing bill items
+function SaleTransactionRow({ transaction: txn, onEdit, onDelete }: { transaction: Transaction; onEdit: (t: Transaction) => void; onDelete: (id: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [billItemsLocal, setBillItemsLocal] = useState<any[]>([]);
+  const [loadedItems, setLoadedItems] = useState(false);
+
+  const loadItems = async () => {
+    if (loadedItems) return;
+    const { data: bills } = await supabase.from('bills').select('id').eq('transaction_id', txn.id);
+    if (bills?.[0]) {
+      const { data: items } = await supabase.from('bill_items').select('*').eq('bill_id', bills[0].id);
+      setBillItemsLocal(items || []);
+    }
+    setLoadedItems(true);
+  };
+
+  const handleToggle = () => {
+    if (!expanded) loadItems();
+    setExpanded(!expanded);
+  };
+
+  return (
+    <div className="hover:bg-secondary/20">
+      <button onClick={handleToggle} className="w-full px-2 py-2 text-left space-y-0.5">
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="text-[10px] font-medium text-muted-foreground capitalize w-14 shrink-0 truncate">{txn.type.replace(/_/g, ' ')}</span>
+          <span className="font-medium truncate flex-1">{txn.customerName || '-'}</span>
+          {txn.billNumber && <span className="text-[10px] text-muted-foreground shrink-0">#{txn.billNumber}</span>}
+          <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
+          <div className="flex gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+            <button onClick={() => onEdit(txn)} className="p-0.5 hover:text-accent"><Pencil className="w-3 h-3" /></button>
+            <button onClick={() => onDelete(txn.id)} className="p-0.5 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-16 text-[10px]">
+          {txn.payments.filter(p => p.amount > 0).map((p, pi) => (
+            <span key={pi} className={cn(
+              p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : p.mode === 'cheque' ? 'text-warning' : p.mode === 'advance' ? 'text-primary' : 'text-muted-foreground'
+            )}>
+              {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : p.mode === 'cheque' ? '📄' : p.mode === 'advance' ? '🔄' : '💳'}
+              {p.mode === 'advance' ? `Adv:${formatINR(p.amount)}` : formatINR(p.amount)}
+            </span>
+          ))}
+          {txn.due != null && txn.due > 0 && <span className="text-warning font-medium">⚠️Due:{formatINR(txn.due)}</span>}
+        </div>
+      </button>
+      <AnimatePresence>
+        {expanded && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.15 }} className="overflow-hidden">
+            <div className="px-3 pb-2 pt-1 bg-secondary/20">
+              {!loadedItems ? (
+                <div className="text-[10px] text-muted-foreground py-1">Loading...</div>
+              ) : billItemsLocal.length === 0 ? (
+                <div className="text-[10px] text-muted-foreground py-1">No items recorded</div>
+              ) : (
+                <div className="space-y-0.5">
+                  <div className="grid grid-cols-[1fr_45px_45px_55px] gap-1 text-[9px] text-muted-foreground font-medium">
+                    <span>Item</span><span className="text-center">Qty</span><span className="text-right">Rate</span><span className="text-right">Amt</span>
+                  </div>
+                  {billItemsLocal.map((item: any) => (
+                    <div key={item.id} className="grid grid-cols-[1fr_45px_45px_55px] gap-1 text-[10px]">
+                      <span className="truncate">{item.item_name}</span>
+                      <span className="text-center">{item.primary_quantity}{item.secondary_quantity > 0 ? `/${item.secondary_quantity}` : ''}</span>
+                      <span className="text-right text-muted-foreground">{formatINR(Number(item.rate))}</span>
+                      <span className="text-right font-medium">{formatINR(Number(item.total_amount))}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 interface CustomerInlineEntryProps {
   transactions: Transaction[];
   selectedDate: Date;
@@ -458,40 +535,12 @@ export function CustomerInlineEntry({
         </Button>
       </div>
 
-      {/* Existing transactions - single line each */}
+      {/* Existing transactions with expandable item details */}
       {customerTransactions.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden divide-y divide-border/50">
-          {customerTransactions.map((txn) => {
-            const cashAmt = txn.payments.filter(p => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
-            const upiAmt = txn.payments.filter(p => p.mode === 'upi').reduce((s, p) => s + p.amount, 0);
-            const chequeAmt = txn.payments.filter(p => p.mode === 'cheque').reduce((s, p) => s + p.amount, 0);
-            const advAmt = txn.payments.filter(p => p.mode === 'advance').reduce((s, p) => s + p.amount, 0);
-            return (
-              <div key={txn.id} className="px-2 py-2 hover:bg-secondary/20 space-y-0.5">
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-[10px] font-medium text-muted-foreground capitalize w-14 shrink-0 truncate">{txn.type.replace(/_/g, ' ')}</span>
-                  <span className="font-medium truncate flex-1">{txn.customerName || '-'}</span>
-                  {txn.billNumber && <span className="text-[10px] text-muted-foreground shrink-0">#{txn.billNumber}</span>}
-                  <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
-                  <div className="flex gap-0.5 shrink-0">
-                    <button onClick={() => onEditTransaction(txn)} className="p-0.5 hover:text-accent"><Pencil className="w-3 h-3" /></button>
-                    <button onClick={() => onDeleteTransaction(txn.id)} className="p-0.5 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-16 text-[10px]">
-                {txn.payments.filter(p => p.amount > 0).map((p, pi) => (
-                    <span key={pi} className={cn(
-                      p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : p.mode === 'cheque' ? 'text-warning' : p.mode === 'advance' ? 'text-primary' : 'text-muted-foreground'
-                    )}>
-                      {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : p.mode === 'cheque' ? '📄' : p.mode === 'advance' ? '🔄' : '💳'}
-                      {p.mode === 'advance' ? `Adv:${formatINR(p.amount)}` : formatINR(p.amount)}
-                    </span>
-                  ))}
-                  {txn.due != null && txn.due > 0 && <span className="text-warning font-medium">⚠️Due:{formatINR(txn.due)}</span>}
-                </div>
-              </div>
-            );
-          })}
+          {customerTransactions.map((txn) => (
+            <SaleTransactionRow key={txn.id} transaction={txn} onEdit={onEditTransaction} onDelete={onDeleteTransaction} />
+          ))}
         </div>
       )}
 

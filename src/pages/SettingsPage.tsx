@@ -62,6 +62,15 @@ export default function SettingsPage() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
 
+  // Font size
+  const [fontSize, setFontSize] = useState(() => localStorage.getItem('app-font-size') || 'medium');
+  const applyFontSize = (size: string) => {
+    setFontSize(size);
+    localStorage.setItem('app-font-size', size);
+    const sizeMap: Record<string, string> = { small: '14px', medium: '16px', large: '18px' };
+    document.documentElement.style.fontSize = sizeMap[size] || '16px';
+  };
+
   // Load existing config
   useEffect(() => {
     loadFormatConfig();

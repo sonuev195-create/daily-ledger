@@ -468,7 +468,7 @@ export function EmployeeInlineEntry({
               </div>
             </div>
           </div>
-        )
+        )}
 
         <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
           <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : editingTransaction ? 'Update' : 'Save & Next'}

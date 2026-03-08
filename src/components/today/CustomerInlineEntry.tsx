@@ -339,6 +339,7 @@ export function CustomerInlineEntry({
   };
 
   const [giveBackPayments, setGiveBackPayments] = useState<PaymentEntry[]>([]);
+  const [saveAsAdvance, setSaveAsAdvance] = useState(false);
 
   const addGiveBack = () => setGiveBackPayments(prev => [...prev, { id: uuidv4(), mode: 'cash' as PaymentMode, amount: 0 }]);
   const updateGiveBack = (i: number, field: 'mode' | 'amount', value: string) => {

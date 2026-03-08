@@ -127,6 +127,39 @@ export function PurchaseInlineEntry({
     }
   }, [entry.type, entry.supplierId]);
 
+  // Populate entry from editingTransaction
+  useEffect(() => {
+    if (editingTransaction) {
+      const typeMap: Record<string, PurchaseSubType> = {
+        purchase_bill: 'purchase_bill_a', purchase_payment: 'purchase_payment',
+        purchase_return: 'purchase_return_a', purchase_delivered: 'purchase_delivered',
+        purchase_expenses: 'purchase_expenses',
+      };
+      let subType = typeMap[editingTransaction.type] || 'purchase_bill_a';
+      if (editingTransaction.billType === 'n_bill') subType = editingTransaction.type.includes('return') ? 'purchase_return_b' : 'purchase_bill_b';
+      if (editingTransaction.billType === 'ng_bill') subType = 'purchase_bill_c';
+      setEntry({
+        type: subType,
+        supplierId: editingTransaction.supplierId,
+        supplierQuery: editingTransaction.supplierName || '',
+        supplierBalance: 0,
+        billNumber: editingTransaction.billNumber || '',
+        amount: editingTransaction.amount?.toString() || '',
+        reference: editingTransaction.reference || '',
+        payments: editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }],
+        dueBills: [],
+        selectedBills: [],
+      });
+    }
+  }, [editingTransaction]);
+
+  const updateExtractedItemMatch = (index: number, itemId: string) => {
+    const updated = [...extractedBillItems];
+    const masterItem = allItems.find(i => i.id === itemId);
+    updated[index] = { ...updated[index], selectedItemId: itemId || null, matchedName: masterItem?.name || null, confirmed: !!itemId };
+    setExtractedBillItems(updated);
+  };
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&

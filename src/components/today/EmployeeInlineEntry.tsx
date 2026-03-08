@@ -112,7 +112,7 @@ export function EmployeeInlineEntry({
         let totalPaid = 0;
         (data || []).forEach(t => {
           totalSalary += Number(t.amount);
-          const payments = Array.isArray(t.payments) ? t.payments : [];
+          const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
           totalPaid += payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
         });
         setPreviousDue(Math.max(0, totalSalary - totalPaid));

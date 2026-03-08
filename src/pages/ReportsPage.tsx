@@ -10,6 +10,7 @@ import { generateDetailedDailyPDF, generateFullMonthlyPDF } from '@/lib/reportEx
 import { useAuth } from '@/contexts/AuthContext';
 import { EmployeeReport } from '@/components/reports/EmployeeReport';
 import { SupplierReport } from '@/components/reports/SupplierReport';
+import { CustomerReport } from '@/components/reports/CustomerReport';
 
 type ReportTab = 'daily' | 'monthly' | 'employee' | 'supplier_detail' | 'customer' | 'supplier' | 'inventory' | 'drawer';
 

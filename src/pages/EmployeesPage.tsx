@@ -45,7 +45,7 @@ export default function EmployeesPage() {
   const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [categories, setCategories] = useState<SalaryCategory[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date());

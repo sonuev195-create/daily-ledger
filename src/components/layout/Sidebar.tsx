@@ -25,17 +25,16 @@ interface SidebarProps {
   onMobileClose: () => void;
 }
 
-const menuItems = [
-  { id: 'today', label: 'Today', icon: Calendar, path: '/' },
-  
-  { id: 'bill', label: 'Bill', icon: Receipt, path: '/bills' },
-  { id: 'customers', label: 'Customers', icon: Users, path: '/customers' },
-  { id: 'suppliers', label: 'Suppliers', icon: Wallet, path: '/suppliers' },
-  { id: 'employees', label: 'Employees', icon: Users, path: '/employees' },
-  { id: 'welders', label: 'Welders', icon: Percent, path: '/welders' },
-  { id: 'items', label: 'Items & Inventory', icon: Package, path: '/items' },
-  { id: 'reports', label: 'Reports', icon: BarChart3, path: '/reports' },
-  { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
+const allMenuItems = [
+  { id: 'today', label: 'Today', icon: Calendar, path: '/', adminOnly: false },
+  { id: 'bill', label: 'Bill', icon: Receipt, path: '/bills', adminOnly: false },
+  { id: 'customers', label: 'Customers', icon: Users, path: '/customers', adminOnly: false },
+  { id: 'suppliers', label: 'Suppliers', icon: Wallet, path: '/suppliers', adminOnly: false },
+  { id: 'employees', label: 'Employees', icon: Users, path: '/employees', adminOnly: false },
+  { id: 'welders', label: 'Welders', icon: Percent, path: '/welders', adminOnly: false },
+  { id: 'items', label: 'Items & Inventory', icon: Package, path: '/items', adminOnly: false },
+  { id: 'reports', label: 'Reports', icon: BarChart3, path: '/reports', adminOnly: false },
+  { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', adminOnly: true },
 ];
 
 export function Sidebar({ isCollapsed, onToggle, isMobileOpen, onMobileClose }: SidebarProps) {

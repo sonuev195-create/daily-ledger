@@ -168,6 +168,29 @@ export function EmployeeInlineEntry({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingTransaction && editingTransaction.section === 'employee') {
+      // Find employee name
+      const empId = editingTransaction.employeeId;
+      if (empId) {
+        supabase.from('employees').select('id, name, advance_balance, salary').eq('id', empId).single().then(({ data }) => {
+          if (data) {
+            setEntry(prev => ({
+              ...prev,
+              employeeQuery: data.name,
+              employeeId: data.id,
+              employeeAdvance: Number(data.advance_balance),
+              salary: editingTransaction.amount.toString(),
+              categoryId: editingTransaction.reference || '',
+              payments: editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }],
+            }));
+          }
+        });
+      }
+    }
+  }, [editingTransaction]);
+
   const selectEmployee = (e: EmployeeResult) => {
     setEntry(prev => ({ ...prev, employeeQuery: e.name, employeeId: e.id, employeeAdvance: e.advance_balance, salary: e.salary.toString() }));
     setShowDropdown(false);

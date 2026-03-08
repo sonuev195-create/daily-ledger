@@ -112,8 +112,8 @@ function DailyReport() {
     return { section: s, label: sectionLabels[s], count: txns.length, total, cashIn, upiIn, chequeIn, advanceUsed, totalPaid, totalDue };
   });
 
-  const handleExportPDF = () => {
-    generateDetailedDailyPDF(date, data, drawerData.opening, drawerData.closing);
+  const handleExportPDF = async () => {
+    await generateDetailedDailyPDF(date, data, drawerData.opening, drawerData.closing);
   };
 
   // Overall summary

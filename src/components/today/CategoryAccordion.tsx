@@ -25,6 +25,7 @@ export const CATEGORIES: CategoryConfig[] = [
   { id: 'expense', label: 'Expense', icon: Banknote, colorClass: 'text-destructive', bgClass: 'bg-destructive/10' },
   { id: 'exchange', label: 'Exchange', icon: ArrowLeftRight, colorClass: 'text-primary', bgClass: 'bg-primary/10' },
   { id: 'home', label: 'Home', icon: Home, colorClass: 'text-muted-foreground', bgClass: 'bg-secondary' },
+  { id: 'fullday', label: 'Full Day Bill', icon: FileSpreadsheet, colorClass: 'text-accent', bgClass: 'bg-accent/10' },
 ];
 
 interface SectionFlowData {

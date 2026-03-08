@@ -90,25 +90,28 @@ export default function TodayPage() {
   const handleDayClickFromMonth = (date: Date) => { setSelectedDate(date); setViewMode('day'); };
   const handleMonthClickFromYear = (date: Date) => { setSelectedDate(date); setViewMode('month'); };
 
+  const editFn = dateEditable ? handleEdit : undefined;
+  const deleteFn = dateEditable ? handleDelete : undefined;
+
   const renderCategoryContent = (categoryId: CategoryId) => {
     if (categoryId === 'drawer') {
       return <DrawerAccordionContent opening={opening} closing={closing} previousClosing={previousClosing} summary={summary} onSaveOpening={updateOpening} onSaveClosing={updateClosing} />;
     }
     if (categoryId === 'fullday') {
-      return <FullDayBillContent transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onDeleteTransaction={handleDelete} />;
+      return <FullDayBillContent transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onDeleteTransaction={deleteFn || (() => {})} />;
     }
     if (categoryId === 'customer') {
-      return <CustomerInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} editingTransaction={editingTransaction?.section === 'sale' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
+      return <CustomerInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})} editingTransaction={editingTransaction?.section === 'sale' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
     }
     if (categoryId === 'purchase') {
-      return <PurchaseInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} editingTransaction={editingTransaction?.section === 'purchase' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
+      return <PurchaseInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})} editingTransaction={editingTransaction?.section === 'purchase' ? editingTransaction : null} onCancelEdit={() => setEditingTransaction(null)} />;
     }
     if (categoryId === 'employee') {
-      return <EmployeeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete} />;
+      return <EmployeeInlineEntry transactions={transactions} selectedDate={selectedDate} onSave={handleSave} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})} />;
     }
     return (
       <CategoryTransactionList categoryId={categoryId as any} transactions={transactions}
-        onAddTransaction={handleAddTransaction} onEditTransaction={handleEdit} onDeleteTransaction={handleDelete}
+        onAddTransaction={handleAddTransaction} onEditTransaction={editFn || (() => {})} onDeleteTransaction={deleteFn || (() => {})}
         selectedDate={selectedDate} onSave={handleSave} />
     );
   };

@@ -442,11 +442,13 @@ function MonthlyReport() {
               <div className="font-semibold underline mt-2">EMPLOYEE</div>
               <Row label="TOTAL SALARY PAID" value={totalSalaryPaid} />
 
-              <div className="border-t-2 border-border mt-3 pt-2 space-y-1">
-                <Row label="CREDIT" value={totalCredit} bold />
-                <Row label="DEBIT" value={totalDebit} bold />
-                <Row label="NET AMOUNT" value={netAmount} bold accent />
-              </div>
+              {isAdmin && (
+                <div className="border-t-2 border-border mt-3 pt-2 space-y-1">
+                  <Row label="CREDIT" value={totalCredit} bold />
+                  <Row label="DEBIT" value={totalDebit} bold />
+                  <Row label="NET AMOUNT" value={netAmount} bold accent />
+                </div>
+              )}
             </div>
           </div>
 

@@ -338,8 +338,7 @@ serve(async (req) => {
     });
   } catch (error: unknown) {
     console.error("Error extracting bill items:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: errorMessage, items: [] }), {
+    return new Response(JSON.stringify({ error: "Failed to process image. Please try again.", items: [] }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

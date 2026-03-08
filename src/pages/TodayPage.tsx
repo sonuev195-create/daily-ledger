@@ -60,7 +60,7 @@ export default function TodayPage() {
   const handleEdit = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     // Expand the right category
-    const categoryMap: Record<string, CategoryId> = { sale: 'customer', purchase: 'purchase', employee: 'employee', expenses: 'expenses', home: 'home', exchange: 'exchange' };
+    const categoryMap: Record<string, CategoryId> = { sale: 'customer', purchase: 'purchase', employee: 'employee', expenses: 'expense', home: 'home', exchange: 'exchange' };
     setExpandedCategory(categoryMap[transaction.section] || null);
   };
 

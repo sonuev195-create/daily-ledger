@@ -57,12 +57,12 @@ const createEmptyRow = (): EntryRow => ({
 
 const SUB_TYPES: { value: PurchaseSubType; label: string }[] = [
   { value: 'purchase_payment', label: 'Payment' },
-  { value: 'purchase_bill_a', label: 'Bill A (G)' },
-  { value: 'purchase_bill_b', label: 'Bill B (N)' },
-  { value: 'purchase_bill_c', label: 'Bill C (N/G)' },
+  { value: 'purchase_bill_a', label: 'Bill A' },
+  { value: 'purchase_bill_b', label: 'Bill B' },
+  { value: 'purchase_bill_c', label: 'Bill C' },
   { value: 'purchase_delivered', label: 'Delivered' },
-  { value: 'purchase_return_a', label: 'Return A (G)' },
-  { value: 'purchase_return_b', label: 'Return B (N)' },
+  { value: 'purchase_return_a', label: 'Return A' },
+  { value: 'purchase_return_b', label: 'Return B' },
   { value: 'purchase_expenses', label: 'Expenses' },
 ];
 

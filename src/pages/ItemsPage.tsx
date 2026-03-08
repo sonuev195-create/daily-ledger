@@ -405,6 +405,18 @@ export default function ItemsPage() {
                     <p className="text-[10px] text-muted-foreground">Val: {fmt(item.inventoryValue || 0)}</p>
                   </div>
                   <div className="flex items-center gap-0.5 ml-1">
+                    {canReorder && (
+                      <div className="flex flex-col">
+                        <button onClick={() => handleMoveItem(item.id, 'up')}
+                          className="w-6 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors">
+                          <ArrowUp className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                        <button onClick={() => handleMoveItem(item.id, 'down')}
+                          className="w-6 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors">
+                          <ArrowDown className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                      </div>
+                    )}
                     <button onClick={() => handleEdit(item)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary transition-colors">
                       <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
                     </button>

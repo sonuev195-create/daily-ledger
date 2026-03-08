@@ -96,6 +96,7 @@ export function PurchaseInlineEntry({
 
   // Supplier search
   useEffect(() => {
+    if (entry.supplierId) { setShowSupplierDropdown(false); return; }
     const timer = setTimeout(async () => {
       if (entry.supplierQuery.length >= 2) {
         const { data } = await supabase.from('suppliers').select('*')
@@ -108,7 +109,7 @@ export function PurchaseInlineEntry({
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [entry.supplierQuery]);
+  }, [entry.supplierQuery, entry.supplierId]);
 
   // Load due bills for payment
   useEffect(() => {

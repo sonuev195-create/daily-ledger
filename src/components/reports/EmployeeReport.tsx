@@ -61,17 +61,10 @@ export function EmployeeReport() {
 
   const selectedEmp = employees.find(e => e.id === selectedEmpId);
   const daysInMonth = getDaysInMonth(month);
-
   const uniqueDays = new Set(txns.map(t => t.date));
   const daysPresent = uniqueDays.size;
   const totalPaid = txns.reduce((s, t) => s + Number(t.amount), 0);
 
-  const runningTxns = txns.map((t, i) => {
-    const runningTotal = txns.slice(0, i + 1).reduce((s, x) => s + Number(x.amount), 0);
-    return { ...t, runningTotal };
-  });
-
-  // Resolve type + category to a readable label
   const getTxnLabel = (t: any) => {
     const baseLabels: Record<string, string> = {
       salary: 'Day Salary', daily_wage: 'Daily Wage', advance: 'Advance',
@@ -89,35 +82,25 @@ export function EmployeeReport() {
     return payments.map((p: any) => `${p.mode}: ${formatINR(Number(p.amount))}`).join(', ');
   };
 
+  // Running balance
+  const runningTxns = txns.map((t, i) => {
+    const runningTotal = txns.slice(0, i + 1).reduce((s, x) => s + Number(x.amount), 0);
+    return { ...t, runningTotal };
+  });
+
   const handleExportPDF = () => {
     if (!selectedEmp) return;
     const doc = new jsPDF();
     const pw = doc.internal.pageSize.getWidth();
-
     doc.setFontSize(16);
     doc.text(`Employee Report: ${selectedEmp.name}`, pw / 2, 18, { align: 'center' });
     doc.setFontSize(10);
     doc.text(format(month, 'MMMM yyyy'), pw / 2, 25, { align: 'center' });
+    doc.text(`Days Present: ${daysPresent}/${daysInMonth} | Total Paid: ${fmtINR(totalPaid)} | Salary: ${fmtINR(Number(selectedEmp.salary || 0))}`, pw / 2, 31, { align: 'center' });
 
     autoTable(doc, {
-      startY: 32,
-      head: [['Summary', 'Value']],
-      body: [
-        ['Days Present', `${daysPresent} / ${daysInMonth}`],
-        ['Total Paid', fmtINR(totalPaid)],
-        ['Monthly Salary', fmtINR(Number(selectedEmp.salary || 0))],
-        ['Advance Balance', fmtINR(Number(selectedEmp.advance_balance || 0))],
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [66, 66, 66] },
-      styles: { fontSize: 9 },
-    });
-
-    let y = (doc as any).lastAutoTable.finalY + 10;
-
-    autoTable(doc, {
-      startY: y,
-      head: [['Date', 'Type', 'Amount', 'Payment', 'Running Total']],
+      startY: 36,
+      head: [['Date', 'Type', 'Amount', 'Payment', 'Balance']],
       body: runningTxns.map(t => [
         format(parseISO(t.date), 'dd MMM yyyy'),
         getTxnLabel(t),
@@ -129,13 +112,12 @@ export function EmployeeReport() {
       headStyles: { fillColor: [66, 66, 66] },
       styles: { fontSize: 8 },
     });
-
     doc.save(`Employee_${selectedEmp.name}_${format(month, 'yyyy-MM')}.pdf`);
   };
 
   const handleExportCSV = () => {
     if (!selectedEmp) return;
-    const header = ['Date', 'Type', 'Amount', 'Payment', 'Running Total'];
+    const header = ['Date', 'Type', 'Amount', 'Payment', 'Balance'];
     const rows = [header, ...runningTxns.map(t => [
       format(parseISO(t.date), 'dd MMM yyyy'),
       getTxnLabel(t),
@@ -148,15 +130,10 @@ export function EmployeeReport() {
 
   return (
     <div className="space-y-4">
-      <select
-        value={selectedEmpId}
-        onChange={e => setSelectedEmpId(e.target.value)}
-        className="w-full h-10 px-3 text-sm bg-background border border-border rounded-xl"
-      >
+      <select value={selectedEmpId} onChange={e => setSelectedEmpId(e.target.value)}
+        className="w-full h-10 px-3 text-sm bg-background border border-border rounded-xl">
         <option value="">Select Employee</option>
-        {employees.map(e => (
-          <option key={e.id} value={e.id}>{e.name}</option>
-        ))}
+        {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
       </select>
 
       {selectedEmpId && (
@@ -198,27 +175,39 @@ export function EmployeeReport() {
             </div>
           )}
 
+          {/* Table-style ledger */}
           {loading ? (
             <div className="h-32 bg-secondary/50 animate-pulse rounded-xl" />
           ) : txns.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No transactions this month</p>
           ) : (
-            <div className="space-y-2">
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              {/* Header */}
+              <div className="grid grid-cols-[70px_1fr_65px_80px_65px] gap-1 px-3 py-2 bg-secondary/50 text-[10px] font-semibold text-muted-foreground border-b border-border">
+                <span>Date</span>
+                <span>Type</span>
+                <span className="text-right">Amount</span>
+                <span className="text-right">Payment</span>
+                <span className="text-right">Balance</span>
+              </div>
+              {/* Rows */}
               {runningTxns.map(t => (
-                <div key={t.id} className="bg-card border border-border rounded-xl p-3">
-                  <div className="flex justify-between items-start text-xs">
-                    <div>
-                      <p className="font-medium">{format(parseISO(t.date), 'dd MMM yyyy, EEE')}</p>
-                      <p className="text-muted-foreground">{getTxnLabel(t)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold">{formatINR(Number(t.amount))}</p>
-                      <p className="text-[10px] text-muted-foreground">{paymentStr(t)}</p>
-                      <p className="text-[10px] font-semibold text-primary mt-0.5">Running: {formatINR(t.runningTotal)}</p>
-                    </div>
-                  </div>
+                <div key={t.id} className="grid grid-cols-[70px_1fr_65px_80px_65px] gap-1 px-3 py-2 border-b border-border/50 last:border-0 text-[11px] items-start">
+                  <span className="text-muted-foreground">{format(parseISO(t.date), 'dd MMM')}</span>
+                  <span className="font-medium truncate">{getTxnLabel(t)}</span>
+                  <span className="text-right font-semibold">{formatINR(Number(t.amount))}</span>
+                  <span className="text-right text-muted-foreground text-[10px]">{paymentStr(t) || '-'}</span>
+                  <span className="text-right font-semibold text-primary">{formatINR(t.runningTotal)}</span>
                 </div>
               ))}
+              {/* Footer total */}
+              <div className="grid grid-cols-[70px_1fr_65px_80px_65px] gap-1 px-3 py-2 bg-secondary/30 text-[11px] font-bold border-t border-border">
+                <span></span>
+                <span>Total</span>
+                <span className="text-right">{formatINR(totalPaid)}</span>
+                <span></span>
+                <span className="text-right text-primary">{formatINR(totalPaid)}</span>
+              </div>
             </div>
           )}
         </>

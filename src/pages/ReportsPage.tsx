@@ -185,7 +185,7 @@ function DailyReport() {
                   return (
                     <div key={t.id} className="flex items-center gap-2 text-[11px] py-1 border-t border-border/30">
                       <span className="text-muted-foreground capitalize w-16 truncate">{t.type.replace(/_/g, ' ')}</span>
-                      <span className="truncate flex-1">{t.customer_name || t.supplier_name || t.reference || '-'}</span>
+                      <span className="truncate flex-1"><ResolvedName txn={t} /></span>
                       {t.bill_number && <span className="text-muted-foreground">#{t.bill_number}</span>}
                       <span className="font-medium">{formatINR(Number(t.amount))}</span>
                       <div className="flex gap-1">

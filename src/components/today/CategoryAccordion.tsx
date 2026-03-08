@@ -113,8 +113,8 @@ interface FlowBadgeProps {
 function FlowBadge({ icon: Icon, inAmount, outAmount, inColor, outColor }: FlowBadgeProps) {
   if (inAmount === 0 && outAmount === 0) return null;
   return (
-    <div className="flex items-center gap-1 text-[10px]">
-      <Icon className="w-3 h-3 text-muted-foreground" />
+    <div className="flex items-center gap-1 text-[10px] lg:text-xs">
+      <Icon className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-muted-foreground" />
       {inAmount > 0 && <span className={cn("font-medium", inColor)}>+{formatINR(inAmount)}</span>}
       {outAmount > 0 && <span className={cn("font-medium", outColor)}>-{formatINR(outAmount)}</span>}
     </div>

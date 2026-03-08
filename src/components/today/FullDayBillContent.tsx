@@ -856,13 +856,12 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                             <input type="text" value={item.extractedName}
                               onChange={e => updateBillItem(idx, 'extractedName', e.target.value)}
                               placeholder="Name" className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate" />
-                            <select value={item.selectedItemId || ''}
-                              onChange={e => updateBillItem(idx, 'selectedItemId', e.target.value || null)}
-                              className={cn("flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
-                                !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground")}>
-                              <option value="">No match</option>
-                              {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                            </select>
+                            <ItemSearchSelect
+                              items={allItems.map(i => ({ id: i.id, name: i.name, paperBillName: i.paperBillName }))}
+                              value={item.selectedItemId}
+                              onChange={(id) => updateBillItem(idx, 'selectedItemId', id)}
+                              className="flex-1"
+                            />
                           </div>
                           <div className="flex items-center gap-1 text-xs">
                             <input type="number" value={item.quantity || ''} onChange={e => updateBillItem(idx, 'quantity', parseFloat(e.target.value) || 0)}

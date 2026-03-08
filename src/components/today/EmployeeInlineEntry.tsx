@@ -117,9 +117,19 @@ export function EmployeeInlineEntry({
           const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
           totalPaid += payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
         });
-        setPreviousDue(Math.max(0, totalSalary - totalPaid));
+        const due = Math.max(0, totalSalary - totalPaid);
+        setPreviousDue(due);
+        // Auto-fill salary (due amount) and payment with the due value
+        if (due > 0) {
+          setEntry(prev => ({
+            ...prev,
+            salary: due.toString(),
+            payments: [{ id: uuidv4(), mode: prev.payments[0]?.mode || 'cash', amount: due }],
+          }));
+        }
       })();
     }
+  }, [entry.employeeId, entry.categoryId, categories]);
   }, [entry.employeeId, entry.categoryId, categories]);
 
   useEffect(() => {

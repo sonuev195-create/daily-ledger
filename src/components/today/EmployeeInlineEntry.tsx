@@ -71,10 +71,53 @@ export function EmployeeInlineEntry({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const employeeTransactions = transactions.filter(t => t.section === 'employee');
+  const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({});
+  const [previousDue, setPreviousDue] = useState<number>(0);
 
   useEffect(() => {
     supabase.from('salary_categories').select('*').order('name').then(({ data }) => setCategories(data || []));
   }, []);
+
+  // Fetch employee names for existing transactions
+  useEffect(() => {
+    const empIds = [...new Set(employeeTransactions.map(t => t.employeeId).filter(Boolean))];
+    if (empIds.length === 0) return;
+    supabase.from('employees').select('id, name').in('id', empIds as string[]).then(({ data }) => {
+      const map: Record<string, string> = {};
+      (data || []).forEach(e => { map[e.id] = e.name; });
+      setEmployeeNames(map);
+    });
+  }, [transactions]);
+
+  // Calculate previous month due when "Previous" category is selected
+  useEffect(() => {
+    const prevCat = categories.find(c => c.name.toLowerCase() === 'previous');
+    if (entry.employeeId && entry.categoryId && prevCat && entry.categoryId === prevCat.id) {
+      (async () => {
+        const now = new Date();
+        const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastMonth = new Date(firstOfMonth);
+        lastMonth.setDate(lastMonth.getDate() - 1);
+        const firstOfLastMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
+        
+        const { data } = await supabase.from('transactions')
+          .select('amount, payments')
+          .eq('employee_id', entry.employeeId!)
+          .eq('section', 'employee')
+          .gte('date', format(firstOfLastMonth, 'yyyy-MM-dd'))
+          .lte('date', format(lastMonth, 'yyyy-MM-dd'));
+        
+        let totalSalary = 0;
+        let totalPaid = 0;
+        (data || []).forEach(t => {
+          totalSalary += Number(t.amount);
+          const payments = Array.isArray(t.payments) ? t.payments : [];
+          totalPaid += payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+        });
+        setPreviousDue(Math.max(0, totalSalary - totalPaid));
+      })();
+    }
+  }, [entry.employeeId, entry.categoryId, categories]);
 
   useEffect(() => {
     if (entry.employeeId) { setShowDropdown(false); return; }

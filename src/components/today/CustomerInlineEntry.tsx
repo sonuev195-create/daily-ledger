@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Pencil, Trash2, AlertTriangle, FileText, X, Check, Camera, Upload, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, FileText, X, Check, Camera, Upload, Loader2, Settings } from 'lucide-react';
 import { Transaction, TransactionSection, PaymentEntry, PaymentMode } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';

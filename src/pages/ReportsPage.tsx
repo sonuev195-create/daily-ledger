@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download, FileSpreadsheet } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,6 +9,17 @@ import { Button } from '@/components/ui/button';
 import { generateDetailedDailyPDF, generateFullMonthlyPDF } from '@/lib/reportExport';
 
 type ReportTab = 'daily' | 'monthly' | 'customer' | 'supplier' | 'inventory' | 'drawer';
+
+// CSV export helper
+function downloadCSV(rows: string[][], filename: string) {
+  const csv = rows.map(r => r.map(c => `"${(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
 
 const reportTabs: { id: ReportTab; label: string; icon: any }[] = [
   { id: 'daily', label: 'Daily', icon: FileText },

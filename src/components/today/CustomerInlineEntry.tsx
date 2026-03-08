@@ -91,6 +91,7 @@ export function CustomerInlineEntry({
 }: CustomerInlineEntryProps) {
   const navigate = useNavigate();
   const { items: allItems } = useItems();
+  const { selectableMethods } = usePaymentMethods();
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());
   const [customerResults, setCustomerResults] = useState<CustomerResult[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);

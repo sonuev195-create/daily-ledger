@@ -71,10 +71,13 @@ interface PurchaseInlineEntryProps {
   onSave: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onEditTransaction: (transaction: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
+  editingTransaction?: Transaction | null;
+  onCancelEdit?: () => void;
 }
 
 export function PurchaseInlineEntry({
   transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction,
+  editingTransaction, onCancelEdit,
 }: PurchaseInlineEntryProps) {
   const { items: allItems } = useItems();
   const [entry, setEntry] = useState<EntryRow>(createEmptyRow());

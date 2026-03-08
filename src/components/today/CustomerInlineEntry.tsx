@@ -79,10 +79,13 @@ interface CustomerInlineEntryProps {
   onSave: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onEditTransaction: (transaction: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
+  editingTransaction?: Transaction | null;
+  onCancelEdit?: () => void;
 }
 
 export function CustomerInlineEntry({
   transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction,
+  editingTransaction, onCancelEdit,
 }: CustomerInlineEntryProps) {
   const navigate = useNavigate();
   const { items: allItems } = useItems();

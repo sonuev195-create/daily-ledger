@@ -619,7 +619,7 @@ export function CustomerInlineEntry({
 
         {/* Desktop: single line | Mobile: 2-3 rows */}
         {/* Row 1: Type + Bill# + Customer */}
-        <div className="grid grid-cols-3 gap-2 md:grid-cols-7">
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-[1fr_1fr_2fr_1fr]">
           <div>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Type</label>
             <Select value={entry.type} onValueChange={(v: string) => {

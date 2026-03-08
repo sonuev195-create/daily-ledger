@@ -1,11 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Camera, Upload, Loader2, Check, Trash2, Save, TableProperties } from 'lucide-react';
+import { Settings, Camera, Upload, Loader2, Check, Trash2, Save, TableProperties, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useItems } from '@/hooks/useSupabaseData';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 
 interface ExtractedItem {
   extractedName: string;
@@ -696,7 +701,10 @@ export default function SettingsPage() {
         {/* ========== Payment Methods Section ========== */}
         <PaymentMethodSettings />
 
-        {/* ========== Reset Database Section ========== */}
+        {/* ========== Change Password Section ========== */}
+        <ChangePasswordSection />
+
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -838,6 +846,153 @@ function PaymentMethodSettings() {
           Add
         </button>
       </div>
+    </motion.div>
+  );
+}
+
+function ChangePasswordSection() {
+  const { user, isAdmin } = useAuth();
+  const [allUsers, setAllUsers] = useState<{ id: string; username: string; role: string; display_name: string | null }[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (isAdmin) {
+      supabase.from('app_users').select('id, username, role, display_name').eq('is_active', true).order('username').then(({ data }) => {
+        setAllUsers(data || []);
+      });
+    }
+  }, [isAdmin]);
+
+  const handleChangePassword = async () => {
+    if (!newPassword.trim()) { toast.error('New password required'); return; }
+    if (newPassword !== confirmPassword) { toast.error('Passwords do not match'); return; }
+    if (newPassword.length < 4) { toast.error('Password must be at least 4 characters'); return; }
+
+    const targetId = isAdmin && selectedUserId ? selectedUserId : user?.id;
+    if (!targetId) return;
+
+    setSaving(true);
+    try {
+      // For non-admin or self-change, verify current password
+      if (!isAdmin || targetId === user?.id) {
+        const { data: check } = await supabase.from('app_users')
+          .select('id').eq('id', targetId).eq('password', currentPassword).single();
+        if (!check) { toast.error('Current password is incorrect'); setSaving(false); return; }
+      }
+
+      const { error } = await supabase.from('app_users')
+        .update({ password: newPassword, updated_at: new Date().toISOString() })
+        .eq('id', targetId);
+
+      if (error) throw error;
+      toast.success('Password changed successfully');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setSelectedUserId('');
+    } catch (err) {
+      toast.error('Failed to change password');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const needsCurrentPassword = !isAdmin || (selectedUserId === user?.id || !selectedUserId);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.19 }}
+      className="bg-secondary/30 rounded-2xl p-5 space-y-4"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+          <KeyRound className="w-5 h-5 text-primary" />
+        </div>
+        <div>
+          <h2 className="font-semibold text-foreground">Change Password</h2>
+          <p className="text-xs text-muted-foreground">
+            {isAdmin ? 'Change password for any user' : 'Update your login password'}
+          </p>
+        </div>
+      </div>
+
+      {isAdmin && allUsers.length > 0 && (
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Select User</label>
+          <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+            <SelectTrigger className="h-10">
+              <SelectValue placeholder="Select user to change password..." />
+            </SelectTrigger>
+            <SelectContent>
+              {allUsers.map(u => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.display_name || u.username} ({u.role})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {needsCurrentPassword && (
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Current Password</label>
+          <div className="relative">
+            <Input
+              type={showCurrent ? 'text' : 'password'}
+              value={currentPassword}
+              onChange={e => setCurrentPassword(e.target.value)}
+              placeholder="Enter current password"
+              className="h-10 pr-10"
+            />
+            <button type="button" onClick={() => setShowCurrent(!showCurrent)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">New Password</label>
+        <div className="relative">
+          <Input
+            type={showNew ? 'text' : 'password'}
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            placeholder="Enter new password"
+            className="h-10 pr-10"
+          />
+          <button type="button" onClick={() => setShowNew(!showNew)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Confirm New Password</label>
+        <Input
+          type="password"
+          value={confirmPassword}
+          onChange={e => setConfirmPassword(e.target.value)}
+          placeholder="Confirm new password"
+          className="h-10"
+        />
+      </div>
+
+      <Button onClick={handleChangePassword} disabled={saving} className="w-full h-10 gap-2">
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+        {saving ? 'Changing...' : 'Change Password'}
+      </Button>
     </motion.div>
   );
 }

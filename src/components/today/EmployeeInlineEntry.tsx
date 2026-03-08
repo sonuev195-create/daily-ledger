@@ -409,44 +409,66 @@ export function EmployeeInlineEntry({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          {!isPreviousCategory ? (
+        {!isPreviousCategory && (
+          <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Day Salary</label>
               <Input type="number" inputMode="numeric" value={entry.salary}
                 onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
             </div>
-          ) : (
             <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Due Amount</label>
-              <Input type="number" inputMode="numeric" value={entry.salary || (previousDue > 0 ? previousDue.toString() : '')}
-                onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
-            </div>
-          )}
-          <div>
-            <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
-            <div className="space-y-1">
-              {entry.payments.map((p, i) => (
-                <div key={p.id} className="flex gap-1">
-                  <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
-                    <SelectTrigger className="h-7 text-[10px] w-16"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {selectableMethods.map(m => (
-                        <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input type="number" inputMode="numeric" value={p.amount || ''}
-                    onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
-                  {entry.payments.length > 1 && (
-                    <button onClick={() => removePayment(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
-                  )}
-                </div>
-              ))}
-              <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add</button>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
+              <div className="space-y-1">
+                {entry.payments.map((p, i) => (
+                  <div key={p.id} className="flex gap-1">
+                    <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
+                      <SelectTrigger className="h-7 text-[10px] w-16"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {selectableMethods.map(m => (
+                          <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" inputMode="numeric" value={p.amount || ''}
+                      onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+                    {entry.payments.length > 1 && (
+                      <button onClick={() => removePayment(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add</button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {isPreviousCategory && (
+          <div className="space-y-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
+              <div className="space-y-1">
+                {entry.payments.map((p, i) => (
+                  <div key={p.id} className="flex gap-1">
+                    <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
+                      <SelectTrigger className="h-7 text-[10px] w-16"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {selectableMethods.map(m => (
+                          <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" inputMode="numeric" value={p.amount || ''}
+                      onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+                    {entry.payments.length > 1 && (
+                      <button onClick={() => removePayment(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Button onClick={handleSave} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
           <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : editingTransaction ? 'Update' : 'Save & Next'}

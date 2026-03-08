@@ -379,9 +379,7 @@ function BillItemCard({
 
   const selectedItemObj = allItems.find(i => i.id === item.itemId);
   const effectivePreference = selectedItemObj ? 
-    (selectedItemObj.batchPreference === 'category' && selectedItemObj.categoryId
-      ? categories.find(c => c.id === selectedItemObj.categoryId)?.batchPreference || 'latest'
-      : selectedItemObj.batchPreference === 'category' ? 'latest' : selectedItemObj.batchPreference
+    (selectedItemObj.batchPreference === 'category' ? 'latest' : selectedItemObj.batchPreference
     ) : 'latest';
 
   return (

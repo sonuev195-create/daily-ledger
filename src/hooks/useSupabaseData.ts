@@ -220,10 +220,10 @@ export async function getBatchesForItem(itemId: string): Promise<Batch[]> {
 
 // Get all categories
 export async function getAllCategoriesAsync(): Promise<Category[]> {
-  const { data, error } = await supabase.from('categories').select('*').order('name');
+  const { data, error } = await supabase.from('categories').select('*').order('sort_order', { ascending: true });
   if (error || !data) return [];
   return data.map(c => ({
-    id: c.id, name: c.name, batchPreference: c.batch_preference as Exclude<BatchPreference, 'category'>,
+    id: c.id, name: c.name, sortOrder: (c as any).sort_order ?? 0,
     createdAt: new Date(c.created_at), updatedAt: new Date(c.updated_at),
   }));
 }

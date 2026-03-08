@@ -370,21 +370,19 @@ export function EmployeeInlineEntry({
         )}
 
         <div className="grid grid-cols-2 gap-2">
-          {!isPreviousCategory && (
+          {!isPreviousCategory ? (
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Day Salary</label>
               <Input type="number" inputMode="numeric" value={entry.salary}
                 onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
             </div>
-          )}
-          {isPreviousCategory && (
+          ) : (
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Due Amount</label>
               <Input type="number" inputMode="numeric" value={entry.salary || (previousDue > 0 ? previousDue.toString() : '')}
                 onChange={e => setEntry(prev => ({ ...prev, salary: e.target.value }))} placeholder="₹0" className="h-8 text-xs" />
             </div>
           )}
-          </div>
           <div>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
             <div className="space-y-1">

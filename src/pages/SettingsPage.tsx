@@ -1,6 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Camera, Upload, Loader2, Check, Trash2, Save, TableProperties } from 'lucide-react';
+import { Settings, Camera, Upload, Loader2, Check, Trash2, Save, TableProperties, KeyRound, Eye, EyeOff } from 'lucide-react';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { useItems } from '@/hooks/useSupabaseData';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useItems } from '@/hooks/useSupabaseData';
 import { supabase } from '@/integrations/supabase/client';

@@ -111,7 +111,6 @@ export function DrawerAccordionContent({ opening, closing, previousClosing, summ
     { label: 'Cash', icon: Wallet, colorClass: 'text-success', bgClass: 'bg-success/10', value: systemCash },
     { label: 'UPI', icon: CreditCard, colorClass: 'text-info', bgClass: 'bg-info/10', value: systemUpi },
     ...(chequeBalance !== 0 ? [{ label: 'Cheque', icon: Wallet, colorClass: 'text-warning', bgClass: 'bg-warning/10', value: chequeBalance }] : []),
-    ...(adjustBalance !== 0 ? [{ label: 'Adjust', icon: Scale, colorClass: adjustBalance === 0 ? 'text-success' : 'text-destructive', bgClass: adjustBalance === 0 ? 'bg-success/10' : 'bg-destructive/10', value: adjustBalance }] : []),
     { label: 'Customer Advance', icon: Users, colorClass: 'text-success', bgClass: 'bg-success/10', value: customerAdvanceTotal },
     { label: 'Customer Due', icon: Users, colorClass: 'text-warning', bgClass: 'bg-warning/10', value: customerDueTotal },
     { label: 'Supplier Due', icon: Truck, colorClass: 'text-destructive', bgClass: 'bg-destructive/10', value: supplierDueTotal },

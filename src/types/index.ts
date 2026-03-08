@@ -21,7 +21,7 @@ export type BatchPreference = 'latest' | 'oldest' | 'custom' | 'category';
 export interface Category {
   id: string;
   name: string;
-  batchPreference: Exclude<BatchPreference, 'category'>; // 'latest' | 'oldest' | 'custom'
+  sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -148,6 +148,7 @@ export interface Item {
   secondaryQuantity?: number;
   purchaseRate?: number;
   inventoryValue?: number;
+  sortOrder?: number;
   createdAt: Date;
   updatedAt: Date;
 }

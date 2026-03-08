@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen, Filter, ChevronDown, Tag } from 'lucide-react';
+import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen, ArrowUp, ArrowDown, Tag } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Item, Category } from '@/types';
 import { useItems, useCategories } from '@/hooks/useSupabaseData';
@@ -15,7 +15,7 @@ import { BatchList } from '@/components/items/BatchList';
 import { cn } from '@/lib/utils';
 
 export default function ItemsPage() {
-  const { items: supabaseItems, loading: itemsLoading, addItem: addSupabaseItem, updateItem: updateSupabaseItem, deleteItem: deleteSupabaseItem, refetch: refetchItems } = useItems();
+  const { items: supabaseItems, loading: itemsLoading, addItem: addSupabaseItem, updateItem: updateSupabaseItem, deleteItem: deleteSupabaseItem, reorderItems, refetch: refetchItems } = useItems();
   const { categories, loading: categoriesLoading, refetch: refetchCategories } = useCategories();
 
   const [items, setItems] = useState<Item[]>([]);
@@ -197,6 +197,19 @@ export default function ItemsPage() {
     const matchesCategory = !selectedCategoryId || item.categoryId === selectedCategoryId;
     return matchesSearch && matchesCategory;
   });
+
+  const canReorder = !searchQuery && !selectedCategoryId;
+
+  const handleMoveItem = async (itemId: string, direction: 'up' | 'down') => {
+    const idx = items.findIndex(i => i.id === itemId);
+    if (idx < 0) return;
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === items.length - 1) return;
+    const reordered = [...items];
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+    await reorderItems(reordered);
+  };
 
   const fmt = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
   const totalInventoryValue = items.reduce((sum, item) => sum + (item.inventoryValue || 0), 0);
@@ -392,6 +405,18 @@ export default function ItemsPage() {
                     <p className="text-[10px] text-muted-foreground">Val: {fmt(item.inventoryValue || 0)}</p>
                   </div>
                   <div className="flex items-center gap-0.5 ml-1">
+                    {canReorder && (
+                      <div className="flex flex-col">
+                        <button onClick={() => handleMoveItem(item.id, 'up')}
+                          className="w-6 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors">
+                          <ArrowUp className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                        <button onClick={() => handleMoveItem(item.id, 'down')}
+                          className="w-6 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors">
+                          <ArrowDown className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                      </div>
+                    )}
                     <button onClick={() => handleEdit(item)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary transition-colors">
                       <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
                     </button>

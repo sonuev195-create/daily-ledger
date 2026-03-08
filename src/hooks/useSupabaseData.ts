@@ -11,13 +11,13 @@ export function useCategories() {
     const { data, error } = await supabase
       .from('categories')
       .select('*')
-      .order('name');
+      .order('sort_order', { ascending: true });
     
     if (!error && data) {
       setCategories(data.map(c => ({
         id: c.id,
         name: c.name,
-        batchPreference: c.batch_preference as Exclude<BatchPreference, 'category'>,
+        sortOrder: (c as any).sort_order ?? 0,
         createdAt: new Date(c.created_at),
         updatedAt: new Date(c.updated_at),
       })));
@@ -30,9 +30,11 @@ export function useCategories() {
   }, [fetchCategories]);
 
   const addCategory = async (category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>) => {
+    // Get max sort_order
+    const maxOrder = categories.length > 0 ? Math.max(...categories.map(c => c.sortOrder)) : 0;
     const { data, error } = await supabase
       .from('categories')
-      .insert({ name: category.name, batch_preference: category.batchPreference })
+      .insert({ name: category.name, sort_order: maxOrder + 1 } as any)
       .select()
       .single();
     if (!error && data) { await fetchCategories(); return data.id; }
@@ -40,11 +42,18 @@ export function useCategories() {
   };
 
   const updateCategory = async (id: string, updates: Partial<Category>) => {
-    await supabase.from('categories').update({
-      name: updates.name,
-      batch_preference: updates.batchPreference,
-      updated_at: new Date().toISOString(),
-    }).eq('id', id);
+    const updatePayload: any = { updated_at: new Date().toISOString() };
+    if (updates.name !== undefined) updatePayload.name = updates.name;
+    if (updates.sortOrder !== undefined) updatePayload.sort_order = updates.sortOrder;
+    await supabase.from('categories').update(updatePayload).eq('id', id);
+    await fetchCategories();
+  };
+
+  const reorderCategories = async (reordered: Category[]) => {
+    setCategories(reordered);
+    await Promise.all(reordered.map((cat, i) =>
+      supabase.from('categories').update({ sort_order: i + 1 } as any).eq('id', cat.id)
+    ));
     await fetchCategories();
   };
 
@@ -53,7 +62,7 @@ export function useCategories() {
     await fetchCategories();
   };
 
-  return { categories, loading, addCategory, updateCategory, deleteCategory, refetch: fetchCategories };
+  return { categories, loading, addCategory, updateCategory, deleteCategory, reorderCategories, refetch: fetchCategories };
 }
 
 // Items
@@ -62,7 +71,7 @@ export function useItems() {
   const [loading, setLoading] = useState(true);
 
   const fetchItems = useCallback(async () => {
-    const { data, error } = await supabase.from('items').select('*').order('name');
+    const { data, error } = await supabase.from('items').select('*').order('sort_order', { ascending: true });
     if (!error && data) {
       setItems(data.map(i => ({
         id: i.id,
@@ -74,6 +83,7 @@ export function useItems() {
         secondaryUnit: i.secondary_unit || undefined,
         conversionRate: i.conversion_rate ? Number(i.conversion_rate) : undefined,
         conversionType: i.conversion_type as 'permanent' | 'batch_wise' | undefined,
+        sortOrder: (i as any).sort_order ?? 0,
         createdAt: new Date(i.created_at),
         updatedAt: new Date(i.updated_at),
       })));
@@ -91,6 +101,7 @@ export function useItems() {
   }, [fetchItems]);
 
   const addItem = async (item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const maxOrder = items.length > 0 ? Math.max(...items.map(i => i.sortOrder || 0)) : 0;
     const { data, error } = await supabase.from('items').insert({
       name: item.name,
       paper_bill_name: item.paperBillName || null,
@@ -99,6 +110,7 @@ export function useItems() {
       selling_price: item.sellingPrice,
       secondary_unit: item.secondaryUnit || null,
       conversion_rate: item.conversionRate || null,
+      sort_order: maxOrder + 1,
     } as any).select().single();
     if (!error && data) { await fetchItems(); return data.id; }
     return null;
@@ -123,7 +135,15 @@ export function useItems() {
     await fetchItems();
   };
 
-  return { items, loading, addItem, updateItem, deleteItem, refetch: fetchItems };
+  const reorderItems = async (reordered: Item[]) => {
+    setItems(reordered);
+    await Promise.all(reordered.map((item, i) =>
+      supabase.from('items').update({ sort_order: i + 1 } as any).eq('id', item.id)
+    ));
+    await fetchItems();
+  };
+
+  return { items, loading, addItem, updateItem, deleteItem, reorderItems, refetch: fetchItems };
 }
 
 // Batches
@@ -210,10 +230,10 @@ export async function getBatchesForItem(itemId: string): Promise<Batch[]> {
 
 // Get all categories
 export async function getAllCategoriesAsync(): Promise<Category[]> {
-  const { data, error } = await supabase.from('categories').select('*').order('name');
+  const { data, error } = await supabase.from('categories').select('*').order('sort_order', { ascending: true });
   if (error || !data) return [];
   return data.map(c => ({
-    id: c.id, name: c.name, batchPreference: c.batch_preference as Exclude<BatchPreference, 'category'>,
+    id: c.id, name: c.name, sortOrder: (c as any).sort_order ?? 0,
     createdAt: new Date(c.created_at), updatedAt: new Date(c.updated_at),
   }));
 }

@@ -104,10 +104,7 @@ export function SaleBillItemsEntry({ billItems, setBillItems }: SaleBillItemsEnt
     if (item.batchPreference !== 'category') {
       return item.batchPreference as Exclude<BatchPreference, 'category'>;
     }
-    if (item.categoryId && categoriesMap[item.categoryId]) {
-      return categoriesMap[item.categoryId].batchPreference;
-    }
-    return 'latest'; // default
+    return 'latest';
   };
 
   // Sort batches based on preference (oldest first in display, but selection based on preference)

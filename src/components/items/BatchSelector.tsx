@@ -40,11 +40,10 @@ export function BatchSelector({ item, selectedBatchId, onSelect }: BatchSelector
   };
 
   const getEffectivePreference = (item: Item, cats: Category[]): Exclude<BatchPreference, 'category'> => {
-    if (item.batchPreference === 'category' && item.categoryId) {
-      const category = cats.find(c => c.id === item.categoryId);
-      return category?.batchPreference || 'latest';
+    if (item.batchPreference === 'category') {
+      return 'latest';
     }
-    return item.batchPreference === 'category' ? 'latest' : item.batchPreference;
+    return item.batchPreference as Exclude<BatchPreference, 'category'>;
   };
 
   const selectBatchByPreference = (batches: Batch[], preference: Exclude<BatchPreference, 'category'>): Batch | null => {

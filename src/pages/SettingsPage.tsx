@@ -666,6 +666,33 @@ export default function SettingsPage() {
           )}
         </motion.div>
 
+        {/* ========== Font Size Section ========== */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="bg-secondary/30 rounded-2xl p-5 space-y-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Settings className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-foreground">Text Size</h2>
+              <p className="text-xs text-muted-foreground">Adjust the app text size for better readability</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {[{ key: 'small', label: 'S', desc: 'Small' }, { key: 'medium', label: 'M', desc: 'Medium' }, { key: 'large', label: 'L', desc: 'Large' }].map(s => (
+              <button key={s.key} onClick={() => applyFontSize(s.key)}
+                className={cn("flex-1 py-3 rounded-xl text-center transition-all", fontSize === s.key ? "bg-primary text-primary-foreground" : "bg-secondary/50 text-muted-foreground hover:bg-secondary")}>
+                <span className="text-lg font-bold">{s.label}</span>
+                <p className="text-[10px] mt-0.5">{s.desc}</p>
+              </button>
+            ))}
+          </div>
+        </motion.div>
+
         {/* ========== Reset Database Section ========== */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

@@ -580,18 +580,6 @@ export default function EmployeesPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Employee Payment Sheet */}
-      <EmployeePaymentSheet
-        isOpen={isPaymentOpen}
-        onClose={() => setIsPaymentOpen(false)}
-        onSuccess={() => {
-          fetchEmployees();
-          if (selectedEmployee) {
-            fetchEmployeeTransactions(selectedEmployee.id);
-          }
-        }}
-        selectedDate={new Date()}
-      />
     </AppLayout>
   );
 }

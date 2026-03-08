@@ -386,17 +386,26 @@ export function PurchaseInlineEntry({
       {purchaseTransactions.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="divide-y divide-border/50">
-            {purchaseTransactions.map((txn, i) => {
-              const totalPaid = txn.payments.reduce((s, p) => s + p.amount, 0);
+            {purchaseTransactions.map((txn) => {
+              const cashAmt = txn.payments.filter(p => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
+              const upiAmt = txn.payments.filter(p => p.mode === 'upi').reduce((s, p) => s + p.amount, 0);
               return (
-                <div key={txn.id} className="flex items-center gap-2 px-2 py-2 hover:bg-secondary/20 text-xs">
-                  <span className="text-muted-foreground capitalize text-[10px] w-16 shrink-0">{txn.type.replace(/_/g, ' ')}</span>
-                  <span className="font-medium truncate flex-1">{txn.supplierName || '-'}</span>
-                  {txn.billNumber && <span className="text-muted-foreground">#{txn.billNumber}</span>}
-                  <span className="font-medium">{formatINR(txn.amount)}</span>
-                  <div className="flex gap-0.5 shrink-0">
-                    <button onClick={() => onEditTransaction(txn)} className="p-0.5 hover:text-accent"><Pencil className="w-3 h-3" /></button>
-                    <button onClick={() => onDeleteTransaction(txn.id)} className="p-0.5 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+                <div key={txn.id} className="px-2 py-2 hover:bg-secondary/20 space-y-0.5">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-[10px] font-medium text-muted-foreground capitalize w-16 shrink-0 truncate">{txn.type.replace(/_/g, ' ')}</span>
+                    <span className="font-medium truncate flex-1">{txn.supplierName || '-'}</span>
+                    {txn.billNumber && <span className="text-[10px] text-muted-foreground">#{txn.billNumber}</span>}
+                    <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
+                    <div className="flex gap-0.5 shrink-0">
+                      <button onClick={() => onEditTransaction(txn)} className="p-0.5 hover:text-accent"><Pencil className="w-3 h-3" /></button>
+                      <button onClick={() => onDeleteTransaction(txn.id)} className="p-0.5 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-[68px] text-[10px]">
+                    {cashAmt > 0 && <span className="text-success">💵{formatINR(cashAmt)}</span>}
+                    {upiAmt > 0 && <span className="text-info">📱{formatINR(upiAmt)}</span>}
+                    {txn.due != null && txn.due > 0 && <span className="text-warning font-medium">⚠️Due:{formatINR(txn.due)}</span>}
+                    {txn.billType && <span className="text-muted-foreground">[{txn.billType === 'g_bill' ? 'G' : txn.billType === 'n_bill' ? 'N' : 'N/G'}]</span>}
                   </div>
                 </div>
               );

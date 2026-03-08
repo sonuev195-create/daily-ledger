@@ -25,7 +25,7 @@ interface SidebarProps {
 
 const menuItems = [
   { id: 'today', label: 'Today', icon: Calendar, path: '/' },
-  { id: 'all-date', label: 'All Date', icon: CalendarDays, path: '/all-dates' },
+  
   { id: 'bill', label: 'Bill', icon: Receipt, path: '/bills' },
   { id: 'customers', label: 'Customers', icon: Users, path: '/customers' },
   { id: 'suppliers', label: 'Suppliers', icon: Wallet, path: '/suppliers' },

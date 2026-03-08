@@ -341,6 +341,45 @@ export function CustomerInlineEntry({
 
       await onSave(transaction);
 
+      // Save bill items and deduct inventory for sale/sales_return with extracted items
+      if ((entry.type === 'sale' || entry.type === 'sales_return') && extractedBillItems.length > 0) {
+        // Get the transaction ID from the most recent transaction
+        const { data: savedTxn } = await supabase.from('transactions')
+          .select('id').eq('bill_number', entry.billNumber).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        
+        if (savedTxn) {
+          const billItemsData = extractedBillItems.filter(i => i.selectedItemId).map(i => {
+            const masterItem = allItems.find(mi => mi.id === i.selectedItemId);
+            return {
+              itemId: i.selectedItemId,
+              batchId: undefined as string | undefined,
+              itemName: masterItem?.name || i.extractedName,
+              primaryQty: i.quantity || 0,
+              secondaryQty: 0,
+              rate: i.amount && i.quantity ? i.amount / i.quantity : (masterItem?.sellingPrice || 0),
+              total: i.amount || 0,
+            };
+          });
+
+          // Auto-select batches and deduct for sales
+          if (entry.type === 'sale') {
+            for (const bi of billItemsData) {
+              if (bi.itemId) {
+                const batches = await getBatchesForItem(bi.itemId);
+                const withStock = batches.filter(b => b.primaryQuantity > 0)
+                  .sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
+                if (withStock.length > 0) {
+                  bi.batchId = withStock[0].id;
+                  await deductFromBatch(withStock[0].id, bi.primaryQty, bi.secondaryQty);
+                }
+              }
+            }
+          }
+
+          await saveBillToSupabase(savedTxn.id, entry.billNumber, entry.type, amountNum, entry.customerQuery, undefined, billItemsData);
+        }
+      }
+
       if (finalCustomerId) {
         if (due > 0) await updateCustomerBalance(finalCustomerId, due, 0);
         if (advanceUsed > 0) await updateCustomerBalance(finalCustomerId, 0, -advanceUsed);
@@ -358,6 +397,8 @@ export function CustomerInlineEntry({
       }
 
       setEntry(createEmptyRow());
+      setExtractedBillItems([]);
+      if (editingTransaction) onCancelEdit?.();
       toast.success('Saved');
     } catch (err) {
       toast.error('Error saving');

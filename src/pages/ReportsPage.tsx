@@ -10,6 +10,7 @@ import { generateDetailedDailyPDF, generateFullMonthlyPDF } from '@/lib/reportEx
 import { useAuth } from '@/contexts/AuthContext';
 import { EmployeeReport } from '@/components/reports/EmployeeReport';
 import { SupplierReport } from '@/components/reports/SupplierReport';
+import { CustomerReport } from '@/components/reports/CustomerReport';
 
 type ReportTab = 'daily' | 'monthly' | 'employee' | 'supplier_detail' | 'customer' | 'supplier' | 'inventory' | 'drawer';
 
@@ -64,7 +65,7 @@ export default function ReportsPage() {
         {activeTab === 'monthly' && <MonthlyReport />}
         {activeTab === 'employee' && <EmployeeReport />}
         {activeTab === 'supplier_detail' && <SupplierReport />}
-        {activeTab === 'customer' && <CustomerLedger />}
+        {activeTab === 'customer' && <CustomerReport />}
         {activeTab === 'supplier' && <SupplierLedger />}
         {activeTab === 'inventory' && <InventoryReport />}
         {activeTab === 'drawer' && <DrawerReport />}

@@ -701,7 +701,10 @@ export default function SettingsPage() {
         {/* ========== Payment Methods Section ========== */}
         <PaymentMethodSettings />
 
-        {/* ========== Reset Database Section ========== */}
+        {/* ========== Change Password Section ========== */}
+        <ChangePasswordSection />
+
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

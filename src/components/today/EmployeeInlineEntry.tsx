@@ -244,8 +244,13 @@ export function EmployeeInlineEntry({
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-4 text-[10px]">
-                  {cashAmt > 0 && <span className="text-success">💵{formatINR(cashAmt)}</span>}
-                  {upiAmt > 0 && <span className="text-info">📱{formatINR(upiAmt)}</span>}
+                  {txn.payments.filter(p => p.amount > 0).map((p, pi) => (
+                    <span key={pi} className={cn(
+                      p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : 'text-muted-foreground'
+                    )}>
+                      {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : '💳'}{formatINR(p.amount)}
+                    </span>
+                  ))}
                 </div>
               </div>
             );

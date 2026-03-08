@@ -198,6 +198,19 @@ export default function ItemsPage() {
     return matchesSearch && matchesCategory;
   });
 
+  const canReorder = !searchQuery && !selectedCategoryId;
+
+  const handleMoveItem = async (itemId: string, direction: 'up' | 'down') => {
+    const idx = items.findIndex(i => i.id === itemId);
+    if (idx < 0) return;
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === items.length - 1) return;
+    const reordered = [...items];
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+    await reorderItems(reordered);
+  };
+
   const fmt = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
   const totalInventoryValue = items.reduce((sum, item) => sum + (item.inventoryValue || 0), 0);
 

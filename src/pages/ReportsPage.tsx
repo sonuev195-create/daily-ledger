@@ -498,10 +498,12 @@ function MonthlyReport() {
 
 // Row helper components
 function Row({ label, value, bold, negative, accent }: { label: string; value: number; bold?: boolean; negative?: boolean; accent?: boolean }) {
+  const displayValue = negative ? -Math.abs(value) : value;
+  const isNeg = displayValue < 0;
   return (
     <div className={cn("flex justify-between py-0.5", bold && "font-semibold", accent && "text-primary")}>
       <span>{label}</span>
-      <span>{negative ? '-' : ''}{formatINR(Math.abs(value))}</span>
+      <span>{isNeg ? '-' : ''}{formatINR(Math.abs(displayValue))}</span>
     </div>
   );
 }

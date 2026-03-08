@@ -32,6 +32,50 @@ export type Database = {
         }
         Relationships: []
       }
+      app_users: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          display_name: string | null
+          id: string
+          is_active: boolean
+          password: string
+          role: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          display_name?: string | null
+          id?: string
+          is_active?: boolean
+          password: string
+          role?: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          display_name?: string | null
+          id?: string
+          is_active?: boolean
+          password?: string
+          role?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_users_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       batches: {
         Row: {
           batch_number: string | null

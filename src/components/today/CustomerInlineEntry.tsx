@@ -638,16 +638,29 @@ export function CustomerInlineEntry({
             {extractedBillItems.length > 0 && (
               <div className="border border-border rounded-lg overflow-hidden">
                 <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
-                  Extracted Items ({extractedBillItems.length})
+                  Extracted Items ({extractedBillItems.length}) — {extractedBillItems.filter(i => i.selectedItemId).length} matched
                 </div>
-                <div className="max-h-40 overflow-y-auto divide-y divide-border/30">
+                <div className="max-h-60 overflow-y-auto divide-y divide-border/30">
                   {extractedBillItems.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-1 px-2 py-1.5 text-xs">
-                      <span className="flex-1 truncate font-medium">{item.matchedName || item.extractedName}</span>
-                      <span className="text-muted-foreground">×{item.quantity}</span>
-                      <span className="font-medium">{formatINR(item.amount)}</span>
-                      <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
-                        className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                    <div key={idx} className="px-2 py-1.5 space-y-1">
+                      <div className="flex items-center gap-1 text-xs">
+                        <span className="text-muted-foreground text-[10px] truncate max-w-[80px]">{item.extractedName}</span>
+                        <select
+                          value={item.selectedItemId || ''}
+                          onChange={(e) => updateExtractedItemMatch(idx, e.target.value)}
+                          className={cn(
+                            "flex-1 h-7 px-1 text-[11px] bg-background/50 border rounded truncate",
+                            !item.selectedItemId ? "border-destructive/50 text-destructive" : "border-border text-foreground"
+                          )}
+                        >
+                          <option value="">No match</option>
+                          {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                        <span className="text-muted-foreground text-[10px]">×{item.quantity}</span>
+                        <span className="font-medium text-[11px]">{formatINR(item.amount)}</span>
+                        <button onClick={() => setExtractedBillItems(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -279,6 +279,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          sort_order: number
           updated_at: string
         }
         Insert: {
@@ -286,6 +287,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          sort_order?: number
           updated_at?: string
         }
         Update: {
@@ -293,6 +295,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          sort_order?: number
           updated_at?: string
         }
         Relationships: []
@@ -528,6 +531,7 @@ export type Database = {
           paper_bill_name: string | null
           secondary_unit: string | null
           selling_price: number
+          sort_order: number
           updated_at: string
         }
         Insert: {
@@ -541,6 +545,7 @@ export type Database = {
           paper_bill_name?: string | null
           secondary_unit?: string | null
           selling_price?: number
+          sort_order?: number
           updated_at?: string
         }
         Update: {
@@ -554,6 +559,7 @@ export type Database = {
           paper_bill_name?: string | null
           secondary_unit?: string | null
           selling_price?: number
+          sort_order?: number
           updated_at?: string
         }
         Relationships: [

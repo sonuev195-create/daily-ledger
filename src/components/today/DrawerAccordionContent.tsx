@@ -134,15 +134,26 @@ export function DrawerAccordionContent({ opening, closing, previousClosing, summ
         })}
       </div>
 
-      {/* Adjust Error */}
-      {adjustBalance !== 0 && (
-        <div className="flex justify-between text-xs p-2 rounded-lg bg-destructive/10 items-center">
-          <span className="flex items-center gap-1 text-destructive">
-            <AlertCircle className="w-3 h-3" /> Adjust Imbalance
+      {/* Adjust Balance - always show */}
+      <div className={cn(
+        "flex justify-between text-xs p-2 rounded-lg items-center",
+        adjustBalance === 0 ? "bg-success/10" : "bg-destructive/10"
+      )}>
+        <span className={cn("flex items-center gap-1", adjustBalance === 0 ? "text-success" : "text-destructive")}>
+          {adjustBalance === 0 ? <Check className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+          Adjust {adjustBalance === 0 ? '(Balanced)' : 'Imbalance'}
+        </span>
+        <div className="text-right">
+          <span className={cn("font-bold", adjustBalance === 0 ? "text-success" : "text-destructive")}>
+            {adjustBalance === 0 ? '₹0' : `${adjustBalance > 0 ? '+' : ''}${formatINR(adjustBalance)}`}
           </span>
-          <span className="font-bold text-destructive">{formatINR(adjustBalance)}</span>
+          {((summary.adjustIn || 0) > 0 || (summary.adjustOut || 0) > 0) && (
+            <div className="text-[10px] text-muted-foreground">
+              In: {formatINR(summary.adjustIn || 0)} | Out: {formatINR(summary.adjustOut || 0)}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Opening Section */}
       <div className="bg-secondary/30 rounded-xl p-3">

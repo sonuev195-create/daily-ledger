@@ -828,9 +828,18 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                   onClick={() => setBillItems(prev => [...prev, { extractedName: '', matchedName: null, selectedItemId: null, quantity: 1, secondaryQty: 0, rate: 0, amount: 0, confirmed: false, isNew: true }])}>
                   <Plus className="w-3 h-3" /> Item
                 </Button>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowColumnConfig(!showColumnConfig)}
+                  title="Column config">
+                  <Settings className="w-3 h-3 text-muted-foreground" />
+                </Button>
                 <input ref={billCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleOcrCapture} />
                 <input ref={billFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleOcrCapture} />
               </div>
+
+              {/* Inline column config */}
+              {showColumnConfig && (
+                <BillColumnConfigInline onClose={() => setShowColumnConfig(false)} />
+              )}
 
               {/* Items table */}
               {billItems.length > 0 && (

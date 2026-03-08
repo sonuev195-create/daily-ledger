@@ -158,7 +158,7 @@ export default function PurchasePage() {
     .reduce((sum, p) => sum + p.amount, 0);
 
   const handleAddPurchase = (type: string) => {
-    navigate('/', { state: { openTransaction: true, section: 'purchase', type } });
+    navigate('/', { state: { date: new Date().toISOString() } });
   };
 
   return (

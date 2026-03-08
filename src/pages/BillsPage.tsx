@@ -520,7 +520,7 @@ export default function BillsPage() {
                       onClick={() => {
                         const billDate = new Date(selectedBill.created_at);
                         setSelectedBill(null);
-                        navigate('/', { state: { date: billDate.toISOString(), openTransaction: true, section: selectedBill.supplier_name ? 'purchase' : 'sale', type: selectedBill.bill_type } });
+                        navigate('/', { state: { date: billDate.toISOString(), editTransactionId: selectedBill.transaction_id } });
                       }}
                       className="gap-2"
                     >

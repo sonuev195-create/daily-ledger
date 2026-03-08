@@ -407,7 +407,7 @@ export function PurchaseInlineEntry({
                     {cashAmt > 0 && <span className="text-success">💵{formatINR(cashAmt)}</span>}
                     {upiAmt > 0 && <span className="text-info">📱{formatINR(upiAmt)}</span>}
                     {txn.due != null && txn.due > 0 && <span className="text-warning font-medium">⚠️Due:{formatINR(txn.due)}</span>}
-                    {txn.billType && <span className="text-muted-foreground">[{txn.billType === 'g_bill' ? 'G' : txn.billType === 'n_bill' ? 'N' : 'N/G'}]</span>}
+                    {txn.billType && <span className="text-muted-foreground">[{txn.billType === 'g_bill' ? 'A' : txn.billType === 'n_bill' ? 'B' : 'C'}]</span>}
                   </div>
                 </div>
               );

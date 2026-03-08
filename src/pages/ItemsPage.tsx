@@ -203,14 +203,18 @@ export default function ItemsPage() {
 
   const canReorder = !searchQuery && !selectedCategoryId;
 
-  const handleMoveItem = async (itemId: string, direction: 'up' | 'down') => {
-    const idx = items.findIndex(i => i.id === itemId);
-    if (idx < 0) return;
-    if (direction === 'up' && idx === 0) return;
-    if (direction === 'down' && idx === items.length - 1) return;
-    const reordered = [...items];
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = items.findIndex(i => i.id === active.id);
+    const newIndex = items.findIndex(i => i.id === over.id);
+    const reordered = arrayMove(items, oldIndex, newIndex);
+    setItems(reordered);
     await reorderItems(reordered);
   };
 

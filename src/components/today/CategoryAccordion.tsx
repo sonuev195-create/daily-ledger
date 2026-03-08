@@ -169,7 +169,7 @@ export function CategoryAccordion({
                   </div>
                 )}
                 {cat.id === 'drawer' && (
-                  <div className="flex gap-2 mt-0.5 text-[10px]">
+                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
                     <span className="text-success font-medium">💵 {formatINR(drawerCash)}</span>
                     <span className="text-info font-medium">📱 {formatINR(drawerUpi)}</span>
                   </div>

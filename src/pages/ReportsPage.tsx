@@ -70,8 +70,8 @@ export default function ReportsPage() {
 function getResolvedName(txn: any, empMap: Record<string, string>) {
   if (txn.customer_name) return txn.customer_name;
   if (txn.supplier_name) return txn.supplier_name;
-  if (txn.reference) return txn.reference;
   if (txn.employee_id && empMap[txn.employee_id]) return empMap[txn.employee_id];
+  if (txn.reference) return txn.reference;
   return '-';
 }
 

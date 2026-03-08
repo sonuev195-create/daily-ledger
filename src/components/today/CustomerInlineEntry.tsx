@@ -287,6 +287,13 @@ export function CustomerInlineEntry({
     }
   };
 
+  const updateExtractedItemMatch = (index: number, itemId: string) => {
+    const updated = [...extractedBillItems];
+    const masterItem = allItems.find(i => i.id === itemId);
+    updated[index] = { ...updated[index], selectedItemId: itemId || null, matchedName: masterItem?.name || null, confirmed: !!itemId };
+    setExtractedBillItems(updated);
+  };
+
   const handleSave = async () => {
     const totalPayments = entry.payments.reduce((s, p) => s + p.amount, 0);
 

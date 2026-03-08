@@ -854,56 +854,74 @@ function ChangePasswordSection() {
   const { user, isAdmin } = useAuth();
   const [allUsers, setAllUsers] = useState<{ id: string; username: string; role: string; display_name: string | null }[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
+  const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Only admin can access this section
+  if (!isAdmin) return null;
+
   useEffect(() => {
-    if (isAdmin) {
-      supabase.from('app_users').select('id, username, role, display_name').eq('is_active', true).order('username').then(({ data }) => {
-        setAllUsers(data || []);
-      });
+    supabase.from('app_users').select('id, username, role, display_name').eq('is_active', true).order('username').then(({ data }) => {
+      setAllUsers(data || []);
+    });
+  }, []);
+
+  const selectedUser = allUsers.find(u => u.id === selectedUserId);
+
+  const handleChangeUsername = async () => {
+    if (!selectedUserId) { toast.error('Select a user'); return; }
+    if (!newUsername.trim()) { toast.error('Enter new username'); return; }
+    if (newUsername.trim().length < 3) { toast.error('Username must be at least 3 characters'); return; }
+
+    setSaving(true);
+    try {
+      // Check if username already taken
+      const { data: existing } = await supabase.from('app_users')
+        .select('id').eq('username', newUsername.trim()).neq('id', selectedUserId).maybeSingle();
+      if (existing) { toast.error('Username already taken'); setSaving(false); return; }
+
+      const { error } = await supabase.from('app_users')
+        .update({ username: newUsername.trim(), updated_at: new Date().toISOString() })
+        .eq('id', selectedUserId);
+
+      if (error) throw error;
+      toast.success('Username changed successfully');
+      setNewUsername('');
+      // Refresh users list
+      const { data } = await supabase.from('app_users').select('id, username, role, display_name').eq('is_active', true).order('username');
+      setAllUsers(data || []);
+    } catch (err) {
+      toast.error('Failed to change username');
+    } finally {
+      setSaving(false);
     }
-  }, [isAdmin]);
+  };
 
   const handleChangePassword = async () => {
+    if (!selectedUserId) { toast.error('Select a user'); return; }
     if (!newPassword.trim()) { toast.error('New password required'); return; }
     if (newPassword !== confirmPassword) { toast.error('Passwords do not match'); return; }
     if (newPassword.length < 4) { toast.error('Password must be at least 4 characters'); return; }
 
-    const targetId = isAdmin && selectedUserId ? selectedUserId : user?.id;
-    if (!targetId) return;
-
     setSaving(true);
     try {
-      // For non-admin or self-change, verify current password
-      if (!isAdmin || targetId === user?.id) {
-        const { data: check } = await supabase.from('app_users')
-          .select('id').eq('id', targetId).eq('password', currentPassword).single();
-        if (!check) { toast.error('Current password is incorrect'); setSaving(false); return; }
-      }
-
       const { error } = await supabase.from('app_users')
         .update({ password: newPassword, updated_at: new Date().toISOString() })
-        .eq('id', targetId);
+        .eq('id', selectedUserId);
 
       if (error) throw error;
       toast.success('Password changed successfully');
-      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setSelectedUserId('');
     } catch (err) {
       toast.error('Failed to change password');
     } finally {
       setSaving(false);
     }
   };
-
-  const needsCurrentPassword = !isAdmin || (selectedUserId === user?.id || !selectedUserId);
 
   return (
     <motion.div
@@ -917,82 +935,82 @@ function ChangePasswordSection() {
           <KeyRound className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h2 className="font-semibold text-foreground">Change Password</h2>
-          <p className="text-xs text-muted-foreground">
-            {isAdmin ? 'Change password for any user' : 'Update your login password'}
-          </p>
+          <h2 className="font-semibold text-foreground">User Account Management</h2>
+          <p className="text-xs text-muted-foreground">Change username or password for any user (Admin only)</p>
         </div>
       </div>
 
-      {isAdmin && allUsers.length > 0 && (
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Select User</label>
-          <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-            <SelectTrigger className="h-10">
-              <SelectValue placeholder="Select user to change password..." />
-            </SelectTrigger>
-            <SelectContent>
-              {allUsers.map(u => (
-                <SelectItem key={u.id} value={u.id}>
-                  {u.display_name || u.username} ({u.role})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+      {/* Select User */}
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Select User</label>
+        <Select value={selectedUserId} onValueChange={(v) => {
+          setSelectedUserId(v);
+          const u = allUsers.find(u => u.id === v);
+          setNewUsername(u?.username || '');
+          setNewPassword('');
+          setConfirmPassword('');
+        }}>
+          <SelectTrigger className="h-10">
+            <SelectValue placeholder="Select user..." />
+          </SelectTrigger>
+          <SelectContent>
+            {allUsers.map(u => (
+              <SelectItem key={u.id} value={u.id}>
+                {u.display_name || u.username} <span className="text-muted-foreground">({u.role})</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-      {needsCurrentPassword && (
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Current Password</label>
-          <div className="relative">
-            <Input
-              type={showCurrent ? 'text' : 'password'}
-              value={currentPassword}
-              onChange={e => setCurrentPassword(e.target.value)}
-              placeholder="Enter current password"
-              className="h-10 pr-10"
-            />
-            <button type="button" onClick={() => setShowCurrent(!showCurrent)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+      {selectedUserId && (
+        <>
+          {/* Change Username */}
+          <div className="bg-background/50 rounded-xl p-3 space-y-2 border border-border">
+            <label className="text-xs font-semibold text-foreground block">Change Username (Login ID)</label>
+            <div className="flex gap-2">
+              <Input
+                value={newUsername}
+                onChange={e => setNewUsername(e.target.value)}
+                placeholder="New username"
+                className="h-9 flex-1"
+              />
+              <Button size="sm" onClick={handleChangeUsername} disabled={saving || newUsername === selectedUser?.username} className="h-9">
+                Update ID
+              </Button>
+            </div>
           </div>
-        </div>
+
+          {/* Change Password */}
+          <div className="bg-background/50 rounded-xl p-3 space-y-2 border border-border">
+            <label className="text-xs font-semibold text-foreground block">Change Password</label>
+            <div className="relative">
+              <Input
+                type={showNew ? 'text' : 'password'}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="New password"
+                className="h-9 pr-10"
+              />
+              <button type="button" onClick={() => setShowNew(!showNew)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="Confirm new password"
+              className="h-9"
+            />
+            <Button onClick={handleChangePassword} disabled={saving} className="w-full h-9 gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+              {saving ? 'Changing...' : 'Change Password'}
+            </Button>
+          </div>
+        </>
       )}
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">New Password</label>
-        <div className="relative">
-          <Input
-            type={showNew ? 'text' : 'password'}
-            value={newPassword}
-            onChange={e => setNewPassword(e.target.value)}
-            placeholder="Enter new password"
-            className="h-10 pr-10"
-          />
-          <button type="button" onClick={() => setShowNew(!showNew)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-            {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Confirm New Password</label>
-        <Input
-          type="password"
-          value={confirmPassword}
-          onChange={e => setConfirmPassword(e.target.value)}
-          placeholder="Confirm new password"
-          className="h-10"
-        />
-      </div>
-
-      <Button onClick={handleChangePassword} disabled={saving} className="w-full h-10 gap-2">
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
-        {saving ? 'Changing...' : 'Change Password'}
-      </Button>
     </motion.div>
   );
 }

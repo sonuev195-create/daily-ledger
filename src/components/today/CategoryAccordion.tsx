@@ -177,7 +177,7 @@ export function CategoryAccordion({
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {flow && flow.count > 0 && (
-                  <span className="text-xs text-muted-foreground bg-secondary rounded-full px-1.5 py-0.5">{flow.count}</span>
+                  <span className="text-xs lg:text-sm text-muted-foreground bg-secondary rounded-full px-1.5 py-0.5 lg:px-2 lg:py-1">{flow.count}</span>
                 )}
                 <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
                   <ChevronDown className="w-4 h-4 text-muted-foreground" />

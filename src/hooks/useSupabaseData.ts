@@ -422,6 +422,59 @@ export async function saveBillToSupabase(
   return bill.id;
 }
 
+// Get bill items for a transaction
+export async function getBillItemsForTransaction(transactionId: string): Promise<{
+  billId: string;
+  items: { id: string; itemId: string | null; batchId: string | null; itemName: string; primaryQty: number; secondaryQty: number; rate: number; amount: number }[];
+} | null> {
+  const { data: bills } = await supabase.from('bills').select('id').eq('transaction_id', transactionId);
+  if (!bills?.[0]) return null;
+  const billId = bills[0].id;
+  const { data: items } = await supabase.from('bill_items').select('*').eq('bill_id', billId);
+  if (!items) return { billId, items: [] };
+  return {
+    billId,
+    items: items.map(i => ({
+      id: i.id, itemId: i.item_id, batchId: i.batch_id,
+      itemName: i.item_name, primaryQty: Number(i.primary_quantity),
+      secondaryQty: Number(i.secondary_quantity), rate: Number(i.rate), amount: Number(i.total_amount),
+    })),
+  };
+}
+
+// Restore inventory (reverse deductions) for bill items before editing
+export async function restoreInventoryForBillItems(transactionId: string): Promise<void> {
+  const result = await getBillItemsForTransaction(transactionId);
+  if (!result || result.items.length === 0) return;
+  for (const item of result.items) {
+    if (!item.itemId) continue;
+    // If we have a specific batch, restore to it
+    if (item.batchId) {
+      const { data: batch } = await supabase.from('batches').select('primary_quantity, secondary_quantity').eq('id', item.batchId).single();
+      if (batch) {
+        await supabase.from('batches').update({
+          primary_quantity: Number(batch.primary_quantity) + item.primaryQty,
+          secondary_quantity: Number(batch.secondary_quantity) + item.secondaryQty,
+        }).eq('id', item.batchId);
+      }
+    } else {
+      // No specific batch - restore to earliest batch with this item
+      const batches = await getBatchesForItem(item.itemId);
+      const sorted = batches.sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
+      if (sorted.length > 0) {
+        await supabase.from('batches').update({
+          primary_quantity: sorted[0].primaryQuantity + item.primaryQty,
+          secondary_quantity: sorted[0].secondaryQuantity + item.secondaryQty,
+        }).eq('id', sorted[0].id);
+      }
+    }
+  }
+  // Delete old bill items
+  await supabase.from('bill_items').delete().eq('bill_id', result.billId);
+  // Delete old bill record
+  await supabase.from('bills').delete().eq('id', result.billId);
+}
+
 // Fetch customers with search and due bills
 export async function searchCustomers(query: string): Promise<{
   id: string;

@@ -159,12 +159,13 @@ function DailyReport() {
     return s + payments.reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
   }, 0);
   const overallDue = saleTxns.reduce((s, t) => s + (Number(t.due) || 0), 0);
-  const overallAdvance = saleTxns.reduce((s, t) => {
+  const advanceUsedInPayments = saleTxns.reduce((s, t) => {
     const payments = Array.isArray(t.payments) ? t.payments : [];
-    const advPay = payments.filter((p: any) => p.mode === 'advance').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
-    const overpay = Number(t.overpayment) || 0;
-    return s + advPay + overpay;
+    return s + payments.filter((p: any) => p.mode === 'advance').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
   }, 0);
+  const advanceFromOverpayment = saleTxns.filter(t => t.type !== 'customer_advance').reduce((s, t) => s + (Number(t.overpayment) || 0), 0);
+  const customerAdvanceTxns = saleTxns.filter(t => t.type === 'customer_advance').reduce((s, t) => s + Number(t.amount), 0);
+  const overallAdvance = advanceUsedInPayments + advanceFromOverpayment + customerAdvanceTxns;
 
   return (
     <div className="space-y-4">

@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react'; // v2
-import { Plus, Trash2, ClipboardPaste, Lock, Unlock, Save, AlertTriangle, X, Package, FileSpreadsheet, Camera, Upload, Loader2, Settings, ChevronRight, Check, Pencil, Eye } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react'; // v3
+import { Plus, Trash2, ClipboardPaste, Lock, Unlock, Save, AlertTriangle, X, Package, FileSpreadsheet, Camera, Upload, Loader2, Settings, ChevronRight, Check, Pencil, Eye, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -13,6 +13,31 @@ import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { getOrCreateCustomer, updateCustomerBalance, saveBillToSupabase, deductFromBatch, getBatchesForItem, useItems, restoreInventoryForBillItems } from '@/hooks/useSupabaseData';
 import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
+
+const BILL_ONLY_CATEGORIES = [
+  { value: 'sale', label: 'Sale', section: 'sale' as TransactionSection, type: 'sale' },
+  { value: 'sales_return', label: 'Sales Return', section: 'sale' as TransactionSection, type: 'sales_return' },
+  { value: 'balance_paid', label: 'Balance Paid', section: 'sale' as TransactionSection, type: 'balance_paid' },
+  { value: 'customer_advance', label: 'Cust. Advance', section: 'sale' as TransactionSection, type: 'customer_advance' },
+  { value: 'purchase_payment', label: 'Pur. Payment', section: 'purchase' as TransactionSection, type: 'purchase_payment' },
+  { value: 'other_expenses', label: 'Expenses', section: 'expenses' as TransactionSection, type: 'other_expenses' },
+];
+
+const DEFAULT_BILL_ONLY_COLUMNS = ['category', 'amount', 'cash', 'upi', 'adjust', 'customer', 'welder'];
+
+interface BillOnlyRow {
+  id: string;
+  category: string;
+  amount: number;
+  cash: number;
+  upi: number;
+  adjust: number;
+  customerName: string;
+  matchedCustomerId: string | null;
+  matchedCustomerName: string | null;
+  welderName: string;
+  matchedWelderId: string | null;
+}
 
 interface FullDayBillRow {
   id: string;
@@ -64,7 +89,7 @@ interface FullDayBillContentProps {
   onDeleteTransaction: (id: string) => void;
 }
 
-type FullDayMode = 'inventory' | 'bills' | 'bill_items';
+type FullDayMode = 'bill_only' | 'inventory' | 'bills' | 'bill_items';
 
 // Fuzzy match item name against master list
 function fuzzyMatchItem(name: string, items: { id: string; name: string; paperBillName?: string | null }[]): { id: string; name: string; score: number } | null {
@@ -143,12 +168,24 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
   const { items: allItems } = useItems();
   const [rows, setRows] = useState<FullDayBillRow[]>([]);
   const [lockMode, setLockMode] = useState<'partial' | 'full'>('partial');
-  const [entryMode, setEntryMode] = useState<FullDayMode>('bills');
+  const [entryMode, setEntryMode] = useState<FullDayMode>('bill_only');
   const [saving, setSaving] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [showPaste, setShowPaste] = useState(false);
   const [allCustomers, setAllCustomers] = useState<{ id: string; name: string }[]>([]);
+  const [allWelders, setAllWelders] = useState<{ id: string; name: string }[]>([]);
 
+  // Bill Only mode state
+  const [billOnlyRows, setBillOnlyRows] = useState<BillOnlyRow[]>([]);
+  const [billOnlyColumns, setBillOnlyColumns] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('billOnlyColumns');
+      return saved ? JSON.parse(saved) : DEFAULT_BILL_ONLY_COLUMNS;
+    } catch { return DEFAULT_BILL_ONLY_COLUMNS; }
+  });
+  const [showBillOnlySettings, setShowBillOnlySettings] = useState(false);
+  const [billOnlyPasteText, setBillOnlyPasteText] = useState('');
+  const [showBillOnlyPaste, setShowBillOnlyPaste] = useState(false);
   // Bill Wise Items mode state
   const [existingSales, setExistingSales] = useState<ExistingSaleBill[]>([]);
   const [currentBillIdx, setCurrentBillIdx] = useState(0);
@@ -162,9 +199,10 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
 
   const saleTransactions = transactions.filter(t => t.section === 'sale' && (t.type === 'sale' || t.type === 'sales_return'));
 
-  // Load all customers for fuzzy matching
+  // Load all customers and welders for matching
   useEffect(() => {
     supabase.from('customers').select('id, name').order('name').then(({ data }) => setAllCustomers(data || []));
+    supabase.from('welders').select('id, name').order('name').then(({ data }) => setAllWelders(data || []));
   }, []);
 
   // Load ALL existing sales for bill_items mode
@@ -591,6 +629,150 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     });
   };
 
+  // === BILL ONLY HELPERS ===
+  const fuzzyMatchWelder = (name: string): { id: string; name: string } | null => {
+    if (!name.trim()) return null;
+    const norm = name.toLowerCase().trim();
+    for (const w of allWelders) {
+      if (w.name.toLowerCase().trim() === norm) return w;
+      if (w.name.toLowerCase().includes(norm) || norm.includes(w.name.toLowerCase())) return w;
+    }
+    return null;
+  };
+
+  const addBillOnlyRow = () => {
+    const lastRow = billOnlyRows[billOnlyRows.length - 1];
+    setBillOnlyRows(prev => [...prev, {
+      id: uuidv4(), category: lastRow?.category || 'sale', amount: 0, cash: 0, upi: 0, adjust: 0,
+      customerName: '', matchedCustomerId: null, matchedCustomerName: null, welderName: '', matchedWelderId: null,
+    }]);
+  };
+
+  const updateBillOnlyRow = (id: string, field: keyof BillOnlyRow, value: string | number) => {
+    setBillOnlyRows(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      const updated = { ...r, [field]: value };
+      if (field === 'customerName') {
+        updated.matchedCustomerId = null; updated.matchedCustomerName = null;
+        const match = fuzzyMatchCustomer(value as string, allCustomers);
+        if (match) { updated.matchedCustomerId = match.id; updated.matchedCustomerName = match.name; }
+      }
+      if (field === 'welderName') {
+        updated.matchedWelderId = null;
+        const match = fuzzyMatchWelder(value as string);
+        if (match) { updated.matchedWelderId = match.id; updated.welderName = match.name; }
+      }
+      // Auto-fill amount from cash+upi+adjust if amount is 0
+      if (['cash', 'upi', 'adjust'].includes(field as string)) {
+        const c = field === 'cash' ? (value as number) : updated.cash;
+        const u = field === 'upi' ? (value as number) : updated.upi;
+        const a = field === 'adjust' ? (value as number) : updated.adjust;
+        if (updated.amount === 0 || updated.amount === (r.cash + r.upi + r.adjust)) {
+          updated.amount = c + u + a;
+        }
+      }
+      return updated;
+    }));
+  };
+
+  const handleBillOnlyPaste = () => {
+    if (!billOnlyPasteText.trim()) return;
+    const lines = billOnlyPasteText.trim().split('\n');
+    const newRows: BillOnlyRow[] = [];
+    for (const line of lines) {
+      const cols = line.split(/\t|,/).map(c => c.trim());
+      if (cols.length < 2) continue;
+      // Map columns based on billOnlyColumns order
+      const row: BillOnlyRow = { id: uuidv4(), category: 'sale', amount: 0, cash: 0, upi: 0, adjust: 0, customerName: '', matchedCustomerId: null, matchedCustomerName: null, welderName: '', matchedWelderId: null };
+      billOnlyColumns.forEach((col, idx) => {
+        if (idx >= cols.length) return;
+        const val = cols[idx];
+        if (col === 'category') {
+          const match = BILL_ONLY_CATEGORIES.find(c => c.label.toLowerCase().includes(val.toLowerCase()) || c.value === val.toLowerCase());
+          row.category = match?.value || 'sale';
+        } else if (col === 'amount') row.amount = parseFloat(val) || 0;
+        else if (col === 'cash') row.cash = parseFloat(val) || 0;
+        else if (col === 'upi') row.upi = parseFloat(val) || 0;
+        else if (col === 'adjust') row.adjust = parseFloat(val) || 0;
+        else if (col === 'customer') {
+          row.customerName = val;
+          const cm = fuzzyMatchCustomer(val, allCustomers);
+          if (cm) { row.matchedCustomerId = cm.id; row.matchedCustomerName = cm.name; row.customerName = cm.name; }
+        }
+        else if (col === 'welder') {
+          row.welderName = val;
+          const wm = fuzzyMatchWelder(val);
+          if (wm) { row.matchedWelderId = wm.id; row.welderName = wm.name; }
+        }
+      });
+      if (row.amount === 0) row.amount = row.cash + row.upi + row.adjust;
+      newRows.push(row);
+    }
+    if (newRows.length === 0) { toast.error('No valid rows found'); return; }
+    setBillOnlyRows(prev => [...prev, ...newRows]);
+    setBillOnlyPasteText('');
+    setShowBillOnlyPaste(false);
+    toast.success(`Added ${newRows.length} rows`);
+  };
+
+  const handleSaveBillOnly = async () => {
+    if (billOnlyRows.length === 0) { toast.error('No rows to save'); return; }
+    setSaving(true);
+    try {
+      // Get next bill number
+      const { data: settings } = await supabase.from('bill_format_config')
+        .select('*').eq('config_name', 'bill_series_start').maybeSingle();
+      const startNum = settings ? parseInt((settings as any).total_columns?.toString() || '1') : 1;
+      const { data: lastBill } = await supabase.from('transactions')
+        .select('bill_number').like('bill_number', 'S%').not('bill_number', 'like', 'SR%')
+        .order('created_at', { ascending: false }).limit(1);
+      let nextNum = startNum;
+      if (lastBill?.[0]?.bill_number) {
+        const n = parseInt(lastBill[0].bill_number.replace('S', ''), 10);
+        if (!isNaN(n)) nextNum = Math.max(startNum, n + 1);
+      }
+
+      for (const row of billOnlyRows) {
+        if (row.amount <= 0 && row.cash <= 0 && row.upi <= 0 && row.adjust <= 0) continue;
+        const catDef = BILL_ONLY_CATEGORIES.find(c => c.value === row.category) || BILL_ONLY_CATEGORIES[0];
+        const payments: PaymentEntry[] = [];
+        if (row.cash > 0) payments.push({ id: uuidv4(), mode: 'cash', amount: row.cash });
+        if (row.upi > 0) payments.push({ id: uuidv4(), mode: 'upi', amount: row.upi });
+        if (row.adjust > 0) payments.push({ id: uuidv4(), mode: 'adjust', amount: row.adjust });
+        const totalPaid = row.cash + row.upi + row.adjust;
+        const due = Math.max(0, row.amount - totalPaid);
+        if (payments.length === 0) payments.push({ id: uuidv4(), mode: 'cash', amount: row.amount });
+
+        let customerId = row.matchedCustomerId || undefined;
+        if (!customerId && row.customerName.trim() && (catDef.section === 'sale')) {
+          customerId = await getOrCreateCustomer(row.customerName.trim()) || undefined;
+        }
+
+        let billNumber: string | undefined;
+        if (catDef.type === 'sale') {
+          billNumber = `S${nextNum.toString().padStart(4, '0')}`;
+          nextNum++;
+        }
+
+        const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+          date: selectedDate, section: catDef.section, type: catDef.type,
+          amount: row.amount, payments, due: due > 0 ? due : undefined,
+          billNumber, customerId, customerName: row.customerName || undefined,
+          welderId: row.matchedWelderId || undefined,
+        };
+        await onSave(txn);
+      }
+      toast.success(`Saved ${billOnlyRows.length} transactions`);
+      setBillOnlyRows([]);
+    } catch (err) { console.error(err); toast.error('Error saving'); }
+    finally { setSaving(false); }
+  };
+
+  const saveBillOnlyColumnOrder = (cols: string[]) => {
+    setBillOnlyColumns(cols);
+    localStorage.setItem('billOnlyColumns', JSON.stringify(cols));
+  };
+
   // === RENDER ===
   return (
     <div className="space-y-3">
@@ -598,14 +780,15 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       <div className="flex items-center gap-2">
         <div className="flex bg-secondary rounded-lg p-0.5 flex-1">
           {([
+            { key: 'bill_only' as FullDayMode, icon: Receipt, label: 'Bill Only' },
             { key: 'inventory' as FullDayMode, icon: Package, label: 'Inventory' },
             { key: 'bills' as FullDayMode, icon: FileSpreadsheet, label: 'Full Bills' },
-            { key: 'bill_items' as FullDayMode, icon: Eye, label: 'Bill Wise Items' },
+            { key: 'bill_items' as FullDayMode, icon: Eye, label: 'Bill Items' },
           ]).map(tab => (
             <button key={tab.key}
-              onClick={() => { setEntryMode(tab.key); setRows([]); setBillItems([]); setEditingBillId(null); }}
+              onClick={() => { setEntryMode(tab.key); setRows([]); setBillItems([]); setBillOnlyRows([]); setEditingBillId(null); }}
               className={cn(
-                "flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-medium transition-colors",
+                "flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[10px] font-medium transition-colors",
                 entryMode === tab.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
               )}
             >
@@ -613,7 +796,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
             </button>
           ))}
         </div>
-        {entryMode !== 'bill_items' && (
+        {(entryMode === 'inventory' || entryMode === 'bills') && (
           <button onClick={() => setLockMode(lockMode === 'partial' ? 'full' : 'partial')}
             className={cn(
               "flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors shrink-0",
@@ -628,13 +811,133 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       </div>
 
       {/* Lock warning */}
-      {lockMode === 'full' && saleTransactions.length > 0 && entryMode !== 'bill_items' && (
+      {lockMode === 'full' && saleTransactions.length > 0 && (entryMode === 'inventory' || entryMode === 'bills') && (
         <div className="bg-warning/10 border border-warning/30 rounded-lg p-2 space-y-1">
           <div className="flex items-center gap-1 text-xs text-warning font-medium">
             <AlertTriangle className="w-3 h-3" /> {saleTransactions.length} sale(s) may duplicate inventory
           </div>
           <p className="text-[10px] text-muted-foreground">Lock only affects inventory tracking.</p>
         </div>
+      )}
+
+      {/* ============ BILL ONLY MODE ============ */}
+      {entryMode === 'bill_only' && (
+        <>
+          {showBillOnlyPaste ? (
+            <div className="space-y-2 border border-accent/30 rounded-lg p-2 bg-accent/5">
+              <label className="text-[10px] text-muted-foreground">
+                Paste columns: {billOnlyColumns.join(', ')}
+              </label>
+              <textarea value={billOnlyPasteText} onChange={e => setBillOnlyPasteText(e.target.value)}
+                placeholder="Paste tab/comma separated data..."
+                className="w-full h-24 text-xs p-2 bg-background border border-border rounded-md resize-none font-mono" />
+              <div className="flex gap-1">
+                <Button size="sm" className="h-7 text-xs gap-1 flex-1" onClick={handleBillOnlyPaste}>
+                  <ClipboardPaste className="w-3 h-3" /> Parse
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { setShowBillOnlyPaste(false); setBillOnlyPasteText(''); }}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1" onClick={() => setShowBillOnlyPaste(true)}>
+                <ClipboardPaste className="w-3 h-3" /> Paste
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addBillOnlyRow}>
+                <Plus className="w-3 h-3" /> Add
+              </Button>
+              {billOnlyRows.length > 0 && (
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-destructive hover:text-destructive" onClick={() => setBillOnlyRows([])}>
+                  <Trash2 className="w-3 h-3" /> Clear
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowBillOnlySettings(!showBillOnlySettings)}>
+                <Settings className="w-3 h-3 text-muted-foreground" />
+              </Button>
+            </div>
+          )}
+
+          {/* Column Settings */}
+          {showBillOnlySettings && (
+            <BillOnlyColumnSettings columns={billOnlyColumns} onSave={(cols) => { saveBillOnlyColumnOrder(cols); setShowBillOnlySettings(false); }} onClose={() => setShowBillOnlySettings(false)} />
+          )}
+
+          {/* Rows */}
+          {billOnlyRows.length > 0 && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <div className="min-w-[600px]">
+                  <div className="flex gap-1 px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
+                    {billOnlyColumns.map(col => (
+                      <span key={col} className={cn(
+                        col === 'category' ? 'w-24' : col === 'customer' ? 'flex-1 min-w-[80px]' : col === 'welder' ? 'w-20' : 'w-16',
+                        'shrink-0'
+                      )}>
+                        {col === 'category' ? 'Type' : col === 'customer' ? 'Customer' : col === 'welder' ? 'Welder' : col.charAt(0).toUpperCase() + col.slice(1)}
+                      </span>
+                    ))}
+                    <span className="w-5"></span>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto divide-y divide-border/30">
+                    {billOnlyRows.map(row => (
+                      <div key={row.id} className="flex gap-1 px-2 py-1 items-center">
+                        {billOnlyColumns.map(col => {
+                          if (col === 'category') return (
+                            <select key={col} value={row.category} onChange={e => updateBillOnlyRow(row.id, 'category', e.target.value)}
+                              className="w-24 h-7 px-1 text-[10px] bg-background/50 border border-border rounded shrink-0">
+                              {BILL_ONLY_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                            </select>
+                          );
+                          if (col === 'customer') return (
+                            <div key={col} className="flex-1 min-w-[80px] shrink-0">
+                              <input value={row.customerName} onChange={e => updateBillOnlyRow(row.id, 'customerName', e.target.value)}
+                                placeholder="Customer" className="w-full h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
+                                list={`cust-${row.id}`} />
+                              <datalist id={`cust-${row.id}`}>
+                                {allCustomers.map(c => <option key={c.id} value={c.name} />)}
+                              </datalist>
+                            </div>
+                          );
+                          if (col === 'welder') return (
+                            <div key={col} className="w-20 shrink-0">
+                              <input value={row.welderName} onChange={e => updateBillOnlyRow(row.id, 'welderName', e.target.value)}
+                                placeholder="Welder" className="w-full h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
+                                list={`weld-${row.id}`} />
+                              <datalist id={`weld-${row.id}`}>
+                                {allWelders.map(w => <option key={w.id} value={w.name} />)}
+                              </datalist>
+                            </div>
+                          );
+                          // Numeric fields: amount, cash, upi, adjust
+                          return (
+                            <input key={col} type="number" value={(row as any)[col] || ''} 
+                              onChange={e => updateBillOnlyRow(row.id, col as keyof BillOnlyRow, parseFloat(e.target.value) || 0)}
+                              placeholder={col === 'amount' ? '₹' : col.charAt(0).toUpperCase()}
+                              className="w-16 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded shrink-0" />
+                          );
+                        })}
+                        <button onClick={() => setBillOnlyRows(prev => prev.filter(r => r.id !== row.id))} className="text-muted-foreground hover:text-destructive w-5 shrink-0">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="px-2 py-1.5 border-t border-border bg-secondary/20 text-xs font-medium flex justify-between">
+                <span>{billOnlyRows.length} rows</span>
+                <span>Total: {formatINR(billOnlyRows.reduce((s, r) => s + r.amount, 0))}</span>
+              </div>
+            </div>
+          )}
+
+          {billOnlyRows.length > 0 && (
+            <Button onClick={handleSaveBillOnly} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
+              <Save className="w-3.5 h-3.5" />
+              {saving ? 'Saving...' : `Save ${billOnlyRows.length} Transaction(s)`}
+            </Button>
+          )}
+        </>
       )}
 
       {/* ============ INVENTORY & BILLS MODES ============ */}
@@ -1075,6 +1378,65 @@ function BillColumnConfigInline({ onClose }: { onClose: () => void }) {
         </Select>
       </div>
       <Button size="sm" className="h-6 text-[10px] w-full" onClick={handleSaveConfig}>Save Config</Button>
+    </div>
+  );
+}
+
+// Column settings for Bill Only mode
+function BillOnlyColumnSettings({ columns, onSave, onClose }: { columns: string[]; onSave: (cols: string[]) => void; onClose: () => void }) {
+  const allCols = ['category', 'amount', 'cash', 'upi', 'adjust', 'customer', 'welder'];
+  const [order, setOrder] = useState<string[]>(columns);
+
+  const moveUp = (idx: number) => {
+    if (idx === 0) return;
+    const newOrder = [...order];
+    [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+    setOrder(newOrder);
+  };
+
+  const moveDown = (idx: number) => {
+    if (idx === order.length - 1) return;
+    const newOrder = [...order];
+    [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
+    setOrder(newOrder);
+  };
+
+  const toggleCol = (col: string) => {
+    if (order.includes(col)) {
+      if (order.length <= 2) return; // minimum 2 columns
+      setOrder(order.filter(c => c !== col));
+    } else {
+      setOrder([...order, col]);
+    }
+  };
+
+  const colLabels: Record<string, string> = { category: 'Type', amount: 'Amount', cash: 'Cash', upi: 'UPI', adjust: 'Adjust', customer: 'Customer', welder: 'Welder' };
+
+  return (
+    <div className="border border-border rounded-lg p-2 bg-secondary/10 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-medium text-muted-foreground">Column Order (Paste & Display)</span>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>
+      </div>
+      <div className="space-y-1">
+        {order.map((col, idx) => (
+          <div key={col} className="flex items-center gap-1 text-[10px]">
+            <span className="w-4 text-muted-foreground text-center">{idx + 1}</span>
+            <Checkbox checked={true} onCheckedChange={() => toggleCol(col)} />
+            <span className="flex-1 font-medium">{colLabels[col] || col}</span>
+            <button onClick={() => moveUp(idx)} disabled={idx === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30 px-1">↑</button>
+            <button onClick={() => moveDown(idx)} disabled={idx === order.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30 px-1">↓</button>
+          </div>
+        ))}
+        {allCols.filter(c => !order.includes(c)).map(col => (
+          <div key={col} className="flex items-center gap-1 text-[10px] opacity-50">
+            <span className="w-4"></span>
+            <Checkbox checked={false} onCheckedChange={() => toggleCol(col)} />
+            <span className="flex-1">{colLabels[col] || col}</span>
+          </div>
+        ))}
+      </div>
+      <Button size="sm" className="h-6 text-[10px] w-full" onClick={() => onSave(order)}>Save Column Order</Button>
     </div>
   );
 }

@@ -310,6 +310,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       if (r.id !== id) return r;
       const updated = { ...r, [field]: value };
       if (field === 'itemName') { updated.matchedItemId = null; updated.matchedItemName = null; }
+      if (field === 'customerName') { updated.matchedCustomerId = null; updated.matchedCustomerName = null; }
       if (field === 'quantity' || field === 'amount') {
         const qty = field === 'quantity' ? (value as number) : updated.quantity;
         const amt = field === 'amount' ? (value as number) : updated.amount;

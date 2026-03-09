@@ -36,7 +36,7 @@ export function BillDetailsSheet({ isOpen, onClose, bill, transaction, onEdit }:
           <SheetHeader className="px-6 py-4 border-b border-border">
             <div className="flex items-center justify-between">
               <SheetTitle className="text-lg font-semibold">Bill Details</SheetTitle>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 pr-10">
                 {onEdit && (
                   <button 
                     onClick={onEdit} 
@@ -50,12 +50,6 @@ export function BillDetailsSheet({ isOpen, onClose, bill, transaction, onEdit }:
                   className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary"
                 >
                   <Download className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={onClose} 
-                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary"
-                >
-                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>

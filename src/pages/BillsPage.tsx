@@ -513,7 +513,7 @@ export default function BillsPage() {
               <div className="flex items-center justify-between">
                 <SheetTitle className="text-lg font-semibold">Bill Details</SheetTitle>
                 {selectedBill && (
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 pr-10">
                     <Button
                       variant="outline"
                       size="sm"

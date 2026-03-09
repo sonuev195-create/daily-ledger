@@ -629,6 +629,150 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     });
   };
 
+  // === BILL ONLY HELPERS ===
+  const fuzzyMatchWelder = (name: string): { id: string; name: string } | null => {
+    if (!name.trim()) return null;
+    const norm = name.toLowerCase().trim();
+    for (const w of allWelders) {
+      if (w.name.toLowerCase().trim() === norm) return w;
+      if (w.name.toLowerCase().includes(norm) || norm.includes(w.name.toLowerCase())) return w;
+    }
+    return null;
+  };
+
+  const addBillOnlyRow = () => {
+    const lastRow = billOnlyRows[billOnlyRows.length - 1];
+    setBillOnlyRows(prev => [...prev, {
+      id: uuidv4(), category: lastRow?.category || 'sale', amount: 0, cash: 0, upi: 0, adjust: 0,
+      customerName: '', matchedCustomerId: null, matchedCustomerName: null, welderName: '', matchedWelderId: null,
+    }]);
+  };
+
+  const updateBillOnlyRow = (id: string, field: keyof BillOnlyRow, value: string | number) => {
+    setBillOnlyRows(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      const updated = { ...r, [field]: value };
+      if (field === 'customerName') {
+        updated.matchedCustomerId = null; updated.matchedCustomerName = null;
+        const match = fuzzyMatchCustomer(value as string, allCustomers);
+        if (match) { updated.matchedCustomerId = match.id; updated.matchedCustomerName = match.name; }
+      }
+      if (field === 'welderName') {
+        updated.matchedWelderId = null;
+        const match = fuzzyMatchWelder(value as string);
+        if (match) { updated.matchedWelderId = match.id; updated.welderName = match.name; }
+      }
+      // Auto-fill amount from cash+upi+adjust if amount is 0
+      if (['cash', 'upi', 'adjust'].includes(field as string)) {
+        const c = field === 'cash' ? (value as number) : updated.cash;
+        const u = field === 'upi' ? (value as number) : updated.upi;
+        const a = field === 'adjust' ? (value as number) : updated.adjust;
+        if (updated.amount === 0 || updated.amount === (r.cash + r.upi + r.adjust)) {
+          updated.amount = c + u + a;
+        }
+      }
+      return updated;
+    }));
+  };
+
+  const handleBillOnlyPaste = () => {
+    if (!billOnlyPasteText.trim()) return;
+    const lines = billOnlyPasteText.trim().split('\n');
+    const newRows: BillOnlyRow[] = [];
+    for (const line of lines) {
+      const cols = line.split(/\t|,/).map(c => c.trim());
+      if (cols.length < 2) continue;
+      // Map columns based on billOnlyColumns order
+      const row: BillOnlyRow = { id: uuidv4(), category: 'sale', amount: 0, cash: 0, upi: 0, adjust: 0, customerName: '', matchedCustomerId: null, matchedCustomerName: null, welderName: '', matchedWelderId: null };
+      billOnlyColumns.forEach((col, idx) => {
+        if (idx >= cols.length) return;
+        const val = cols[idx];
+        if (col === 'category') {
+          const match = BILL_ONLY_CATEGORIES.find(c => c.label.toLowerCase().includes(val.toLowerCase()) || c.value === val.toLowerCase());
+          row.category = match?.value || 'sale';
+        } else if (col === 'amount') row.amount = parseFloat(val) || 0;
+        else if (col === 'cash') row.cash = parseFloat(val) || 0;
+        else if (col === 'upi') row.upi = parseFloat(val) || 0;
+        else if (col === 'adjust') row.adjust = parseFloat(val) || 0;
+        else if (col === 'customer') {
+          row.customerName = val;
+          const cm = fuzzyMatchCustomer(val, allCustomers);
+          if (cm) { row.matchedCustomerId = cm.id; row.matchedCustomerName = cm.name; row.customerName = cm.name; }
+        }
+        else if (col === 'welder') {
+          row.welderName = val;
+          const wm = fuzzyMatchWelder(val);
+          if (wm) { row.matchedWelderId = wm.id; row.welderName = wm.name; }
+        }
+      });
+      if (row.amount === 0) row.amount = row.cash + row.upi + row.adjust;
+      newRows.push(row);
+    }
+    if (newRows.length === 0) { toast.error('No valid rows found'); return; }
+    setBillOnlyRows(prev => [...prev, ...newRows]);
+    setBillOnlyPasteText('');
+    setShowBillOnlyPaste(false);
+    toast.success(`Added ${newRows.length} rows`);
+  };
+
+  const handleSaveBillOnly = async () => {
+    if (billOnlyRows.length === 0) { toast.error('No rows to save'); return; }
+    setSaving(true);
+    try {
+      // Get next bill number
+      const { data: settings } = await supabase.from('bill_format_config')
+        .select('*').eq('config_name', 'bill_series_start').maybeSingle();
+      const startNum = settings ? parseInt((settings as any).total_columns?.toString() || '1') : 1;
+      const { data: lastBill } = await supabase.from('transactions')
+        .select('bill_number').like('bill_number', 'S%').not('bill_number', 'like', 'SR%')
+        .order('created_at', { ascending: false }).limit(1);
+      let nextNum = startNum;
+      if (lastBill?.[0]?.bill_number) {
+        const n = parseInt(lastBill[0].bill_number.replace('S', ''), 10);
+        if (!isNaN(n)) nextNum = Math.max(startNum, n + 1);
+      }
+
+      for (const row of billOnlyRows) {
+        if (row.amount <= 0 && row.cash <= 0 && row.upi <= 0 && row.adjust <= 0) continue;
+        const catDef = BILL_ONLY_CATEGORIES.find(c => c.value === row.category) || BILL_ONLY_CATEGORIES[0];
+        const payments: PaymentEntry[] = [];
+        if (row.cash > 0) payments.push({ id: uuidv4(), mode: 'cash', amount: row.cash });
+        if (row.upi > 0) payments.push({ id: uuidv4(), mode: 'upi', amount: row.upi });
+        if (row.adjust > 0) payments.push({ id: uuidv4(), mode: 'adjust', amount: row.adjust });
+        const totalPaid = row.cash + row.upi + row.adjust;
+        const due = Math.max(0, row.amount - totalPaid);
+        if (payments.length === 0) payments.push({ id: uuidv4(), mode: 'cash', amount: row.amount });
+
+        let customerId = row.matchedCustomerId || undefined;
+        if (!customerId && row.customerName.trim() && (catDef.section === 'sale')) {
+          customerId = await getOrCreateCustomer(row.customerName.trim()) || undefined;
+        }
+
+        let billNumber: string | undefined;
+        if (catDef.type === 'sale') {
+          billNumber = `S${nextNum.toString().padStart(4, '0')}`;
+          nextNum++;
+        }
+
+        const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+          date: selectedDate, section: catDef.section, type: catDef.type,
+          amount: row.amount, payments, due: due > 0 ? due : undefined,
+          billNumber, customerId, customerName: row.customerName || undefined,
+          welderId: row.matchedWelderId || undefined,
+        };
+        await onSave(txn);
+      }
+      toast.success(`Saved ${billOnlyRows.length} transactions`);
+      setBillOnlyRows([]);
+    } catch (err) { console.error(err); toast.error('Error saving'); }
+    finally { setSaving(false); }
+  };
+
+  const saveBillOnlyColumnOrder = (cols: string[]) => {
+    setBillOnlyColumns(cols);
+    localStorage.setItem('billOnlyColumns', JSON.stringify(cols));
+  };
+
   // === RENDER ===
   return (
     <div className="space-y-3">

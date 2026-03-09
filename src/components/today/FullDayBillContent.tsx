@@ -374,14 +374,20 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
         const customerId = await getOrCreateCustomer(group.customerName);
         if (!customerId) continue;
 
+        // Use the same sale bill numbering as CustomerInlineEntry (S prefix)
+        const { data: settings } = await supabase.from('bill_format_config')
+          .select('*').eq('config_name', 'bill_series_start').maybeSingle();
+        const startNum = settings ? parseInt((settings as any).total_columns?.toString() || '1') : 1;
+
         const { data: lastBill } = await supabase.from('transactions')
-          .select('bill_number').like('bill_number', 'FD%').order('created_at', { ascending: false }).limit(1);
-        let nextNum = 1;
+          .select('bill_number').like('bill_number', 'S%').not('bill_number', 'like', 'SR%')
+          .order('created_at', { ascending: false }).limit(1);
+        let nextNum = startNum;
         if (lastBill?.[0]?.bill_number) {
-          const n = parseInt(lastBill[0].bill_number.replace(/^FD[A-Z]?/, ''), 10);
-          if (!isNaN(n)) nextNum = n + 1;
+          const n = parseInt(lastBill[0].bill_number.replace('S', ''), 10);
+          if (!isNaN(n)) nextNum = Math.max(startNum, n + 1);
         }
-        const billNumber = `FD${nextNum.toString().padStart(4, '0')}`;
+        const billNumber = `S${nextNum.toString().padStart(4, '0')}`;
 
         const saleTransaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
           date: selectedDate, section: 'sale' as TransactionSection, type: 'sale',

@@ -663,6 +663,11 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
               <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addRow}>
                 <Plus className="w-3 h-3" /> Add Row
               </Button>
+              {rows.length > 0 && (
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-destructive hover:text-destructive" onClick={() => setRows([])}>
+                  <Trash2 className="w-3 h-3" /> Clear
+                </Button>
+              )}
             </div>
           )}
 

@@ -22,6 +22,8 @@ interface FullDayBillRow {
   amount: number;
   matchedItemId: string | null;
   matchedItemName: string | null;
+  matchedCustomerId: string | null;
+  matchedCustomerName: string | null;
   secondaryQty: number;
   rate: number;
 }
@@ -113,6 +115,30 @@ function levenshtein(a: string, b: string): number {
   return dp[m][n];
 }
 
+// Fuzzy match customer name against existing customers
+function fuzzyMatchCustomer(name: string, customers: { id: string; name: string }[]): { id: string; name: string } | null {
+  if (!name.trim()) return null;
+  const norm = name.toLowerCase().trim();
+  let best: { id: string; name: string; score: number } | null = null;
+
+  for (const cust of customers) {
+    const custNorm = cust.name.toLowerCase().trim();
+    if (norm === custNorm) return { id: cust.id, name: cust.name };
+    if (custNorm.includes(norm) || norm.includes(custNorm)) {
+      const score = 0.9;
+      if (!best || score > best.score) best = { id: cust.id, name: cust.name, score };
+      continue;
+    }
+    const maxLen = Math.max(norm.length, custNorm.length);
+    if (maxLen > 0) {
+      const dist = levenshtein(norm, custNorm);
+      const sim = 1 - dist / maxLen;
+      if (sim > (best?.score || 0.5)) best = { id: cust.id, name: cust.name, score: sim };
+    }
+  }
+  return best && best.score >= 0.6 ? { id: best.id, name: best.name } : null;
+}
+
 export function FullDayBillContent({ transactions, selectedDate, onSave, onDeleteTransaction }: FullDayBillContentProps) {
   const { items: allItems } = useItems();
   const [rows, setRows] = useState<FullDayBillRow[]>([]);
@@ -121,6 +147,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
   const [saving, setSaving] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [showPaste, setShowPaste] = useState(false);
+  const [allCustomers, setAllCustomers] = useState<{ id: string; name: string }[]>([]);
 
   // Bill Wise Items mode state
   const [existingSales, setExistingSales] = useState<ExistingSaleBill[]>([]);
@@ -134,6 +161,11 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
   const [showColumnConfig, setShowColumnConfig] = useState(false);
 
   const saleTransactions = transactions.filter(t => t.section === 'sale' && (t.type === 'sale' || t.type === 'sales_return'));
+
+  // Load all customers for fuzzy matching
+  useEffect(() => {
+    supabase.from('customers').select('id, name').order('name').then(({ data }) => setAllCustomers(data || []));
+  }, []);
 
   // Load ALL existing sales for bill_items mode
   useEffect(() => {
@@ -183,26 +215,35 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     return { rate: item.conversionRate, type: item.conversionType };
   };
 
-  // Auto-match item names when rows change
+  // Auto-match item names and customer names when rows change
   useEffect(() => {
-    if (rows.length === 0 || allItems.length === 0) return;
+    if (rows.length === 0) return;
     const updated = rows.map(row => {
-      if (row.matchedItemId) return row;
-      if (!row.itemName.trim()) return row;
-      const match = fuzzyMatchItem(row.itemName, allItems);
-      if (match) {
-        const conv = getItemConversion(match.id);
-        let secQty = row.secondaryQty;
-        if (conv && conv.type === 'permanent' && conv.rate > 0 && row.quantity > 0 && secQty === 0) {
-          secQty = row.quantity * conv.rate;
+      let r = { ...row };
+      // Item matching
+      if (!r.matchedItemId && r.itemName.trim() && allItems.length > 0) {
+        const match = fuzzyMatchItem(r.itemName, allItems);
+        if (match) {
+          const conv = getItemConversion(match.id);
+          let secQty = r.secondaryQty;
+          if (conv && conv.type === 'permanent' && conv.rate > 0 && r.quantity > 0 && secQty === 0) {
+            secQty = r.quantity * conv.rate;
+          }
+          r = { ...r, matchedItemId: match.id, matchedItemName: match.name, secondaryQty: secQty };
         }
-        return { ...row, matchedItemId: match.id, matchedItemName: match.name, secondaryQty: secQty };
       }
-      return row;
+      // Customer matching
+      if (!r.matchedCustomerId && r.customerName.trim() && allCustomers.length > 0) {
+        const custMatch = fuzzyMatchCustomer(r.customerName, allCustomers);
+        if (custMatch) {
+          r = { ...r, matchedCustomerId: custMatch.id, matchedCustomerName: custMatch.name, customerName: custMatch.name };
+        }
+      }
+      return r;
     });
-    const changed = updated.some((r, i) => r.matchedItemId !== rows[i].matchedItemId);
+    const changed = updated.some((r, i) => r.matchedItemId !== rows[i].matchedItemId || r.matchedCustomerId !== rows[i].matchedCustomerId);
     if (changed) setRows(updated);
-  }, [rows, allItems]);
+  }, [rows, allItems, allCustomers]);
 
   const groupByCustomer = useCallback((rowList: FullDayBillRow[]): CustomerBillGroup[] => {
     const groups: CustomerBillGroup[] = [];
@@ -235,7 +276,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
           const item = cols[0] || '';
           const qty = parseFloat(cols[1]) || 0;
           const amt = cols.length >= 3 ? (parseFloat(cols[2]) || 0) : 0;
-          newRows.push({ id: uuidv4(), customerName: '', itemName: item, quantity: qty, amount: amt, matchedItemId: null, matchedItemName: null, secondaryQty: 0, rate: qty > 0 && amt > 0 ? amt / qty : 0 });
+          newRows.push({ id: uuidv4(), customerName: '', itemName: item, quantity: qty, amount: amt, matchedItemId: null, matchedItemName: null, matchedCustomerId: null, matchedCustomerName: null, secondaryQty: 0, rate: qty > 0 && amt > 0 ? amt / qty : 0 });
         }
       } else {
         if (cols.length >= 3) {
@@ -243,7 +284,8 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
           const item = cols[1] || '';
           const qty = parseFloat(cols[2]) || 0;
           const amt = cols.length >= 4 ? (parseFloat(cols[3]) || 0) : 0;
-          newRows.push({ id: uuidv4(), customerName: name, itemName: item, quantity: qty, amount: amt, matchedItemId: null, matchedItemName: null, secondaryQty: 0, rate: qty > 0 && amt > 0 ? amt / qty : 0 });
+          const custMatch = fuzzyMatchCustomer(name, allCustomers);
+          newRows.push({ id: uuidv4(), customerName: custMatch?.name || name, itemName: item, quantity: qty, amount: amt, matchedItemId: null, matchedItemName: null, matchedCustomerId: custMatch?.id || null, matchedCustomerName: custMatch?.name || null, secondaryQty: 0, rate: qty > 0 && amt > 0 ? amt / qty : 0 });
         }
       }
     }
@@ -259,7 +301,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     setRows(prev => [...prev, {
       id: uuidv4(),
       customerName: entryMode === 'bills' ? (lastRow?.customerName || '') : '',
-      itemName: '', quantity: 0, amount: 0, matchedItemId: null, matchedItemName: null, secondaryQty: 0, rate: 0,
+      itemName: '', quantity: 0, amount: 0, matchedItemId: null, matchedItemName: null, matchedCustomerId: lastRow?.matchedCustomerId || null, matchedCustomerName: lastRow?.matchedCustomerName || null, secondaryQty: 0, rate: 0,
     }]);
   };
 
@@ -268,6 +310,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       if (r.id !== id) return r;
       const updated = { ...r, [field]: value };
       if (field === 'itemName') { updated.matchedItemId = null; updated.matchedItemName = null; }
+      if (field === 'customerName') { updated.matchedCustomerId = null; updated.matchedCustomerName = null; }
       if (field === 'quantity' || field === 'amount') {
         const qty = field === 'quantity' ? (value as number) : updated.quantity;
         const amt = field === 'amount' ? (value as number) : updated.amount;
@@ -344,14 +387,20 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
         const customerId = await getOrCreateCustomer(group.customerName);
         if (!customerId) continue;
 
+        // Use the same sale bill numbering as CustomerInlineEntry (S prefix)
+        const { data: settings } = await supabase.from('bill_format_config')
+          .select('*').eq('config_name', 'bill_series_start').maybeSingle();
+        const startNum = settings ? parseInt((settings as any).total_columns?.toString() || '1') : 1;
+
         const { data: lastBill } = await supabase.from('transactions')
-          .select('bill_number').like('bill_number', 'FD%').order('created_at', { ascending: false }).limit(1);
-        let nextNum = 1;
+          .select('bill_number').like('bill_number', 'S%').not('bill_number', 'like', 'SR%')
+          .order('created_at', { ascending: false }).limit(1);
+        let nextNum = startNum;
         if (lastBill?.[0]?.bill_number) {
-          const n = parseInt(lastBill[0].bill_number.replace(/^FD[A-Z]?/, ''), 10);
-          if (!isNaN(n)) nextNum = n + 1;
+          const n = parseInt(lastBill[0].bill_number.replace('S', ''), 10);
+          if (!isNaN(n)) nextNum = Math.max(startNum, n + 1);
         }
-        const billNumber = `FD${nextNum.toString().padStart(4, '0')}`;
+        const billNumber = `S${nextNum.toString().padStart(4, '0')}`;
 
         const saleTransaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
           date: selectedDate, section: 'sale' as TransactionSection, type: 'sale',
@@ -614,6 +663,11 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
               <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addRow}>
                 <Plus className="w-3 h-3" /> Add Row
               </Button>
+              {rows.length > 0 && (
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-destructive hover:text-destructive" onClick={() => setRows([])}>
+                  <Trash2 className="w-3 h-3" /> Clear
+                </Button>
+              )}
             </div>
           )}
 
@@ -693,6 +747,21 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                               placeholder="₹" className="h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
                             <button onClick={() => removeRow(row.id)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
                           </div>
+                          {isNewCustomer && row.customerName.trim() && (
+                            <div className="flex items-center gap-1 px-2 pb-0.5">
+                              {row.matchedCustomerId ? (
+                                <span className="text-[9px] text-success flex items-center gap-0.5"><Check className="w-2.5 h-2.5" /> {row.matchedCustomerName}</span>
+                              ) : (
+                                <select value="" onChange={e => {
+                                  const cust = allCustomers.find(c => c.id === e.target.value);
+                                  if (cust) setRows(prev => prev.map(r => r.customerName.toLowerCase() === row.customerName.toLowerCase() ? { ...r, matchedCustomerId: cust.id, matchedCustomerName: cust.name, customerName: cust.name } : r));
+                                }} className="text-[9px] text-destructive bg-transparent border-none h-4">
+                                  <option value="">⚠ No match</option>
+                                  {allCustomers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                              )}
+                            </div>
+                          )}
                           {row.itemName.trim() && (
                             <div className="flex items-center gap-1 px-2 pb-0.5">
                               {row.matchedItemId ? (

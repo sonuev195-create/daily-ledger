@@ -168,12 +168,24 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
   const { items: allItems } = useItems();
   const [rows, setRows] = useState<FullDayBillRow[]>([]);
   const [lockMode, setLockMode] = useState<'partial' | 'full'>('partial');
-  const [entryMode, setEntryMode] = useState<FullDayMode>('bills');
+  const [entryMode, setEntryMode] = useState<FullDayMode>('bill_only');
   const [saving, setSaving] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [showPaste, setShowPaste] = useState(false);
   const [allCustomers, setAllCustomers] = useState<{ id: string; name: string }[]>([]);
+  const [allWelders, setAllWelders] = useState<{ id: string; name: string }[]>([]);
 
+  // Bill Only mode state
+  const [billOnlyRows, setBillOnlyRows] = useState<BillOnlyRow[]>([]);
+  const [billOnlyColumns, setBillOnlyColumns] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('billOnlyColumns');
+      return saved ? JSON.parse(saved) : DEFAULT_BILL_ONLY_COLUMNS;
+    } catch { return DEFAULT_BILL_ONLY_COLUMNS; }
+  });
+  const [showBillOnlySettings, setShowBillOnlySettings] = useState(false);
+  const [billOnlyPasteText, setBillOnlyPasteText] = useState('');
+  const [showBillOnlyPaste, setShowBillOnlyPaste] = useState(false);
   // Bill Wise Items mode state
   const [existingSales, setExistingSales] = useState<ExistingSaleBill[]>([]);
   const [currentBillIdx, setCurrentBillIdx] = useState(0);

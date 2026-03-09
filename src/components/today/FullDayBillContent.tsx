@@ -780,14 +780,15 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       <div className="flex items-center gap-2">
         <div className="flex bg-secondary rounded-lg p-0.5 flex-1">
           {([
+            { key: 'bill_only' as FullDayMode, icon: Receipt, label: 'Bill Only' },
             { key: 'inventory' as FullDayMode, icon: Package, label: 'Inventory' },
             { key: 'bills' as FullDayMode, icon: FileSpreadsheet, label: 'Full Bills' },
-            { key: 'bill_items' as FullDayMode, icon: Eye, label: 'Bill Wise Items' },
+            { key: 'bill_items' as FullDayMode, icon: Eye, label: 'Bill Items' },
           ]).map(tab => (
             <button key={tab.key}
-              onClick={() => { setEntryMode(tab.key); setRows([]); setBillItems([]); setEditingBillId(null); }}
+              onClick={() => { setEntryMode(tab.key); setRows([]); setBillItems([]); setBillOnlyRows([]); setEditingBillId(null); }}
               className={cn(
-                "flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-medium transition-colors",
+                "flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[10px] font-medium transition-colors",
                 entryMode === tab.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
               )}
             >

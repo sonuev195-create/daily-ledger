@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'; // v2
-import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download, FileSpreadsheet, UserCheck } from 'lucide-react';
+import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download, FileSpreadsheet, UserCheck, TrendingUp } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,8 +11,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { EmployeeReport } from '@/components/reports/EmployeeReport';
 import { SupplierReport } from '@/components/reports/SupplierReport';
 import { CustomerReport } from '@/components/reports/CustomerReport';
+import { ProfitReport } from '@/components/reports/ProfitReport';
 
-type ReportTab = 'daily' | 'monthly' | 'employee' | 'supplier_detail' | 'customer' | 'supplier' | 'inventory' | 'drawer';
+type ReportTab = 'daily' | 'monthly' | 'profit' | 'employee' | 'supplier_detail' | 'customer' | 'supplier' | 'inventory' | 'drawer';
 
 // CSV export helper
 function downloadCSV(rows: string[][], filename: string) {
@@ -28,6 +29,7 @@ function downloadCSV(rows: string[][], filename: string) {
 const reportTabs: { id: ReportTab; label: string; icon: any }[] = [
   { id: 'daily', label: 'Daily', icon: FileText },
   { id: 'monthly', label: 'Monthly', icon: BarChart3 },
+  { id: 'profit', label: 'Profit', icon: TrendingUp },
   { id: 'employee', label: 'Employee', icon: UserCheck },
   { id: 'supplier_detail', label: 'Supplier', icon: Truck },
   { id: 'customer', label: 'Customers', icon: Users },
@@ -63,6 +65,7 @@ export default function ReportsPage() {
 
         {activeTab === 'daily' && <DailyReport />}
         {activeTab === 'monthly' && <MonthlyReport />}
+        {activeTab === 'profit' && <ProfitReport />}
         {activeTab === 'employee' && <EmployeeReport />}
         {activeTab === 'supplier_detail' && <SupplierReport />}
         {activeTab === 'customer' && <CustomerReport />}

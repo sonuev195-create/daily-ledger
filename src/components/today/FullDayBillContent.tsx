@@ -215,26 +215,35 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     return { rate: item.conversionRate, type: item.conversionType };
   };
 
-  // Auto-match item names when rows change
+  // Auto-match item names and customer names when rows change
   useEffect(() => {
-    if (rows.length === 0 || allItems.length === 0) return;
+    if (rows.length === 0) return;
     const updated = rows.map(row => {
-      if (row.matchedItemId) return row;
-      if (!row.itemName.trim()) return row;
-      const match = fuzzyMatchItem(row.itemName, allItems);
-      if (match) {
-        const conv = getItemConversion(match.id);
-        let secQty = row.secondaryQty;
-        if (conv && conv.type === 'permanent' && conv.rate > 0 && row.quantity > 0 && secQty === 0) {
-          secQty = row.quantity * conv.rate;
+      let r = { ...row };
+      // Item matching
+      if (!r.matchedItemId && r.itemName.trim() && allItems.length > 0) {
+        const match = fuzzyMatchItem(r.itemName, allItems);
+        if (match) {
+          const conv = getItemConversion(match.id);
+          let secQty = r.secondaryQty;
+          if (conv && conv.type === 'permanent' && conv.rate > 0 && r.quantity > 0 && secQty === 0) {
+            secQty = r.quantity * conv.rate;
+          }
+          r = { ...r, matchedItemId: match.id, matchedItemName: match.name, secondaryQty: secQty };
         }
-        return { ...row, matchedItemId: match.id, matchedItemName: match.name, secondaryQty: secQty };
       }
-      return row;
+      // Customer matching
+      if (!r.matchedCustomerId && r.customerName.trim() && allCustomers.length > 0) {
+        const custMatch = fuzzyMatchCustomer(r.customerName, allCustomers);
+        if (custMatch) {
+          r = { ...r, matchedCustomerId: custMatch.id, matchedCustomerName: custMatch.name, customerName: custMatch.name };
+        }
+      }
+      return r;
     });
-    const changed = updated.some((r, i) => r.matchedItemId !== rows[i].matchedItemId);
+    const changed = updated.some((r, i) => r.matchedItemId !== rows[i].matchedItemId || r.matchedCustomerId !== rows[i].matchedCustomerId);
     if (changed) setRows(updated);
-  }, [rows, allItems]);
+  }, [rows, allItems, allCustomers]);
 
   const groupByCustomer = useCallback((rowList: FullDayBillRow[]): CustomerBillGroup[] => {
     const groups: CustomerBillGroup[] = [];

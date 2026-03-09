@@ -464,7 +464,7 @@ export function EmployeeInlineEntry({
           <div className="space-y-2">
             {entry.employeeId && (
               <div className="bg-warning/10 border border-warning/30 rounded-lg p-2">
-                <span className="text-xs font-medium text-warning">Previous Month Due: {formatINR(previousDue)}</span>
+                <span className="text-xs font-medium text-warning">{format(new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1), 'MMM')} Due: {formatINR(previousDue)}</span>
               </div>
             )}
             <div>

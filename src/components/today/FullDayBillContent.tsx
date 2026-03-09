@@ -113,6 +113,30 @@ function levenshtein(a: string, b: string): number {
   return dp[m][n];
 }
 
+// Fuzzy match customer name against existing customers
+function fuzzyMatchCustomer(name: string, customers: { id: string; name: string }[]): { id: string; name: string } | null {
+  if (!name.trim()) return null;
+  const norm = name.toLowerCase().trim();
+  let best: { id: string; name: string; score: number } | null = null;
+
+  for (const cust of customers) {
+    const custNorm = cust.name.toLowerCase().trim();
+    if (norm === custNorm) return { id: cust.id, name: cust.name };
+    if (custNorm.includes(norm) || norm.includes(custNorm)) {
+      const score = 0.9;
+      if (!best || score > best.score) best = { id: cust.id, name: cust.name, score };
+      continue;
+    }
+    const maxLen = Math.max(norm.length, custNorm.length);
+    if (maxLen > 0) {
+      const dist = levenshtein(norm, custNorm);
+      const sim = 1 - dist / maxLen;
+      if (sim > (best?.score || 0.5)) best = { id: cust.id, name: cust.name, score: sim };
+    }
+  }
+  return best && best.score >= 0.6 ? { id: best.id, name: best.name } : null;
+}
+
 export function FullDayBillContent({ transactions, selectedDate, onSave, onDeleteTransaction }: FullDayBillContentProps) {
   const { items: allItems } = useItems();
   const [rows, setRows] = useState<FullDayBillRow[]>([]);
@@ -121,6 +145,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
   const [saving, setSaving] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [showPaste, setShowPaste] = useState(false);
+  const [allCustomers, setAllCustomers] = useState<{ id: string; name: string }[]>([]);
 
   // Bill Wise Items mode state
   const [existingSales, setExistingSales] = useState<ExistingSaleBill[]>([]);
@@ -134,6 +159,11 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
   const [showColumnConfig, setShowColumnConfig] = useState(false);
 
   const saleTransactions = transactions.filter(t => t.section === 'sale' && (t.type === 'sale' || t.type === 'sales_return'));
+
+  // Load all customers for fuzzy matching
+  useEffect(() => {
+    supabase.from('customers').select('id, name').order('name').then(({ data }) => setAllCustomers(data || []));
+  }, []);
 
   // Load ALL existing sales for bill_items mode
   useEffect(() => {

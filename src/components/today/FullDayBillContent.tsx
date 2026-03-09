@@ -199,9 +199,10 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
 
   const saleTransactions = transactions.filter(t => t.section === 'sale' && (t.type === 'sale' || t.type === 'sales_return'));
 
-  // Load all customers for fuzzy matching
+  // Load all customers and welders for matching
   useEffect(() => {
     supabase.from('customers').select('id, name').order('name').then(({ data }) => setAllCustomers(data || []));
+    supabase.from('welders').select('id, name').order('name').then(({ data }) => setAllWelders(data || []));
   }, []);
 
   // Load ALL existing sales for bill_items mode

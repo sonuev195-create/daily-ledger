@@ -680,13 +680,18 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     const lines = billOnlyPasteText.trim().split('\n');
     const newRows: BillOnlyRow[] = [];
     for (const line of lines) {
-      const cols = line.split(/\t|,/).map(c => c.trim());
-      if (cols.length < 2) continue;
+      if (!line.trim()) continue;
+      // Split by tab or comma - empty values between delimiters become empty strings
+      const cols = line.split(/\t|,/);
       // Map columns based on billOnlyColumns order
+      // If fewer columns provided than configured, remaining columns stay at defaults
       const row: BillOnlyRow = { id: uuidv4(), category: 'sale', amount: 0, cash: 0, upi: 0, adjust: 0, customerName: '', matchedCustomerId: null, matchedCustomerName: null, welderName: '', matchedWelderId: null };
       billOnlyColumns.forEach((col, idx) => {
+        // If column index exceeds provided data, leave as default (empty)
         if (idx >= cols.length) return;
-        const val = cols[idx];
+        const val = cols[idx].trim();
+        // Empty value (comma without data) = skip, keep default
+        if (!val) return;
         if (col === 'category') {
           const match = BILL_ONLY_CATEGORIES.find(c => c.label.toLowerCase().includes(val.toLowerCase()) || c.value === val.toLowerCase());
           row.category = match?.value || 'sale';

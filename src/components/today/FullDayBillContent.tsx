@@ -267,7 +267,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
           const item = cols[0] || '';
           const qty = parseFloat(cols[1]) || 0;
           const amt = cols.length >= 3 ? (parseFloat(cols[2]) || 0) : 0;
-          newRows.push({ id: uuidv4(), customerName: '', itemName: item, quantity: qty, amount: amt, matchedItemId: null, matchedItemName: null, secondaryQty: 0, rate: qty > 0 && amt > 0 ? amt / qty : 0 });
+          newRows.push({ id: uuidv4(), customerName: '', itemName: item, quantity: qty, amount: amt, matchedItemId: null, matchedItemName: null, matchedCustomerId: null, matchedCustomerName: null, secondaryQty: 0, rate: qty > 0 && amt > 0 ? amt / qty : 0 });
         }
       } else {
         if (cols.length >= 3) {

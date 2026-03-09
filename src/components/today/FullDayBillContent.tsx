@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react'; // v2
-import { Plus, Trash2, ClipboardPaste, Lock, Unlock, Save, AlertTriangle, X, Package, FileSpreadsheet, Camera, Upload, Loader2, Settings, ChevronRight, Check, Pencil, Eye } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react'; // v3
+import { Plus, Trash2, ClipboardPaste, Lock, Unlock, Save, AlertTriangle, X, Package, FileSpreadsheet, Camera, Upload, Loader2, Settings, ChevronRight, Check, Pencil, Eye, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -13,6 +13,31 @@ import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { getOrCreateCustomer, updateCustomerBalance, saveBillToSupabase, deductFromBatch, getBatchesForItem, useItems, restoreInventoryForBillItems } from '@/hooks/useSupabaseData';
 import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
+
+const BILL_ONLY_CATEGORIES = [
+  { value: 'sale', label: 'Sale', section: 'sale' as TransactionSection, type: 'sale' },
+  { value: 'sales_return', label: 'Sales Return', section: 'sale' as TransactionSection, type: 'sales_return' },
+  { value: 'balance_paid', label: 'Balance Paid', section: 'sale' as TransactionSection, type: 'balance_paid' },
+  { value: 'customer_advance', label: 'Cust. Advance', section: 'sale' as TransactionSection, type: 'customer_advance' },
+  { value: 'purchase_payment', label: 'Pur. Payment', section: 'purchase' as TransactionSection, type: 'purchase_payment' },
+  { value: 'other_expenses', label: 'Expenses', section: 'expenses' as TransactionSection, type: 'other_expenses' },
+];
+
+const DEFAULT_BILL_ONLY_COLUMNS = ['category', 'amount', 'cash', 'upi', 'adjust', 'customer', 'welder'];
+
+interface BillOnlyRow {
+  id: string;
+  category: string;
+  amount: number;
+  cash: number;
+  upi: number;
+  adjust: number;
+  customerName: string;
+  matchedCustomerId: string | null;
+  matchedCustomerName: string | null;
+  welderName: string;
+  matchedWelderId: string | null;
+}
 
 interface FullDayBillRow {
   id: string;
@@ -64,7 +89,7 @@ interface FullDayBillContentProps {
   onDeleteTransaction: (id: string) => void;
 }
 
-type FullDayMode = 'inventory' | 'bills' | 'bill_items';
+type FullDayMode = 'bill_only' | 'inventory' | 'bills' | 'bill_items';
 
 // Fuzzy match item name against master list
 function fuzzyMatchItem(name: string, items: { id: string; name: string; paperBillName?: string | null }[]): { id: string; name: string; score: number } | null {

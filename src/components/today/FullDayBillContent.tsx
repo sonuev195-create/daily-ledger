@@ -292,7 +292,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
     setRows(prev => [...prev, {
       id: uuidv4(),
       customerName: entryMode === 'bills' ? (lastRow?.customerName || '') : '',
-      itemName: '', quantity: 0, amount: 0, matchedItemId: null, matchedItemName: null, secondaryQty: 0, rate: 0,
+      itemName: '', quantity: 0, amount: 0, matchedItemId: null, matchedItemName: null, matchedCustomerId: lastRow?.matchedCustomerId || null, matchedCustomerName: lastRow?.matchedCustomerName || null, secondaryQty: 0, rate: 0,
     }]);
   };
 

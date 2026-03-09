@@ -464,7 +464,7 @@ export function EmployeeInlineEntry({
           <div className="space-y-2">
             {entry.employeeId && (
               <div className="bg-warning/10 border border-warning/30 rounded-lg p-2">
-                <span className="text-xs font-medium text-warning">Previous Month Due: {formatINR(previousDue)}</span>
+                <span className="text-xs font-medium text-warning">{format(new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1), 'MMM')} Due: {formatINR(previousDue)}</span>
               </div>
             )}
             <div>
@@ -508,7 +508,7 @@ export function EmployeeInlineEntry({
 
             {entry.employeeId && thisMonthDue > 0 && (
               <div className="bg-accent/10 border border-accent/30 rounded-lg p-2">
-                <span className="text-xs font-medium text-accent">This Month Due: {formatINR(thisMonthDue)}</span>
+                <span className="text-xs font-medium text-accent">{format(selectedDate, 'MMM')} Due: {formatINR(thisMonthDue)}</span>
               </div>
             )}
 

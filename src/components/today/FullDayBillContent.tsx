@@ -742,6 +742,21 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                               placeholder="₹" className="h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded" />
                             <button onClick={() => removeRow(row.id)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
                           </div>
+                          {isNewCustomer && row.customerName.trim() && (
+                            <div className="flex items-center gap-1 px-2 pb-0.5">
+                              {row.matchedCustomerId ? (
+                                <span className="text-[9px] text-success flex items-center gap-0.5"><Check className="w-2.5 h-2.5" /> {row.matchedCustomerName}</span>
+                              ) : (
+                                <select value="" onChange={e => {
+                                  const cust = allCustomers.find(c => c.id === e.target.value);
+                                  if (cust) setRows(prev => prev.map(r => r.customerName.toLowerCase() === row.customerName.toLowerCase() ? { ...r, matchedCustomerId: cust.id, matchedCustomerName: cust.name, customerName: cust.name } : r));
+                                }} className="text-[9px] text-destructive bg-transparent border-none h-4">
+                                  <option value="">⚠ No match</option>
+                                  {allCustomers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                              )}
+                            </div>
+                          )}
                           {row.itemName.trim() && (
                             <div className="flex items-center gap-1 px-2 pb-0.5">
                               {row.matchedItemId ? (

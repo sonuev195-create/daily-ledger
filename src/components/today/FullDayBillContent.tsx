@@ -1381,3 +1381,62 @@ function BillColumnConfigInline({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
+
+// Column settings for Bill Only mode
+function BillOnlyColumnSettings({ columns, onSave, onClose }: { columns: string[]; onSave: (cols: string[]) => void; onClose: () => void }) {
+  const allCols = ['category', 'amount', 'cash', 'upi', 'adjust', 'customer', 'welder'];
+  const [order, setOrder] = useState<string[]>(columns);
+
+  const moveUp = (idx: number) => {
+    if (idx === 0) return;
+    const newOrder = [...order];
+    [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+    setOrder(newOrder);
+  };
+
+  const moveDown = (idx: number) => {
+    if (idx === order.length - 1) return;
+    const newOrder = [...order];
+    [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
+    setOrder(newOrder);
+  };
+
+  const toggleCol = (col: string) => {
+    if (order.includes(col)) {
+      if (order.length <= 2) return; // minimum 2 columns
+      setOrder(order.filter(c => c !== col));
+    } else {
+      setOrder([...order, col]);
+    }
+  };
+
+  const colLabels: Record<string, string> = { category: 'Type', amount: 'Amount', cash: 'Cash', upi: 'UPI', adjust: 'Adjust', customer: 'Customer', welder: 'Welder' };
+
+  return (
+    <div className="border border-border rounded-lg p-2 bg-secondary/10 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-medium text-muted-foreground">Column Order (Paste & Display)</span>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>
+      </div>
+      <div className="space-y-1">
+        {order.map((col, idx) => (
+          <div key={col} className="flex items-center gap-1 text-[10px]">
+            <span className="w-4 text-muted-foreground text-center">{idx + 1}</span>
+            <Checkbox checked={true} onCheckedChange={() => toggleCol(col)} />
+            <span className="flex-1 font-medium">{colLabels[col] || col}</span>
+            <button onClick={() => moveUp(idx)} disabled={idx === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30 px-1">↑</button>
+            <button onClick={() => moveDown(idx)} disabled={idx === order.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30 px-1">↓</button>
+          </div>
+        ))}
+        {allCols.filter(c => !order.includes(c)).map(col => (
+          <div key={col} className="flex items-center gap-1 text-[10px] opacity-50">
+            <span className="w-4"></span>
+            <Checkbox checked={false} onCheckedChange={() => toggleCol(col)} />
+            <span className="flex-1">{colLabels[col] || col}</span>
+          </div>
+        ))}
+      </div>
+      <Button size="sm" className="h-6 text-[10px] w-full" onClick={() => onSave(order)}>Save Column Order</Button>
+    </div>
+  );
+}

@@ -13,7 +13,7 @@ import { SupplierReport } from '@/components/reports/SupplierReport';
 import { CustomerReport } from '@/components/reports/CustomerReport';
 import { ProfitReport } from '@/components/reports/ProfitReport';
 
-type ReportTab = 'daily' | 'monthly' | 'employee' | 'supplier_detail' | 'customer' | 'supplier' | 'inventory' | 'drawer';
+type ReportTab = 'daily' | 'monthly' | 'profit' | 'employee' | 'supplier_detail' | 'customer' | 'supplier' | 'inventory' | 'drawer';
 
 // CSV export helper
 function downloadCSV(rows: string[][], filename: string) {

@@ -22,6 +22,8 @@ interface FullDayBillRow {
   amount: number;
   matchedItemId: string | null;
   matchedItemName: string | null;
+  matchedCustomerId: string | null;
+  matchedCustomerName: string | null;
   secondaryQty: number;
   rate: number;
 }

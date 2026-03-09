@@ -508,7 +508,7 @@ export function EmployeeInlineEntry({
 
             {entry.employeeId && thisMonthDue > 0 && (
               <div className="bg-accent/10 border border-accent/30 rounded-lg p-2">
-                <span className="text-xs font-medium text-accent">This Month Due: {formatINR(thisMonthDue)}</span>
+                <span className="text-xs font-medium text-accent">{format(selectedDate, 'MMM')} Due: {formatINR(thisMonthDue)}</span>
               </div>
             )}
 

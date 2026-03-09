@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'; // v2
-import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download, FileSpreadsheet, UserCheck } from 'lucide-react';
+import { BarChart3, FileText, Users, Truck, Package, ArrowLeftRight, ChevronLeft, ChevronRight, Download, FileSpreadsheet, UserCheck, TrendingUp } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';

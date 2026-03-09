@@ -796,7 +796,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
             </button>
           ))}
         </div>
-        {entryMode !== 'bill_items' && (
+        {(entryMode === 'inventory' || entryMode === 'bills') && (
           <button onClick={() => setLockMode(lockMode === 'partial' ? 'full' : 'partial')}
             className={cn(
               "flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors shrink-0",
@@ -811,13 +811,133 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
       </div>
 
       {/* Lock warning */}
-      {lockMode === 'full' && saleTransactions.length > 0 && entryMode !== 'bill_items' && (
+      {lockMode === 'full' && saleTransactions.length > 0 && (entryMode === 'inventory' || entryMode === 'bills') && (
         <div className="bg-warning/10 border border-warning/30 rounded-lg p-2 space-y-1">
           <div className="flex items-center gap-1 text-xs text-warning font-medium">
             <AlertTriangle className="w-3 h-3" /> {saleTransactions.length} sale(s) may duplicate inventory
           </div>
           <p className="text-[10px] text-muted-foreground">Lock only affects inventory tracking.</p>
         </div>
+      )}
+
+      {/* ============ BILL ONLY MODE ============ */}
+      {entryMode === 'bill_only' && (
+        <>
+          {showBillOnlyPaste ? (
+            <div className="space-y-2 border border-accent/30 rounded-lg p-2 bg-accent/5">
+              <label className="text-[10px] text-muted-foreground">
+                Paste columns: {billOnlyColumns.join(', ')}
+              </label>
+              <textarea value={billOnlyPasteText} onChange={e => setBillOnlyPasteText(e.target.value)}
+                placeholder="Paste tab/comma separated data..."
+                className="w-full h-24 text-xs p-2 bg-background border border-border rounded-md resize-none font-mono" />
+              <div className="flex gap-1">
+                <Button size="sm" className="h-7 text-xs gap-1 flex-1" onClick={handleBillOnlyPaste}>
+                  <ClipboardPaste className="w-3 h-3" /> Parse
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { setShowBillOnlyPaste(false); setBillOnlyPasteText(''); }}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1" onClick={() => setShowBillOnlyPaste(true)}>
+                <ClipboardPaste className="w-3 h-3" /> Paste
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addBillOnlyRow}>
+                <Plus className="w-3 h-3" /> Add
+              </Button>
+              {billOnlyRows.length > 0 && (
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-destructive hover:text-destructive" onClick={() => setBillOnlyRows([])}>
+                  <Trash2 className="w-3 h-3" /> Clear
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowBillOnlySettings(!showBillOnlySettings)}>
+                <Settings className="w-3 h-3 text-muted-foreground" />
+              </Button>
+            </div>
+          )}
+
+          {/* Column Settings */}
+          {showBillOnlySettings && (
+            <BillOnlyColumnSettings columns={billOnlyColumns} onSave={(cols) => { saveBillOnlyColumnOrder(cols); setShowBillOnlySettings(false); }} onClose={() => setShowBillOnlySettings(false)} />
+          )}
+
+          {/* Rows */}
+          {billOnlyRows.length > 0 && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <div className="min-w-[600px]">
+                  <div className="flex gap-1 px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">
+                    {billOnlyColumns.map(col => (
+                      <span key={col} className={cn(
+                        col === 'category' ? 'w-24' : col === 'customer' ? 'flex-1 min-w-[80px]' : col === 'welder' ? 'w-20' : 'w-16',
+                        'shrink-0'
+                      )}>
+                        {col === 'category' ? 'Type' : col === 'customer' ? 'Customer' : col === 'welder' ? 'Welder' : col.charAt(0).toUpperCase() + col.slice(1)}
+                      </span>
+                    ))}
+                    <span className="w-5"></span>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto divide-y divide-border/30">
+                    {billOnlyRows.map(row => (
+                      <div key={row.id} className="flex gap-1 px-2 py-1 items-center">
+                        {billOnlyColumns.map(col => {
+                          if (col === 'category') return (
+                            <select key={col} value={row.category} onChange={e => updateBillOnlyRow(row.id, 'category', e.target.value)}
+                              className="w-24 h-7 px-1 text-[10px] bg-background/50 border border-border rounded shrink-0">
+                              {BILL_ONLY_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                            </select>
+                          );
+                          if (col === 'customer') return (
+                            <div key={col} className="flex-1 min-w-[80px] shrink-0">
+                              <input value={row.customerName} onChange={e => updateBillOnlyRow(row.id, 'customerName', e.target.value)}
+                                placeholder="Customer" className="w-full h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
+                                list={`cust-${row.id}`} />
+                              <datalist id={`cust-${row.id}`}>
+                                {allCustomers.map(c => <option key={c.id} value={c.name} />)}
+                              </datalist>
+                            </div>
+                          );
+                          if (col === 'welder') return (
+                            <div key={col} className="w-20 shrink-0">
+                              <input value={row.welderName} onChange={e => updateBillOnlyRow(row.id, 'welderName', e.target.value)}
+                                placeholder="Welder" className="w-full h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
+                                list={`weld-${row.id}`} />
+                              <datalist id={`weld-${row.id}`}>
+                                {allWelders.map(w => <option key={w.id} value={w.name} />)}
+                              </datalist>
+                            </div>
+                          );
+                          // Numeric fields: amount, cash, upi, adjust
+                          return (
+                            <input key={col} type="number" value={(row as any)[col] || ''} 
+                              onChange={e => updateBillOnlyRow(row.id, col as keyof BillOnlyRow, parseFloat(e.target.value) || 0)}
+                              placeholder={col === 'amount' ? '₹' : col.charAt(0).toUpperCase()}
+                              className="w-16 h-7 px-1 text-[11px] text-right bg-background/50 border border-border rounded shrink-0" />
+                          );
+                        })}
+                        <button onClick={() => setBillOnlyRows(prev => prev.filter(r => r.id !== row.id))} className="text-muted-foreground hover:text-destructive w-5 shrink-0">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="px-2 py-1.5 border-t border-border bg-secondary/20 text-xs font-medium flex justify-between">
+                <span>{billOnlyRows.length} rows</span>
+                <span>Total: {formatINR(billOnlyRows.reduce((s, r) => s + r.amount, 0))}</span>
+              </div>
+            </div>
+          )}
+
+          {billOnlyRows.length > 0 && (
+            <Button onClick={handleSaveBillOnly} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
+              <Save className="w-3.5 h-3.5" />
+              {saving ? 'Saving...' : `Save ${billOnlyRows.length} Transaction(s)`}
+            </Button>
+          )}
+        </>
       )}
 
       {/* ============ INVENTORY & BILLS MODES ============ */}

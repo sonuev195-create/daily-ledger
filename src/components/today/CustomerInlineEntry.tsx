@@ -439,9 +439,13 @@ export function CustomerInlineEntry({
       if (!entry.customerQuery) { toast.error('Customer required'); return; }
     } else if (entry.type === 'balance_paid') {
       if (totalPayments <= 0) { toast.error('Payment required'); return; }
+      if (!entry.customerQuery) { toast.error('Customer name required'); return; }
     } else {
       const amountNum = parseFloat(entry.amount) || 0;
       if (amountNum <= 0) { toast.error('Amount required'); return; }
+      // Name mandatory for due bills
+      const due = amountNum - totalPayments - (parseFloat(entry.useAdvance) || 0);
+      if (due > 0 && !entry.customerQuery) { toast.error('Customer name required for due bills'); return; }
     }
 
     setSaving(true);

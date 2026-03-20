@@ -203,6 +203,13 @@ const buildTransactionPayload = (transaction: Transaction) => ({
   adjusted_from_sales: transaction.adjustedFromSales || 0,
   reference: transaction.reference || null,
   bill_type: transaction.billType || null,
+  allowance_category_id: transaction.allowanceCategoryId || null,
+  rate_work_type_id: transaction.rateWorkTypeId || null,
+  salary_category_id: transaction.salaryCategoryId || null,
+  expense_category_id: transaction.expenseCategoryId || null,
+  home_category_id: transaction.homeCategoryId || null,
+  advance_purpose_id: transaction.advancePurposeId || null,
+  advance_rate: transaction.advanceRate || null,
   updated_at: transaction.updatedAt.toISOString(),
   created_at: transaction.createdAt.toISOString(),
 });

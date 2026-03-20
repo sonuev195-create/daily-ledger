@@ -71,7 +71,7 @@ export function ItemSearchSelect({ items, value, onChange, placeholder = 'Search
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg w-[95vw] max-h-[60vh] p-0 gap-0 overflow-hidden">
-          <VisuallyHidden><DialogTitle>Select Item</DialogTitle></VisuallyHidden>
+          <DialogTitle className="sr-only">Select Item</DialogTitle>
           {/* Search */}
           <div className="p-3 border-b border-border">
             <div className="relative">

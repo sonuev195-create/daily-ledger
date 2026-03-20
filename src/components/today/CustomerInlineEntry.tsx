@@ -684,16 +684,26 @@ export function CustomerInlineEntry({
           )}
         </div>
 
-        {/* Balance paid: due bills */}
+        {/* Balance paid: due bills + opening due */}
         {entry.type === 'balance_paid' && entry.dueBills.length > 0 && (
           <div className="border border-border rounded-lg overflow-hidden">
-            <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">Select bills to pay</div>
-            <div className="max-h-32 overflow-y-auto divide-y divide-border/30">
+            <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium flex justify-between">
+              <span>Select bills to pay</span>
+              {customerTotalDue > 0 && <span className="text-warning font-semibold">Total Due: {formatINR(customerTotalDue)}</span>}
+            </div>
+            <div className="max-h-40 overflow-y-auto divide-y divide-border/30">
               {entry.dueBills.map(bill => (
-                <label key={bill.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-secondary/20 cursor-pointer text-xs">
+                <label key={bill.id} className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 hover:bg-secondary/20 cursor-pointer text-xs",
+                  bill.id === '__opening_due__' && "bg-warning/5"
+                )}>
                   <Checkbox checked={entry.selectedBills.includes(bill.id)} onCheckedChange={() => toggleBillSelection(bill.id)} />
-                  <span className="font-medium">{bill.billNumber || '-'}</span>
-                  <span className="text-muted-foreground">{format(bill.createdAt, 'dd MMM')}</span>
+                  <span className={cn("font-medium", bill.id === '__opening_due__' ? "text-warning" : "")}>
+                    {bill.billNumber || '-'}
+                  </span>
+                  {bill.id !== '__opening_due__' && (
+                    <span className="text-muted-foreground">{format(bill.createdAt, 'dd MMM')}</span>
+                  )}
                   <span className="ml-auto text-warning font-medium">{formatINR(bill.dueAmount)}</span>
                 </label>
               ))}

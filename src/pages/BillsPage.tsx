@@ -232,16 +232,17 @@ export default function BillsPage() {
     
     // Type filter
     let matchesFilter = true;
+    const isSaleBill = (!!bill.customer_name && !bill.supplier_name) || bill.bill_type === 'sale' || bill.bill_number?.startsWith('S');
+    const isPurchaseBill = !!bill.supplier_name || bill.bill_type === 'purchase_bill' || bill.bill_number?.startsWith('PB');
+
     if (filterType === 'sale') {
-      matchesFilter = (!!bill.customer_name && !bill.supplier_name) || 
-                      bill.bill_type === 'sale' || 
-                      bill.bill_number?.startsWith('S');
+      matchesFilter = isSaleBill;
     } else if (filterType === 'purchase') {
-      matchesFilter = !!bill.supplier_name || 
-                      bill.bill_type === 'purchase_bill' || 
-                      bill.bill_number?.startsWith('PB');
-    } else if (filterType === 'due') {
-      matchesFilter = !!(bill.due_amount && bill.due_amount > 0);
+      matchesFilter = isPurchaseBill;
+    } else if (filterType === 'sale_due') {
+      matchesFilter = isSaleBill && !!(bill.due_amount && bill.due_amount > 0);
+    } else if (filterType === 'purchase_due') {
+      matchesFilter = isPurchaseBill && !!(bill.due_amount && bill.due_amount > 0);
     } else if (filterType === 'advance') {
       matchesFilter = bill.bill_type === 'customer_advance' || 
                       bill.bill_number?.startsWith('CA') ||

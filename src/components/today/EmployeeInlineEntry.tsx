@@ -81,6 +81,7 @@ export function EmployeeInlineEntry({
   const [paymentEmployeeId, setPaymentEmployeeId] = useState('');
   const [paymentDueType, setPaymentDueType] = useState<PaymentDueType>('present');
   const [paymentPayments, setPaymentPayments] = useState<PaymentEntry[]>([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+  const [showAdvanceToggle, setShowAdvanceToggle] = useState(false);
   const [employeeDues, setEmployeeDues] = useState<{
     currentMonthDue: number;
     previousDues: number;

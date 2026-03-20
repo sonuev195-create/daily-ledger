@@ -648,26 +648,27 @@ export function CustomerInlineEntry({
 
       {/* New Entry */}
       <div className="border border-accent/30 rounded-lg p-3 bg-accent/5 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-accent">
-          <Plus className="w-3.5 h-3.5" /> New Entry
+        {/* Toggle tabs for type selection */}
+        <div className="flex rounded-lg overflow-hidden border border-border">
+          {SUB_TYPES.map(st => (
+            <button
+              key={st.value}
+              onClick={() => {
+                const newType = st.value;
+                setEntry(prev => ({ ...prev, type: newType, selectedBills: [], dueBills: [], customerQuery: '', customerId: undefined, customerAdvance: 0, amount: '', welderId: undefined }));
+              }}
+              className={cn(
+                "flex-1 py-1.5 text-[10px] font-medium transition-colors",
+                entry.type === st.value ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+              )}
+            >
+              {st.label}
+            </button>
+          ))}
         </div>
 
-        {/* Desktop: single line | Mobile: 2-3 rows */}
-        {/* Row 1: Type + Bill# + Customer */}
-        <div className="grid grid-cols-3 gap-2 md:grid-cols-[1fr_1fr_2fr_1fr]">
-          <div>
-            <label className="text-[10px] text-muted-foreground mb-0.5 block">Type</label>
-            <Select value={entry.type} onValueChange={(v: string) => {
-              const newType = v as CustomerSubType;
-              setEntry(prev => ({ ...prev, type: newType, selectedBills: [], dueBills: [], customerQuery: '', customerId: undefined, customerAdvance: 0, amount: '', welderId: undefined }));
-            }}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {SUB_TYPES.map(st => <SelectItem key={st.value} value={st.value} className="text-xs">{st.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
+        {/* Row 1: Bill# + Customer + Welder */}
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-[1fr_2fr_1fr]">
           {(entry.type === 'sale' || entry.type === 'sales_return') && (
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Bill #</label>
@@ -675,7 +676,10 @@ export function CustomerInlineEntry({
             </div>
           )}
 
-          <div className={entry.type === 'balance_paid' ? 'col-span-2' : ''}>
+          <div className={cn(
+            entry.type === 'balance_paid' || entry.type === 'customer_advance' ? 'col-span-2' : '',
+            !(entry.type === 'sale' || entry.type === 'sales_return') ? 'col-span-2' : ''
+          )}>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Customer</label>
             {renderCustomerSearch()}
           </div>

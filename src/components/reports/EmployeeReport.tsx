@@ -94,17 +94,17 @@ export function EmployeeReport() {
   };
 
   const getSubCategory = (t: any): string => {
-    if (t.type === 'allowance' && t.allowance_category_id) {
-      return allowanceCategories[t.allowance_category_id] || t.reference || '';
+    // Allowance: check dedicated column first, then reference
+    if (t.type === 'allowance') {
+      const catId = t.allowance_category_id || t.reference;
+      if (catId) return allowanceCategories[catId] || 'Allowance';
+      return 'Allowance';
     }
-    if (t.type === 'allowance' && t.reference) {
-      return allowanceCategories[t.reference] || t.reference || '';
-    }
-    if (t.type === 'rate_work' && t.rate_work_type_id) {
-      return rateWorkTypes[t.rate_work_type_id] || t.reference || '';
-    }
-    if (t.type === 'rate_work' && t.reference) {
-      return rateWorkTypes[t.reference] || t.reference || '';
+    // Rate work: check dedicated column first, then reference
+    if (t.type === 'rate_work') {
+      const typeId = t.rate_work_type_id || t.reference;
+      if (typeId) return rateWorkTypes[typeId] || 'Rate Work';
+      return 'Rate Work';
     }
     if (t.type === 'payment' && t.reference) {
       const labels: Record<string, string> = { present: 'Present Due', previous: 'Previous Due', ratework: 'Rate Work Due' };

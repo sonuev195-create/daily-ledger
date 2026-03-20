@@ -289,8 +289,33 @@ export function CustomerInlineEntry({
     return () => clearTimeout(timer);
   }, [entry.customerQuery, entry.customerId]);
 
+  const [customerTotalDue, setCustomerTotalDue] = useState(0);
+
   useEffect(() => {
-    if (entry.type === 'balance_paid' && entry.customerQuery.length >= 2) {
+    if (entry.type === 'balance_paid' && entry.customerId) {
+      // Fetch both due bills and customer's total due balance
+      Promise.all([
+        getDueBillsForCustomer(entry.customerQuery),
+        supabase.from('customers').select('due_balance').eq('id', entry.customerId).single(),
+      ]).then(([bills, { data: custData }]) => {
+        const totalDue = Number(custData?.due_balance || 0);
+        const billDueTotal = bills.reduce((s, b) => s + b.dueAmount, 0);
+        const openingDue = Math.max(0, totalDue - billDueTotal);
+        setCustomerTotalDue(totalDue);
+        // If there's opening due, add it as a virtual "bill" entry
+        const allBills = [...bills];
+        if (openingDue > 0) {
+          allBills.push({
+            id: '__opening_due__',
+            billNumber: 'Opening Due',
+            totalAmount: openingDue,
+            dueAmount: openingDue,
+            createdAt: new Date(0),
+          });
+        }
+        setEntry(prev => ({ ...prev, dueBills: allBills }));
+      });
+    } else if (entry.type === 'balance_paid' && entry.customerQuery.length >= 2) {
       getDueBillsForCustomer(entry.customerQuery).then(bills => {
         setEntry(prev => ({ ...prev, dueBills: bills }));
       });
@@ -507,13 +532,15 @@ export function CustomerInlineEntry({
         if (advanceUsed > 0) await updateCustomerBalance(finalCustomerId, 0, -advanceUsed);
         if (entry.type === 'customer_advance') await updateCustomerBalance(finalCustomerId, 0, totalPayments);
         if (entry.type === 'balance_paid') {
-          const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id));
+          const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id) && b.id !== '__opening_due__');
+          const hasOpeningDue = entry.selectedBills.includes('__opening_due__');
           let remaining = totalPayments;
           for (const bill of selectedDueBills) {
             const payForBill = Math.min(remaining, bill.dueAmount);
             remaining -= payForBill;
             await supabase.from('transactions').update({ due: bill.dueAmount - payForBill }).eq('id', bill.id);
           }
+          // Opening due is handled via the customer balance update directly
           await updateCustomerBalance(finalCustomerId, -totalPayments, 0);
         }
 
@@ -659,16 +686,26 @@ export function CustomerInlineEntry({
           )}
         </div>
 
-        {/* Balance paid: due bills */}
+        {/* Balance paid: due bills + opening due */}
         {entry.type === 'balance_paid' && entry.dueBills.length > 0 && (
           <div className="border border-border rounded-lg overflow-hidden">
-            <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium">Select bills to pay</div>
-            <div className="max-h-32 overflow-y-auto divide-y divide-border/30">
+            <div className="px-2 py-1 bg-secondary/30 text-[10px] text-muted-foreground font-medium flex justify-between">
+              <span>Select bills to pay</span>
+              {customerTotalDue > 0 && <span className="text-warning font-semibold">Total Due: {formatINR(customerTotalDue)}</span>}
+            </div>
+            <div className="max-h-40 overflow-y-auto divide-y divide-border/30">
               {entry.dueBills.map(bill => (
-                <label key={bill.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-secondary/20 cursor-pointer text-xs">
+                <label key={bill.id} className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 hover:bg-secondary/20 cursor-pointer text-xs",
+                  bill.id === '__opening_due__' && "bg-warning/5"
+                )}>
                   <Checkbox checked={entry.selectedBills.includes(bill.id)} onCheckedChange={() => toggleBillSelection(bill.id)} />
-                  <span className="font-medium">{bill.billNumber || '-'}</span>
-                  <span className="text-muted-foreground">{format(bill.createdAt, 'dd MMM')}</span>
+                  <span className={cn("font-medium", bill.id === '__opening_due__' ? "text-warning" : "")}>
+                    {bill.billNumber || '-'}
+                  </span>
+                  {bill.id !== '__opening_due__' && (
+                    <span className="text-muted-foreground">{format(bill.createdAt, 'dd MMM')}</span>
+                  )}
                   <span className="ml-auto text-warning font-medium">{formatINR(bill.dueAmount)}</span>
                 </label>
               ))}

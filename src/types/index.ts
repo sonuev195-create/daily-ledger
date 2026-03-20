@@ -96,6 +96,13 @@ export interface Transaction {
   due?: number;
   overpayment?: number;
   adjustedFromSales?: number; // For expenses paid from sales cash
+  allowanceCategoryId?: string;
+  rateWorkTypeId?: string;
+  salaryCategoryId?: string;
+  expenseCategoryId?: string;
+  homeCategoryId?: string;
+  advancePurposeId?: string;
+  advanceRate?: number;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -506,7 +506,7 @@ export default function BillsPage() {
 
       {/* Bill Details Sheet */}
       <Sheet open={!!selectedBill} onOpenChange={(open) => { if (!open) setSelectedBill(null); }}>
-        <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl p-0 bg-background">
+        <SheetContent side="bottom" className="h-[95vh] rounded-t-3xl p-0 bg-background">
           <div className="flex flex-col h-full">
             <SheetHeader className="px-6 py-4 border-b border-border">
               <div className="flex items-center justify-between">

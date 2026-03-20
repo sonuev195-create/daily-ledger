@@ -281,6 +281,7 @@ export function EmployeeInlineEntry({
         payments: [],
         employeeId: allowanceEmployeeId,
         billNumber: `EA${Date.now().toString().slice(-6)}`,
+        allowanceCategoryId: allowanceCategoryId,
         reference: allowanceCategoryId,
       };
       await onSave(txn);
@@ -310,6 +311,7 @@ export function EmployeeInlineEntry({
         payments: [],
         employeeId: rateWorkEmployeeId,
         billNumber: `RW${Date.now().toString().slice(-6)}`,
+        rateWorkTypeId: rateWorkTypeId,
         reference: rateWorkTypeId,
       };
       await onSave(txn);

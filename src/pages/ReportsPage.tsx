@@ -237,7 +237,15 @@ function DailyReport() {
                   const totalPaid = payments.reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
                   return (
                     <div key={t.id} className="flex items-center gap-2 text-[11px] py-1 border-t border-border/30">
-                      <span className="text-muted-foreground capitalize w-16 truncate">{t.type.replace(/_/g, ' ')}</span>
+                      <span className="text-muted-foreground capitalize w-16 truncate">
+                        {t.section === 'employee' 
+                          ? (t.type === 'salary' || t.type === 'attendance' ? 'Present' 
+                            : t.type === 'allowance' ? 'Allowance' 
+                            : t.type === 'rate_work' ? 'Rate Work' 
+                            : t.type === 'payment' ? 'Payment' 
+                            : t.type.replace(/_/g, ' '))
+                          : t.type.replace(/_/g, ' ')}
+                      </span>
                       <span className="truncate flex-1">{getResolvedName(t, empMap)}</span>
                       {t.bill_number && <span className="text-muted-foreground">#{t.bill_number}</span>}
                       <span className="font-medium">{formatINR(Number(t.amount))}</span>

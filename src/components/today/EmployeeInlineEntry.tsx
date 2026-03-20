@@ -643,6 +643,7 @@ export function EmployeeInlineEntry({
                 setPaymentEmployeeId(v);
                 setPaymentDueType('present');
                 setPaymentPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+                setShowAdvanceToggle(false);
               }}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select employee..." /></SelectTrigger>
                 <SelectContent>
@@ -653,7 +654,64 @@ export function EmployeeInlineEntry({
               </Select>
             </div>
 
-            {employeeDues && (
+            {/* Advance Toggle */}
+            {paymentEmployeeId && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAdvanceToggle(!showAdvanceToggle)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+                    showAdvanceToggle ? "bg-info/20 border-info text-info" : "bg-secondary/30 border-border text-muted-foreground hover:bg-secondary/50"
+                  )}
+                >
+                  💰 Advance
+                  {(() => {
+                    const emp = allEmployees.find(e => e.id === paymentEmployeeId);
+                    return emp && emp.advance_balance > 0 ? ` (${formatINR(emp.advance_balance)})` : '';
+                  })()}
+                </button>
+              </div>
+            )}
+
+            {/* Advance Payment Section */}
+            {showAdvanceToggle && paymentEmployeeId && (
+              <div className="border border-info/30 rounded-lg p-2 bg-info/5 space-y-2">
+                <span className="text-[10px] font-medium text-info">Record Advance Payment</span>
+                <div className="space-y-1">
+                  {paymentPayments.map((p, i) => (
+                    <div key={p.id} className="flex gap-1">
+                      <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
+                        <SelectTrigger className="h-7 text-[10px] w-16"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {selectableMethods.map(m => (
+                            <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        value={p.amount || ''}
+                        onChange={e => updatePayment(i, 'amount', e.target.value)}
+                        placeholder="₹0"
+                        className="h-7 text-xs flex-1"
+                      />
+                      {paymentPayments.length > 1 && (
+                        <button onClick={() => setPaymentPayments(prev => prev.filter((_, idx) => idx !== i))} className="text-muted-foreground hover:text-destructive">
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button onClick={() => setPaymentPayments(prev => [...prev, { id: uuidv4(), mode: 'upi', amount: 0 }])} className="text-[10px] text-accent hover:underline">+ Add mode</button>
+                </div>
+                <Button onClick={saveAdvance} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
+                  <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Advance'}
+                </Button>
+              </div>
+            )}
+
+            {!showAdvanceToggle && employeeDues && (
               <div className="space-y-1.5">
                 {/* Current Month Due */}
                 <div className={cn(
@@ -714,7 +772,7 @@ export function EmployeeInlineEntry({
             )}
 
             {/* Payment Mode */}
-            {paymentEmployeeId && (
+            {!showAdvanceToggle && paymentEmployeeId && (
               <div>
                 <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment for: <span className="font-semibold text-foreground">{dueTypeLabels.find(d => d.id === paymentDueType)?.label}</span></label>
                 <div className="space-y-1">
@@ -748,7 +806,7 @@ export function EmployeeInlineEntry({
               </div>
             )}
 
-            {paymentEmployeeId && (
+            {!showAdvanceToggle && paymentEmployeeId && (
               <Button onClick={savePayment} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
                 <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Payment'}
               </Button>

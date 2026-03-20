@@ -311,6 +311,7 @@ export function EmployeeInlineEntry({
         payments: [],
         employeeId: rateWorkEmployeeId,
         billNumber: `RW${Date.now().toString().slice(-6)}`,
+        rateWorkTypeId: rateWorkTypeId,
         reference: rateWorkTypeId,
       };
       await onSave(txn);

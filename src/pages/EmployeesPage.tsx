@@ -126,12 +126,14 @@ export default function EmployeesPage() {
   };
 
   const handleEditEmployee = (employee: Employee) => {
-    setEditEmployee(employee);
+    // Batch all state updates together to prevent jerking
     setFormName(employee.name);
     setFormPhone(employee.phone || '');
     setFormRole(employee.role || '');
     setFormSalary(employee.salary.toString());
-    setIsAddOpen(true);
+    setEditEmployee(employee);
+    // Open the sheet after a microtask to ensure state is settled
+    requestAnimationFrame(() => setIsAddOpen(true));
   };
 
   const handleDeleteEmployee = async (id: string) => {

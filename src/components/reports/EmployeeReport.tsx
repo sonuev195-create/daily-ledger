@@ -172,7 +172,7 @@ export function EmployeeReport() {
     let y = 36;
 
     // Each wage category section
-    const categories: WageCategory[] = ['present', 'allowance', 'rate_work', 'payment'];
+    const categories: WageCategory[] = ['present', 'rate_work', 'payment'];
     categories.forEach(cat => {
       const catTxns = groupedByCategory[cat];
       if (catTxns.length === 0) return;

@@ -145,7 +145,6 @@ export function EmployeeReport() {
   // Category totals
   const categoryTotals: Record<WageCategory, { amount: number; paid: number }> = {
     present: { amount: 0, paid: 0 },
-    allowance: { amount: 0, paid: 0 },
     rate_work: { amount: 0, paid: 0 },
     payment: { amount: 0, paid: 0 },
   };

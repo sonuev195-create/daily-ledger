@@ -133,7 +133,7 @@ interface CategoryAccordionProps {
 }
 
 export function CategoryAccordion({ 
-  transactions, summary, expandedCategory, onToggle, renderContent, drawerCash = 0, drawerUpi = 0 
+  transactions, summary, expandedCategory, onToggle, renderContent, drawerCash = 0, drawerUpi = 0, employeeDue = 0,
 }: CategoryAccordionProps) {
   return (
     <div className="space-y-2">

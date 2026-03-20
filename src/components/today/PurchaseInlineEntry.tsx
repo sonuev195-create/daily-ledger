@@ -437,11 +437,29 @@ export function PurchaseInlineEntry({
 
       {/* New Entry */}
       <div className="border border-accent/30 rounded-lg p-3 bg-accent/5 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-accent">
-          <Plus className="w-3.5 h-3.5" /> New Entry
+        {/* Bill / Payment Toggle */}
+        <div className="flex rounded-lg overflow-hidden border border-border mb-1">
+          <button
+            onClick={() => setEntry(prev => ({ ...prev, type: 'purchase_bill_a', selectedBills: [], dueBills: [] }))}
+            className={cn(
+              "flex-1 py-1.5 text-xs font-medium transition-colors",
+              !isPayment ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+            )}
+          >
+            Bill
+          </button>
+          <button
+            onClick={() => setEntry(prev => ({ ...prev, type: 'purchase_payment', selectedBills: [], dueBills: [] }))}
+            className={cn(
+              "flex-1 py-1.5 text-xs font-medium transition-colors",
+              isPayment ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+            )}
+          >
+            Payment
+          </button>
         </div>
 
-        {/* Supplier + Type row */}
+        {/* Supplier + Sub-type row */}
         <div className="grid grid-cols-2 gap-2">
           <div className="relative">
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Supplier</label>
@@ -469,15 +487,17 @@ export function PurchaseInlineEntry({
             </AnimatePresence>
           </div>
 
-          <div>
-            <label className="text-[10px] text-muted-foreground mb-0.5 block">Type</label>
-            <Select value={entry.type} onValueChange={(v: string) => setEntry(prev => ({ ...prev, type: v as PurchaseSubType, selectedBills: [], dueBills: [] }))}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {SUB_TYPES.map(st => <SelectItem key={st.value} value={st.value} className="text-xs">{st.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          {!isPayment && (
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Type</label>
+              <Select value={entry.type} onValueChange={(v: string) => setEntry(prev => ({ ...prev, type: v as PurchaseSubType, selectedBills: [], dueBills: [] }))}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SUB_TYPES.filter(st => st.value !== 'purchase_payment').map(st => <SelectItem key={st.value} value={st.value} className="text-xs">{st.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Bill number for bill/return types */}

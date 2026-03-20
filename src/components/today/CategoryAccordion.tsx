@@ -129,10 +129,11 @@ interface CategoryAccordionProps {
   renderContent: (categoryId: CategoryId) => React.ReactNode;
   drawerCash?: number;
   drawerUpi?: number;
+  employeeDue?: number;
 }
 
 export function CategoryAccordion({ 
-  transactions, summary, expandedCategory, onToggle, renderContent, drawerCash = 0, drawerUpi = 0 
+  transactions, summary, expandedCategory, onToggle, renderContent, drawerCash = 0, drawerUpi = 0, employeeDue = 0,
 }: CategoryAccordionProps) {
   return (
     <div className="space-y-2">
@@ -172,6 +173,11 @@ export function CategoryAccordion({
                   <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
                     <span className="text-success font-medium">💵 {formatINR(drawerCash)}</span>
                     <span className="text-info font-medium">📱 {formatINR(drawerUpi)}</span>
+                  </div>
+                )}
+                {cat.id === 'employee' && employeeDue > 0 && (
+                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
+                    <span className="text-warning font-medium">⚠️ Due: {formatINR(employeeDue)}</span>
                   </div>
                 )}
               </div>

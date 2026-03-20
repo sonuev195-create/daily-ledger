@@ -234,6 +234,13 @@ const mapTransactionFromRow = (row: any): Transaction => ({
   due: row.due != null ? toSafeNumber(row.due) : undefined,
   overpayment: row.overpayment != null ? toSafeNumber(row.overpayment) : undefined,
   adjustedFromSales: row.adjusted_from_sales != null ? toSafeNumber(row.adjusted_from_sales) : undefined,
+  allowanceCategoryId: row.allowance_category_id || undefined,
+  rateWorkTypeId: row.rate_work_type_id || undefined,
+  salaryCategoryId: row.salary_category_id || undefined,
+  expenseCategoryId: row.expense_category_id || undefined,
+  homeCategoryId: row.home_category_id || undefined,
+  advancePurposeId: row.advance_purpose_id || undefined,
+  advanceRate: row.advance_rate != null ? toSafeNumber(row.advance_rate) : undefined,
   createdAt: row.created_at ? new Date(row.created_at) : new Date(),
   updatedAt: row.updated_at ? new Date(row.updated_at) : new Date(),
 });

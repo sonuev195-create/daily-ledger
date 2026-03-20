@@ -510,20 +510,22 @@ export default function BillsPage() {
 
       {/* Bill Details Sheet */}
       <Sheet open={!!selectedBill} onOpenChange={(open) => { if (!open) setSelectedBill(null); }}>
-        <SheetContent side="bottom" className="h-[95vh] rounded-t-3xl p-0 bg-background">
+        <SheetContent side="bottom" className="h-[95vh] rounded-t-3xl p-0 bg-background" onOpenAutoFocus={(e) => e.preventDefault()}>
           <div className="flex flex-col h-full">
-            <SheetHeader className="px-6 py-4 border-b border-border">
+            <SheetHeader className="px-6 py-4 border-b border-border shrink-0">
               <div className="flex items-center justify-between">
                 <SheetTitle className="text-lg font-semibold">Bill Details</SheetTitle>
                 {selectedBill && (
-                  <div className="flex gap-2 pr-10">
+                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
                         const billDate = new Date(selectedBill.created_at);
                         setSelectedBill(null);
-                        navigate('/', { state: { date: billDate.toISOString(), editTransactionId: selectedBill.transaction_id } });
+                        setTimeout(() => {
+                          navigate('/', { state: { date: billDate.toISOString(), editTransactionId: selectedBill.transaction_id } });
+                        }, 100);
                       }}
                       className="gap-2"
                     >

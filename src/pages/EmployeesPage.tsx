@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Search, Phone, Plus, Edit2, Trash2, Wallet, Settings, Calendar, TrendingUp, Banknote } from 'lucide-react';
+import { Users, Search, Phone, Plus, Edit2, Trash2, Wallet, Settings, Calendar, TrendingUp, Gift, Hammer } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
@@ -8,9 +8,7 @@ import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-
 
 interface Employee {
   id: string;
@@ -21,10 +19,10 @@ interface Employee {
   advance_balance: number;
 }
 
-interface SalaryCategory {
+interface CategoryItem {
   id: string;
   name: string;
-  description: string | null;
+  description?: string | null;
 }
 
 interface EmployeeTransaction {
@@ -37,6 +35,8 @@ interface EmployeeTransaction {
   payments: any;
 }
 
+type SettingsTab = 'salary' | 'allowance' | 'ratework';
+
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,33 +45,32 @@ export default function EmployeesPage() {
   const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
-  
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('salary');
+
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
-  const [categories, setCategories] = useState<SalaryCategory[]>([]);
+  const [salaryCategories, setSalaryCategories] = useState<CategoryItem[]>([]);
+  const [allowanceCategories, setAllowanceCategories] = useState<CategoryItem[]>([]);
+  const [rateWorkTypes, setRateWorkTypes] = useState<CategoryItem[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
-  
+
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formRole, setFormRole] = useState('');
   const [formSalary, setFormSalary] = useState('');
-  
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategoryDesc, setNewCategoryDesc] = useState('');
-  const [editingCategory, setEditingCategory] = useState<SalaryCategory | null>(null);
+
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemDesc, setNewItemDesc] = useState('');
+  const [editingItem, setEditingItem] = useState<CategoryItem | null>(null);
 
   useEffect(() => {
     fetchEmployees();
-    fetchCategories();
+    fetchAllCategories();
   }, []);
 
   const fetchEmployees = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .order('name');
-      
+      const { data, error } = await supabase.from('employees').select('*').order('name');
       if (error) throw error;
       setEmployees(data || []);
     } catch (error) {
@@ -81,21 +80,22 @@ export default function EmployeesPage() {
     }
   };
 
-  const fetchCategories = async () => {
-    const { data } = await supabase
-      .from('salary_categories')
-      .select('*')
-      .order('name');
-    setCategories(data || []);
+  const fetchAllCategories = async () => {
+    const [salRes, alRes, rwRes] = await Promise.all([
+      supabase.from('salary_categories').select('*').order('name'),
+      supabase.from('allowance_categories').select('*').order('name'),
+      supabase.from('rate_work_types').select('*').order('name'),
+    ]);
+    setSalaryCategories(salRes.data || []);
+    setAllowanceCategories(alRes.data || []);
+    setRateWorkTypes(rwRes.data || []);
   };
 
   const fetchEmployeeTransactions = async (employeeId: string) => {
-    const { data } = await supabase
-      .from('transactions')
+    const { data } = await supabase.from('transactions')
       .select('id, type, amount, date, created_at, salary_category_id, payments')
       .eq('employee_id', employeeId)
       .order('created_at', { ascending: false });
-    
     setEmployeeTransactions(data || []);
   };
 
@@ -105,39 +105,20 @@ export default function EmployeesPage() {
   };
 
   const handleSaveEmployee = async () => {
-    if (!formName.trim()) {
-      toast.error('Employee name is required');
-      return;
-    }
-
+    if (!formName.trim()) { toast.error('Employee name is required'); return; }
     try {
       if (editEmployee) {
-        const { error } = await supabase
-          .from('employees')
-          .update({ 
-            name: formName, 
-            phone: formPhone || null, 
-            role: formRole || null,
-            salary: parseFloat(formSalary) || 0
-          })
+        const { error } = await supabase.from('employees')
+          .update({ name: formName, phone: formPhone || null, role: formRole || null, salary: parseFloat(formSalary) || 0 })
           .eq('id', editEmployee.id);
-        
         if (error) throw error;
         toast.success('Employee updated');
       } else {
-        const { error } = await supabase
-          .from('employees')
-          .insert({ 
-            name: formName, 
-            phone: formPhone || null, 
-            role: formRole || null,
-            salary: parseFloat(formSalary) || 0
-          });
-        
+        const { error } = await supabase.from('employees')
+          .insert({ name: formName, phone: formPhone || null, role: formRole || null, salary: parseFloat(formSalary) || 0 });
         if (error) throw error;
         toast.success('Employee added');
       }
-      
       closeForm();
       fetchEmployees();
     } catch (error) {
@@ -171,54 +152,55 @@ export default function EmployeesPage() {
     setFormSalary('');
   };
 
-  const handleSaveCategory = async () => {
-    if (!newCategoryName.trim()) {
-      toast.error('Category name is required');
-      return;
-    }
+  const getTableName = (tab: SettingsTab) => {
+    if (tab === 'salary') return 'salary_categories';
+    if (tab === 'allowance') return 'allowance_categories';
+    return 'rate_work_types';
+  };
 
+  const getItems = (tab: SettingsTab) => {
+    if (tab === 'salary') return salaryCategories;
+    if (tab === 'allowance') return allowanceCategories;
+    return rateWorkTypes;
+  };
+
+  const handleSaveItem = async () => {
+    if (!newItemName.trim()) { toast.error('Name is required'); return; }
+    const table = getTableName(settingsTab);
     try {
-      if (editingCategory) {
-        const { error } = await supabase
-          .from('salary_categories')
-          .update({ name: newCategoryName, description: newCategoryDesc || null })
-          .eq('id', editingCategory.id);
-        
+      if (editingItem) {
+        const { error } = await supabase.from(table)
+          .update({ name: newItemName, description: newItemDesc || null } as any)
+          .eq('id', editingItem.id);
         if (error) throw error;
-        toast.success('Category updated');
+        toast.success('Updated');
       } else {
-        const { error } = await supabase
-          .from('salary_categories')
-          .insert({ name: newCategoryName, description: newCategoryDesc || null });
-        
+        const { error } = await supabase.from(table)
+          .insert({ name: newItemName, description: newItemDesc || null } as any);
         if (error) throw error;
-        toast.success('Category added');
+        toast.success('Added');
       }
-      
-      setNewCategoryName('');
-      setNewCategoryDesc('');
-      setEditingCategory(null);
-      fetchCategories();
+      setNewItemName('');
+      setNewItemDesc('');
+      setEditingItem(null);
+      fetchAllCategories();
     } catch (error) {
-      console.error('Error saving category:', error);
-      toast.error('Failed to save category');
+      console.error('Error saving:', error);
+      toast.error('Failed to save');
     }
   };
 
-  const handleDeleteCategory = async (id: string) => {
-    if (!confirm('Delete this category?')) return;
-    const { error } = await supabase.from('salary_categories').delete().eq('id', id);
-    if (error) {
-      toast.error('Failed to delete');
-    } else {
-      toast.success('Category deleted');
-      fetchCategories();
-    }
+  const handleDeleteItem = async (id: string) => {
+    if (!confirm('Delete this item?')) return;
+    const table = getTableName(settingsTab);
+    const { error } = await supabase.from(table).delete().eq('id', id);
+    if (error) toast.error('Failed to delete');
+    else { toast.success('Deleted'); fetchAllCategories(); }
   };
 
   const getCategoryName = (id: string | null) => {
     if (!id) return 'Uncategorized';
-    return categories.find(c => c.id === id)?.name || 'Unknown';
+    return salaryCategories.find(c => c.id === id)?.name || 'Unknown';
   };
 
   const filteredEmployees = employees.filter(e =>
@@ -227,32 +209,18 @@ export default function EmployeesPage() {
     e.role?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(amount);
 
   const totalAdvance = employees.reduce((sum, e) => sum + e.advance_balance, 0);
   const totalSalary = employees.reduce((sum, e) => sum + e.salary, 0);
 
-  // Calculate category-wise totals for selected employee
   const categoryWiseTotals = employeeTransactions.reduce((acc, tx) => {
     const catId = tx.salary_category_id || 'uncategorized';
     acc[catId] = (acc[catId] || 0) + tx.amount;
     return acc;
   }, {} as Record<string, number>);
 
-  // Calculate month-wise totals
-  const monthWiseTotals = employeeTransactions.reduce((acc, tx) => {
-    const month = format(new Date(tx.date), 'yyyy-MM');
-    acc[month] = (acc[month] || 0) + tx.amount;
-    return acc;
-  }, {} as Record<string, number>);
-
-  // Filter transactions by selected month
   const monthStart = startOfMonth(selectedMonth);
   const monthEnd = endOfMonth(selectedMonth);
   const monthTransactions = employeeTransactions.filter(tx => {
@@ -260,6 +228,12 @@ export default function EmployeesPage() {
     return txDate >= monthStart && txDate <= monthEnd;
   });
   const monthTotal = monthTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+
+  const settingsTabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'salary', label: 'Wage Categories', icon: <TrendingUp className="w-3 h-3" /> },
+    { id: 'allowance', label: 'Allowance Types', icon: <Gift className="w-3 h-3" /> },
+    { id: 'ratework', label: 'Rate Work Types', icon: <Hammer className="w-3 h-3" /> },
+  ];
 
   return (
     <AppLayout title="Employees">
@@ -273,7 +247,7 @@ export default function EmployeesPage() {
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setIsCategoryOpen(true)} className="gap-2">
               <Settings className="w-4 h-4" />
-              Categories
+              Settings
             </Button>
             <Button onClick={() => setIsAddOpen(true)} className="gap-2">
               <Plus className="w-4 h-4" />
@@ -291,9 +265,7 @@ export default function EmployeesPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Advance</p>
-                <p className={cn("text-xl font-bold", totalAdvance > 0 ? "text-warning" : "text-muted-foreground")}>
-                  {formatCurrency(totalAdvance)}
-                </p>
+                <p className={cn("text-xl font-bold", totalAdvance > 0 ? "text-warning" : "text-muted-foreground")}>{formatCurrency(totalAdvance)}</p>
               </div>
             </div>
           </div>
@@ -313,13 +285,9 @@ export default function EmployeesPage() {
         {/* Search */}
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name, phone, or role..."
-            className="w-full h-10 pl-10 pr-4 bg-secondary/50 border border-border rounded-xl text-sm focus:ring-2 focus:ring-accent"
-          />
+            className="w-full h-10 pl-10 pr-4 bg-secondary/50 border border-border rounded-xl text-sm focus:ring-2 focus:ring-accent" />
         </div>
 
         {/* Employee List */}
@@ -333,59 +301,26 @@ export default function EmployeesPage() {
         ) : (
           <div className="space-y-3">
             {filteredEmployees.map((employee, index) => (
-              <motion.div
-                key={employee.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03 }}
-                className="bg-card border border-border rounded-xl p-4"
-              >
+              <motion.div key={employee.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.03 }} className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-center justify-between">
-                  <div 
-                    className="flex-1 cursor-pointer"
-                    onClick={() => handleSelectEmployee(employee)}
-                  >
+                  <div className="flex-1 cursor-pointer" onClick={() => handleSelectEmployee(employee)}>
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-foreground">{employee.name}</h3>
-                      {employee.role && (
-                        <span className="text-xs px-2 py-0.5 bg-secondary rounded-full text-muted-foreground">
-                          {employee.role}
-                        </span>
-                      )}
+                      {employee.role && <span className="text-xs px-2 py-0.5 bg-secondary rounded-full text-muted-foreground">{employee.role}</span>}
                     </div>
                     <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                      {employee.phone && (
-                        <span className="flex items-center gap-1">
-                          <Phone className="w-3 h-3" />
-                          {employee.phone}
-                        </span>
-                      )}
-                      {employee.salary > 0 && (
-                        <span>Salary: {formatCurrency(employee.salary)}</span>
-                      )}
+                      {employee.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{employee.phone}</span>}
+                      {employee.salary > 0 && <span>Salary: {formatCurrency(employee.salary)}</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <p className={cn("text-lg font-bold", employee.advance_balance > 0 ? "text-warning" : "text-muted-foreground")}>
-                        {formatCurrency(employee.advance_balance)}
-                      </p>
+                      <p className={cn("text-lg font-bold", employee.advance_balance > 0 ? "text-warning" : "text-muted-foreground")}>{formatCurrency(employee.advance_balance)}</p>
                       <p className="text-xs text-muted-foreground">Advance</p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEditEmployee(employee)}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteEmployee(employee.id)}
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee)}><Edit2 className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDeleteEmployee(employee.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                   </div>
                 </div>
               </motion.div>
@@ -400,16 +335,12 @@ export default function EmployeesPage() {
           <SheetHeader className="mb-4">
             <SheetTitle>{selectedEmployee?.name}</SheetTitle>
           </SheetHeader>
-          
           {selectedEmployee && (
             <div className="space-y-4 overflow-y-auto max-h-[calc(85vh-100px)]">
-              {/* Balance Summary */}
               <div className="grid grid-cols-3 gap-3">
                 <div className={cn("rounded-xl p-3", selectedEmployee.advance_balance > 0 ? "bg-warning/10" : "bg-secondary/50")}>
                   <p className="text-xs text-muted-foreground">Advance</p>
-                  <p className={cn("text-lg font-bold", selectedEmployee.advance_balance > 0 ? "text-warning" : "text-muted-foreground")}>
-                    {formatCurrency(selectedEmployee.advance_balance)}
-                  </p>
+                  <p className={cn("text-lg font-bold", selectedEmployee.advance_balance > 0 ? "text-warning" : "text-muted-foreground")}>{formatCurrency(selectedEmployee.advance_balance)}</p>
                 </div>
                 <div className="bg-secondary/50 rounded-xl p-3">
                   <p className="text-xs text-muted-foreground">Salary</p>
@@ -417,13 +348,10 @@ export default function EmployeesPage() {
                 </div>
                 <div className="bg-info/10 rounded-xl p-3">
                   <p className="text-xs text-muted-foreground">Total Paid</p>
-                  <p className="text-lg font-bold text-info">
-                    {formatCurrency(employeeTransactions.reduce((s, t) => s + t.amount, 0))}
-                  </p>
+                  <p className="text-lg font-bold text-info">{formatCurrency(employeeTransactions.reduce((s, t) => s + t.amount, 0))}</p>
                 </div>
               </div>
 
-              {/* Category-wise Totals */}
               {Object.keys(categoryWiseTotals).length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium text-foreground mb-2">Category-wise Summary</h4>
@@ -438,14 +366,12 @@ export default function EmployeesPage() {
                 </div>
               )}
 
-              {/* Month Selector */}
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm font-medium">{format(selectedMonth, 'MMMM yyyy')}</span>
                 <span className="text-sm text-muted-foreground">- {formatCurrency(monthTotal)}</span>
               </div>
 
-              {/* Recent Transactions */}
               <div>
                 <h4 className="text-sm font-medium text-foreground mb-3">Recent Transactions</h4>
                 {employeeTransactions.length === 0 ? (
@@ -459,9 +385,7 @@ export default function EmployeesPage() {
                           <p className="text-xs text-muted-foreground">
                             {tx.type.replace(/_/g, ' ')} • {format(new Date(tx.date), 'MMM d')}
                           </p>
-                          {tx.salary_category_id && (
-                            <p className="text-xs text-accent">{getCategoryName(tx.salary_category_id)}</p>
-                          )}
+                          {tx.salary_category_id && <p className="text-xs text-accent">{getCategoryName(tx.salary_category_id)}</p>}
                         </div>
                         <div className="text-right text-xs text-muted-foreground">
                           {tx.payments && Array.isArray(tx.payments) && tx.payments.map((p: any, i: number) => (
@@ -484,7 +408,6 @@ export default function EmployeesPage() {
           <SheetHeader className="mb-4">
             <SheetTitle>{editEmployee ? 'Edit Employee' : 'Add Employee'}</SheetTitle>
           </SheetHeader>
-          
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Name *</label>
@@ -499,83 +422,69 @@ export default function EmployeesPage() {
               <Input value={formRole} onChange={(e) => setFormRole(e.target.value)} placeholder="e.g. Manager, Worker" className="mt-1" />
             </div>
             <div>
-              <label className="text-sm font-medium">Monthly Salary</label>
+              <label className="text-sm font-medium">Day Salary</label>
               <Input value={formSalary} onChange={(e) => setFormSalary(e.target.value)} placeholder="0" type="number" className="mt-1" />
             </div>
-            <Button onClick={handleSaveEmployee} className="w-full">
-              {editEmployee ? 'Update Employee' : 'Add Employee'}
-            </Button>
+            <Button onClick={handleSaveEmployee} className="w-full">{editEmployee ? 'Update Employee' : 'Add Employee'}</Button>
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* Salary Categories Sheet */}
+      {/* Settings Sheet - Salary Categories, Allowance Types, Rate Work Types */}
       <Sheet open={isCategoryOpen} onOpenChange={setIsCategoryOpen}>
         <SheetContent side="bottom" className="h-[80vh] rounded-t-3xl">
           <SheetHeader className="mb-4">
-            <SheetTitle>Wage Categories</SheetTitle>
+            <SheetTitle>Employee Settings</SheetTitle>
           </SheetHeader>
-          
-          <div className="space-y-4 overflow-y-auto max-h-[calc(80vh-150px)]">
-            {/* Add/Edit Category */}
+
+          {/* Settings Tabs */}
+          <div className="flex rounded-lg overflow-hidden border border-border mb-4">
+            {settingsTabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => { setSettingsTab(tab.id); setEditingItem(null); setNewItemName(''); setNewItemDesc(''); }}
+                className={cn(
+                  "flex-1 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1",
+                  settingsTab === tab.id ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+                )}
+              >
+                {tab.icon}{tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-4 overflow-y-auto max-h-[calc(80vh-200px)]">
+            {/* Add/Edit Form */}
             <div className="space-y-2 p-3 bg-secondary/30 rounded-xl">
-              <Input
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder={editingCategory ? "Edit category name" : "New category name (e.g., Daily Salary, Rate Work)"}
-              />
-              <Input
-                value={newCategoryDesc}
-                onChange={(e) => setNewCategoryDesc(e.target.value)}
-                placeholder="Description (optional)"
-              />
+              <Input value={newItemName} onChange={(e) => setNewItemName(e.target.value)}
+                placeholder={editingItem ? "Edit name" : `New ${settingsTab === 'salary' ? 'category' : settingsTab === 'allowance' ? 'allowance type' : 'work type'} name`} />
+              <Input value={newItemDesc} onChange={(e) => setNewItemDesc(e.target.value)} placeholder="Description (optional)" />
               <div className="flex gap-2">
-                <Button onClick={handleSaveCategory} className="flex-1">
-                  {editingCategory ? 'Update' : 'Add Category'}
-                </Button>
-                {editingCategory && (
-                  <Button variant="outline" onClick={() => { setEditingCategory(null); setNewCategoryName(''); setNewCategoryDesc(''); }}>
-                    Cancel
-                  </Button>
+                <Button onClick={handleSaveItem} className="flex-1">{editingItem ? 'Update' : 'Add'}</Button>
+                {editingItem && (
+                  <Button variant="outline" onClick={() => { setEditingItem(null); setNewItemName(''); setNewItemDesc(''); }}>Cancel</Button>
                 )}
               </div>
             </div>
 
-            {/* Default Categories Info */}
-            <p className="text-xs text-muted-foreground px-1">
-              Common categories: Daily Salary, Previous Balance, Rate Work, Allowance, Bonus, Advance Deduction
-            </p>
-
-            {/* Category List */}
+            {/* Items List */}
             <div className="space-y-2">
-              {categories.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No categories yet. Add one above.</p>
+              {getItems(settingsTab).length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No items yet. Add one above.</p>
               ) : (
-                categories.map((category) => (
-                  <div key={category.id} className="bg-card border border-border rounded-lg p-3 flex items-center justify-between">
+                getItems(settingsTab).map((item) => (
+                  <div key={item.id} className="bg-card border border-border rounded-lg p-3 flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-foreground">{category.name}</p>
-                      {category.description && (
-                        <p className="text-xs text-muted-foreground">{category.description}</p>
-                      )}
+                      <p className="font-medium text-foreground">{item.name}</p>
+                      {item.description && <p className="text-xs text-muted-foreground">{item.description}</p>}
                     </div>
                     <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditingCategory(category);
-                          setNewCategoryName(category.name);
-                          setNewCategoryDesc(category.description || '');
-                        }}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteCategory(category.id)}
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => {
+                        setEditingItem(item);
+                        setNewItemName(item.name);
+                        setNewItemDesc(item.description || '');
+                      }}><Edit2 className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item.id)}>
                         <Trash2 className="w-4 h-4 text-destructive" />
                       </Button>
                     </div>
@@ -586,7 +495,6 @@ export default function EmployeesPage() {
           </div>
         </SheetContent>
       </Sheet>
-
     </AppLayout>
   );
 }

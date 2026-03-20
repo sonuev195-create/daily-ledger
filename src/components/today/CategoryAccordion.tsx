@@ -129,6 +129,7 @@ interface CategoryAccordionProps {
   renderContent: (categoryId: CategoryId) => React.ReactNode;
   drawerCash?: number;
   drawerUpi?: number;
+  employeeDue?: number;
 }
 
 export function CategoryAccordion({ 

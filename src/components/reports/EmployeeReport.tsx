@@ -20,7 +20,7 @@ function downloadCSV(rows: string[][], filename: string) {
 
 const fmtINR = (n: number) => `Rs.${Math.abs(n).toLocaleString('en-IN')}`;
 
-type WageCategory = 'present' | 'allowance' | 'rate_work' | 'payment';
+type WageCategory = 'present' | 'rate_work' | 'payment';
 
 interface ReportRow {
   date: string;
@@ -86,8 +86,7 @@ export function EmployeeReport() {
   ).size;
 
   const getWageCategory = (t: any): WageCategory => {
-    if (t.type === 'salary' || t.type === 'attendance' || t.type === 'daily_wage') return 'present';
-    if (t.type === 'allowance') return 'allowance';
+    if (t.type === 'salary' || t.type === 'attendance' || t.type === 'daily_wage' || t.type === 'allowance') return 'present';
     if (t.type === 'rate_work') return 'rate_work';
     if (t.type === 'payment') return 'payment';
     return 'present';
@@ -125,21 +124,19 @@ export function EmployeeReport() {
   };
 
   const wageCategoryLabel: Record<WageCategory, string> = {
-    present: 'Present',
-    allowance: 'Allowance',
+    present: 'Present & Allowance',
     rate_work: 'Rate Work',
     payment: 'Payment',
   };
 
   const wageCategoryColor: Record<WageCategory, string> = {
     present: 'bg-success/10 text-success',
-    allowance: 'bg-info/10 text-info',
     rate_work: 'bg-accent/10 text-accent',
     payment: 'bg-warning/10 text-warning',
   };
 
   // Group transactions by wage category
-  const groupedByCategory: Record<WageCategory, any[]> = { present: [], allowance: [], rate_work: [], payment: [] };
+  const groupedByCategory: Record<WageCategory, any[]> = { present: [], rate_work: [], payment: [] };
   txns.forEach(t => {
     const cat = getWageCategory(t);
     groupedByCategory[cat].push(t);
@@ -148,7 +145,6 @@ export function EmployeeReport() {
   // Category totals
   const categoryTotals: Record<WageCategory, { amount: number; paid: number }> = {
     present: { amount: 0, paid: 0 },
-    allowance: { amount: 0, paid: 0 },
     rate_work: { amount: 0, paid: 0 },
     payment: { amount: 0, paid: 0 },
   };
@@ -176,7 +172,7 @@ export function EmployeeReport() {
     let y = 36;
 
     // Each wage category section
-    const categories: WageCategory[] = ['present', 'allowance', 'rate_work', 'payment'];
+    const categories: WageCategory[] = ['present', 'rate_work', 'payment'];
     categories.forEach(cat => {
       const catTxns = groupedByCategory[cat];
       if (catTxns.length === 0) return;
@@ -218,7 +214,7 @@ export function EmployeeReport() {
     if (!selectedEmp) return;
     const header = ['Date', 'Wage Category', 'Sub Category', 'Amount', 'Payment', 'Balance'];
     const rows: string[][] = [header];
-    const categories: WageCategory[] = ['present', 'allowance', 'rate_work', 'payment'];
+    const categories: WageCategory[] = ['present', 'rate_work', 'payment'];
     categories.forEach(cat => {
       let runBal = 0;
       groupedByCategory[cat].forEach(t => {
@@ -292,7 +288,7 @@ export function EmployeeReport() {
           ) : (
             <div className="space-y-3">
               {/* Each wage category section */}
-              {(['present', 'allowance', 'rate_work', 'payment'] as WageCategory[]).map(cat => {
+              {(['present', 'rate_work', 'payment'] as WageCategory[]).map(cat => {
                 const catTxns = groupedByCategory[cat];
                 if (catTxns.length === 0) return null;
 

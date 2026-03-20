@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search, X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 interface ItemOption {
   id: string;
@@ -20,7 +22,6 @@ export function ItemSearchSelect({ items, value, onChange, placeholder = 'Search
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedItem = value ? items.find(i => i.id === value) : null;
 
@@ -31,87 +32,92 @@ export function ItemSearchSelect({ items, value, onChange, placeholder = 'Search
       })
     : items;
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
   const handleSelect = (id: string) => {
     onChange(id);
     setOpen(false);
     setQuery('');
   };
 
-  const handleClear = () => {
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
     onChange(null);
     setQuery('');
   };
 
   return (
-    <div ref={containerRef} className={cn("relative", className)}>
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-          className={cn(
-            "w-full h-7 px-1.5 text-[11px] bg-background/50 border rounded truncate text-left flex items-center gap-1",
-            !value ? "border-destructive/50 text-destructive" : "border-border text-foreground"
-          )}
-        >
-          {selectedItem ? (
+    <div className={cn("relative", className)}>
+      <button
+        type="button"
+        onClick={() => { setOpen(true); setQuery(''); }}
+        className={cn(
+          "w-full h-7 px-1.5 text-[11px] bg-background/50 border rounded truncate text-left flex items-center gap-1",
+          !value ? "border-destructive/50 text-destructive" : "border-border text-foreground"
+        )}
+      >
+        {selectedItem ? (
+          <>
             <span className="truncate flex-1">{selectedItem.name}</span>
-          ) : (
-            <span className="text-muted-foreground truncate flex-1">No match</span>
-          )}
-          <Search className="w-3 h-3 shrink-0 text-muted-foreground" />
-        </button>
-      ) : (
-        <div className="flex items-center gap-0.5">
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder={placeholder}
-            className="w-full h-7 px-1.5 text-[11px] bg-background border border-accent/50 rounded focus:outline-none focus:ring-1 focus:ring-accent/30"
-            onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}
-          />
-          {value && (
-            <button type="button" onClick={handleClear} className="text-muted-foreground hover:text-destructive shrink-0">
+            <button type="button" onClick={handleClear} className="shrink-0 text-muted-foreground hover:text-destructive">
               <X className="w-3 h-3" />
             </button>
-          )}
-        </div>
-      )}
-      {open && (
-        <div className="absolute z-50 w-full mt-0.5 bg-popover border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-          {filtered.length === 0 ? (
-            <div className="px-2 py-2 text-[10px] text-muted-foreground">No items found</div>
-          ) : (
-            filtered.slice(0, 50).map(item => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleSelect(item.id)}
-                className={cn(
-                  "w-full px-2 py-1.5 text-left text-[11px] hover:bg-secondary/50 border-b border-border/20 last:border-0",
-                  item.id === value && "bg-accent/10 font-medium"
-                )}
-              >
-                {item.name}
-                {item.paperBillName && item.paperBillName !== item.name && (
-                  <span className="text-muted-foreground ml-1">({item.paperBillName})</span>
-                )}
-              </button>
-            ))
-          )}
-        </div>
-      )}
+          </>
+        ) : (
+          <>
+            <span className="text-muted-foreground truncate flex-1">Select item</span>
+            <Search className="w-3 h-3 shrink-0 text-muted-foreground" />
+          </>
+        )}
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg w-[95vw] max-h-[60vh] p-0 gap-0 overflow-hidden">
+          <DialogTitle className="sr-only">Select Item</DialogTitle>
+          {/* Search */}
+          <div className="p-3 border-b border-border">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                ref={inputRef}
+                autoFocus
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder={placeholder}
+                className="pl-9 h-10 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Item List */}
+          <div className="overflow-y-auto max-h-[calc(60vh-70px)]">
+            {filtered.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-muted-foreground">No items found</div>
+            ) : (
+              <div className="divide-y divide-border/30">
+                {filtered.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelect(item.id)}
+                    className={cn(
+                      "w-full px-4 py-3 text-left text-sm hover:bg-secondary/50 flex items-center justify-between transition-colors",
+                      item.id === value && "bg-accent/10"
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <span className="font-medium">{item.name}</span>
+                      {item.paperBillName && item.paperBillName !== item.name && (
+                        <span className="text-muted-foreground ml-2 text-xs">({item.paperBillName})</span>
+                      )}
+                    </div>
+                    {item.id === value && <Check className="w-4 h-4 text-accent shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -505,16 +505,24 @@ export function CustomerInlineEntry({
             };
           });
 
-          // Auto-select batches and deduct for sales
-          if (entry.type === 'sale') {
-            for (const bi of billItemsData) {
-              if (bi.itemId) {
-                const batches = await getBatchesForItem(bi.itemId);
+          // Auto-select batches and deduct for sales, restore for returns
+          for (const bi of billItemsData) {
+            if (bi.itemId) {
+              const batches = await getBatchesForItem(bi.itemId);
+              if (entry.type === 'sale') {
                 const withStock = batches.filter(b => b.primaryQuantity > 0)
                   .sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
                 if (withStock.length > 0) {
                   bi.batchId = withStock[0].id;
                   await deductFromBatch(withStock[0].id, bi.primaryQty, bi.secondaryQty);
+                }
+              } else if (entry.type === 'sales_return') {
+                // For returns, restore inventory - add back to earliest batch
+                const sorted = batches.sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
+                if (sorted.length > 0) {
+                  bi.batchId = sorted[0].id;
+                  // Restore: add qty back (negative deduction)
+                  await deductFromBatch(sorted[0].id, -bi.primaryQty, -bi.secondaryQty);
                 }
               }
             }

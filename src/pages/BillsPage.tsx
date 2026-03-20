@@ -56,7 +56,7 @@ export default function BillsPage() {
   const [bills, setBills] = useState<BillWithCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'sale' | 'purchase' | 'due' | 'advance'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'sale' | 'purchase' | 'sale_due' | 'purchase_due' | 'advance'>('all');
   const [expandedBill, setExpandedBill] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<BillWithCustomer | null>(null);
   const [billItems, setBillItems] = useState<BillItem[]>([]);
@@ -232,16 +232,17 @@ export default function BillsPage() {
     
     // Type filter
     let matchesFilter = true;
+    const isSaleBill = (!!bill.customer_name && !bill.supplier_name) || bill.bill_type === 'sale' || bill.bill_number?.startsWith('S');
+    const isPurchaseBill = !!bill.supplier_name || bill.bill_type === 'purchase_bill' || bill.bill_number?.startsWith('PB');
+
     if (filterType === 'sale') {
-      matchesFilter = (!!bill.customer_name && !bill.supplier_name) || 
-                      bill.bill_type === 'sale' || 
-                      bill.bill_number?.startsWith('S');
+      matchesFilter = isSaleBill;
     } else if (filterType === 'purchase') {
-      matchesFilter = !!bill.supplier_name || 
-                      bill.bill_type === 'purchase_bill' || 
-                      bill.bill_number?.startsWith('PB');
-    } else if (filterType === 'due') {
-      matchesFilter = !!(bill.due_amount && bill.due_amount > 0);
+      matchesFilter = isPurchaseBill;
+    } else if (filterType === 'sale_due') {
+      matchesFilter = isSaleBill && !!(bill.due_amount && bill.due_amount > 0);
+    } else if (filterType === 'purchase_due') {
+      matchesFilter = isPurchaseBill && !!(bill.due_amount && bill.due_amount > 0);
     } else if (filterType === 'advance') {
       matchesFilter = bill.bill_type === 'customer_advance' || 
                       bill.bill_number?.startsWith('CA') ||
@@ -347,24 +348,27 @@ export default function BillsPage() {
             />
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {(['all', 'sale', 'purchase', 'due', 'advance'] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={cn(
-                  "px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap",
-                  filterType === type
-                    ? type === 'due' 
-                      ? "bg-warning text-warning-foreground"
-                      : type === 'advance'
-                      ? "bg-accent text-accent-foreground"
-                      : "bg-primary text-primary-foreground"
-                    : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
-                )}
-              >
-                {type === 'due' ? 'Due Bills' : type === 'advance' ? 'Advance' : type.charAt(0).toUpperCase() + type.slice(1)}
-              </button>
-            ))}
+            {(['all', 'sale', 'purchase', 'sale_due', 'purchase_due', 'advance'] as const).map((type) => {
+              const labels: Record<string, string> = { all: 'All', sale: 'Sale', purchase: 'Purchase', sale_due: 'Sale Due', purchase_due: 'Purchase Due', advance: 'Advance' };
+              return (
+                <button
+                  key={type}
+                  onClick={() => setFilterType(type)}
+                  className={cn(
+                    "px-3 py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap",
+                    filterType === type
+                      ? (type === 'sale_due' || type === 'purchase_due')
+                        ? "bg-warning text-warning-foreground"
+                        : type === 'advance'
+                        ? "bg-accent text-accent-foreground"
+                        : "bg-primary text-primary-foreground"
+                      : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+                  )}
+                >
+                  {labels[type]}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -375,7 +379,7 @@ export default function BillsPage() {
           <div className="text-center py-12">
             <Receipt className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground">No bills found</p>
-            {filterType === 'due' && (
+            {(filterType === 'sale_due' || filterType === 'purchase_due') && (
               <p className="text-sm text-muted-foreground mt-1">No pending dues</p>
             )}
           </div>

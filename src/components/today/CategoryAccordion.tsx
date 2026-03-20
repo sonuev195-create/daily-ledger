@@ -21,7 +21,7 @@ export const CATEGORIES: CategoryConfig[] = [
   { id: 'drawer', label: 'Drawer', icon: Wallet, colorClass: 'text-accent', bgClass: 'bg-accent/10' },
   { id: 'customer', label: 'Customer', icon: CreditCard, colorClass: 'text-success', bgClass: 'bg-success/10' },
   { id: 'purchase', label: 'Purchase', icon: ShoppingCart, colorClass: 'text-warning', bgClass: 'bg-warning/10' },
-  { id: 'employee', label: 'Employee', icon: Users, colorClass: 'text-info', bgClass: 'bg-info/10' },
+  { id: 'employee', label: 'Salary', icon: Users, colorClass: 'text-info', bgClass: 'bg-info/10' },
   { id: 'expense', label: 'Expense', icon: Banknote, colorClass: 'text-destructive', bgClass: 'bg-destructive/10' },
   { id: 'exchange', label: 'Exchange', icon: ArrowLeftRight, colorClass: 'text-primary', bgClass: 'bg-primary/10' },
   { id: 'home', label: 'Home', icon: Home, colorClass: 'text-muted-foreground', bgClass: 'bg-secondary' },

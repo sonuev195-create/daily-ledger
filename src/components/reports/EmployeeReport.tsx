@@ -124,15 +124,13 @@ export function EmployeeReport() {
   };
 
   const wageCategoryLabel: Record<WageCategory, string> = {
-    present: 'Present',
-    allowance: 'Allowance',
+    present: 'Present & Allowance',
     rate_work: 'Rate Work',
     payment: 'Payment',
   };
 
   const wageCategoryColor: Record<WageCategory, string> = {
     present: 'bg-success/10 text-success',
-    allowance: 'bg-info/10 text-info',
     rate_work: 'bg-accent/10 text-accent',
     payment: 'bg-warning/10 text-warning',
   };

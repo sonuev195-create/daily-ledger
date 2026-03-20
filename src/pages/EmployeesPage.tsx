@@ -35,7 +35,8 @@ interface EmployeeTransaction {
   payments: any;
 }
 
-type SettingsTab = 'salary' | 'allowance' | 'ratework';
+// Only allowance and rate work types are configurable; wage categories (present, allowance, rate work) are fixed
+type SettingsTab = 'allowance' | 'ratework';
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -45,10 +46,9 @@ export default function EmployeesPage() {
   const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('salary');
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('allowance');
 
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
-  const [salaryCategories, setSalaryCategories] = useState<CategoryItem[]>([]);
   const [allowanceCategories, setAllowanceCategories] = useState<CategoryItem[]>([]);
   const [rateWorkTypes, setRateWorkTypes] = useState<CategoryItem[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
@@ -81,12 +81,10 @@ export default function EmployeesPage() {
   };
 
   const fetchAllCategories = async () => {
-    const [salRes, alRes, rwRes] = await Promise.all([
-      supabase.from('salary_categories').select('*').order('name'),
+    const [alRes, rwRes] = await Promise.all([
       supabase.from('allowance_categories').select('*').order('name'),
       supabase.from('rate_work_types').select('*').order('name'),
     ]);
-    setSalaryCategories(salRes.data || []);
     setAllowanceCategories(alRes.data || []);
     setRateWorkTypes(rwRes.data || []);
   };
@@ -153,13 +151,11 @@ export default function EmployeesPage() {
   };
 
   const getTableName = (tab: SettingsTab) => {
-    if (tab === 'salary') return 'salary_categories';
     if (tab === 'allowance') return 'allowance_categories';
     return 'rate_work_types';
   };
 
   const getItems = (tab: SettingsTab) => {
-    if (tab === 'salary') return salaryCategories;
     if (tab === 'allowance') return allowanceCategories;
     return rateWorkTypes;
   };
@@ -198,11 +194,6 @@ export default function EmployeesPage() {
     else { toast.success('Deleted'); fetchAllCategories(); }
   };
 
-  const getCategoryName = (id: string | null) => {
-    if (!id) return 'Uncategorized';
-    return salaryCategories.find(c => c.id === id)?.name || 'Unknown';
-  };
-
   const filteredEmployees = employees.filter(e =>
     e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     e.phone?.includes(searchQuery) ||
@@ -215,12 +206,6 @@ export default function EmployeesPage() {
   const totalAdvance = employees.reduce((sum, e) => sum + e.advance_balance, 0);
   const totalSalary = employees.reduce((sum, e) => sum + e.salary, 0);
 
-  const categoryWiseTotals = employeeTransactions.reduce((acc, tx) => {
-    const catId = tx.salary_category_id || 'uncategorized';
-    acc[catId] = (acc[catId] || 0) + tx.amount;
-    return acc;
-  }, {} as Record<string, number>);
-
   const monthStart = startOfMonth(selectedMonth);
   const monthEnd = endOfMonth(selectedMonth);
   const monthTransactions = employeeTransactions.filter(tx => {
@@ -230,7 +215,6 @@ export default function EmployeesPage() {
   const monthTotal = monthTransactions.reduce((sum, tx) => sum + tx.amount, 0);
 
   const settingsTabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'salary', label: 'Wage Categories', icon: <TrendingUp className="w-3 h-3" /> },
     { id: 'allowance', label: 'Allowance Types', icon: <Gift className="w-3 h-3" /> },
     { id: 'ratework', label: 'Rate Work Types', icon: <Hammer className="w-3 h-3" /> },
   ];
@@ -352,20 +336,6 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {Object.keys(categoryWiseTotals).length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-foreground mb-2">Category-wise Summary</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(categoryWiseTotals).map(([catId, total]) => (
-                      <div key={catId} className="bg-secondary/30 rounded-lg p-2">
-                        <p className="text-xs text-muted-foreground">{getCategoryName(catId === 'uncategorized' ? null : catId)}</p>
-                        <p className="font-semibold text-foreground">{formatCurrency(total)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm font-medium">{format(selectedMonth, 'MMMM yyyy')}</span>
@@ -385,7 +355,6 @@ export default function EmployeesPage() {
                           <p className="text-xs text-muted-foreground">
                             {tx.type.replace(/_/g, ' ')} • {format(new Date(tx.date), 'MMM d')}
                           </p>
-                          {tx.salary_category_id && <p className="text-xs text-accent">{getCategoryName(tx.salary_category_id)}</p>}
                         </div>
                         <div className="text-right text-xs text-muted-foreground">
                           {tx.payments && Array.isArray(tx.payments) && tx.payments.map((p: any, i: number) => (
@@ -430,14 +399,14 @@ export default function EmployeesPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Settings Sheet - Salary Categories, Allowance Types, Rate Work Types */}
+      {/* Settings Sheet - Allowance Types and Rate Work Types only */}
       <Sheet open={isCategoryOpen} onOpenChange={setIsCategoryOpen}>
         <SheetContent side="bottom" className="h-[80vh] rounded-t-3xl">
           <SheetHeader className="mb-4">
             <SheetTitle>Employee Settings</SheetTitle>
           </SheetHeader>
 
-          {/* Settings Tabs */}
+          {/* Settings Tabs - no wage category tab */}
           <div className="flex rounded-lg overflow-hidden border border-border mb-4">
             {settingsTabs.map(tab => (
               <button
@@ -457,7 +426,7 @@ export default function EmployeesPage() {
             {/* Add/Edit Form */}
             <div className="space-y-2 p-3 bg-secondary/30 rounded-xl">
               <Input value={newItemName} onChange={(e) => setNewItemName(e.target.value)}
-                placeholder={editingItem ? "Edit name" : `New ${settingsTab === 'salary' ? 'category' : settingsTab === 'allowance' ? 'allowance type' : 'work type'} name`} />
+                placeholder={editingItem ? "Edit name" : `New ${settingsTab === 'allowance' ? 'allowance type' : 'work type'} name`} />
               <Input value={newItemDesc} onChange={(e) => setNewItemDesc(e.target.value)} placeholder="Description (optional)" />
               <div className="flex gap-2">
                 <Button onClick={handleSaveItem} className="flex-1">{editingItem ? 'Update' : 'Add'}</Button>

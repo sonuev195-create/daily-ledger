@@ -31,13 +31,14 @@ interface RateWorkType {
 }
 
 type EmployeeTab = 'attendance' | 'allowance' | 'ratework' | 'payment';
+type PaymentDueType = 'present' | 'previous' | 'ratework';
 
 interface AttendanceRow {
   employeeId: string;
   employeeName: string;
   present: boolean;
   daySalary: string;
-  rateWorkTypeId: string; // '' means none/normal job
+  rateWorkTypeId: string;
   saved: boolean;
   transactionId?: string;
 }
@@ -78,6 +79,7 @@ export function EmployeeInlineEntry({
 
   // Payment state
   const [paymentEmployeeId, setPaymentEmployeeId] = useState('');
+  const [paymentDueType, setPaymentDueType] = useState<PaymentDueType>('present');
   const [paymentPayments, setPaymentPayments] = useState<PaymentEntry[]>([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
   const [employeeDues, setEmployeeDues] = useState<{
     currentMonthDue: number;
@@ -93,7 +95,6 @@ export function EmployeeInlineEntry({
   const currentMonthName = format(selectedDate, 'MMM');
   const previousMonthName = format(subMonths(selectedDate, 1), 'MMM');
 
-  // Fetch all base data
   useEffect(() => {
     const fetchData = async () => {
       const [empRes, allowRes, rateRes] = await Promise.all([
@@ -109,7 +110,6 @@ export function EmployeeInlineEntry({
     fetchData();
   }, []);
 
-  // Fetch employee names for existing transactions
   useEffect(() => {
     const empIds = [...new Set(employeeTransactions.map(t => t.employeeId).filter(Boolean))];
     if (empIds.length === 0) return;
@@ -120,16 +120,20 @@ export function EmployeeInlineEntry({
     });
   }, [transactions]);
 
-  // Build attendance rows from all employees + today's transactions
+  // Build attendance rows - rate_work entries should NOT count as present
   useEffect(() => {
     if (allEmployees.length === 0) return;
+    // Only salary/attendance type counts as present, NOT rate_work
     const todayAttendanceTxns = employeeTransactions.filter(t => t.type === 'salary' || t.type === 'attendance');
+    const todayRateWorkTxns = employeeTransactions.filter(t => t.type === 'rate_work');
 
     const rows: AttendanceRow[] = allEmployees.map(emp => {
       const existingTxn = todayAttendanceTxns.find(t => t.employeeId === emp.id);
+      const hasRateWork = todayRateWorkTxns.some(t => t.employeeId === emp.id);
       return {
         employeeId: emp.id,
         employeeName: emp.name,
+        // Present only if has attendance/salary txn, rate_work alone does NOT mean present
         present: !!existingTxn,
         daySalary: existingTxn ? existingTxn.amount.toString() : emp.salary.toString(),
         rateWorkTypeId: existingTxn?.reference || '',
@@ -146,10 +150,7 @@ export function EmployeeInlineEntry({
     (async () => {
       const monthStart = startOfMonth(selectedDate);
       const monthEnd = endOfMonth(selectedDate);
-      const prevEnd = new Date(monthStart);
-      prevEnd.setDate(prevEnd.getDate() - 1);
 
-      // Current month transactions for this employee
       const { data: currentMonthData } = await supabase.from('transactions')
         .select('amount, payments, type, rate_work_type_id')
         .eq('employee_id', paymentEmployeeId)
@@ -157,14 +158,12 @@ export function EmployeeInlineEntry({
         .gte('date', format(monthStart, 'yyyy-MM-dd'))
         .lte('date', format(monthEnd, 'yyyy-MM-dd'));
 
-      // All previous transactions
       const { data: prevData } = await supabase.from('transactions')
         .select('amount, payments, type, rate_work_type_id')
         .eq('employee_id', paymentEmployeeId)
         .eq('section', 'employee')
         .lt('date', format(monthStart, 'yyyy-MM-dd'));
 
-      // Rate work types for names
       const { data: rwTypes } = await supabase.from('rate_work_types').select('id, name');
       const rwMap = new Map((rwTypes || []).map(r => [r.id, r.name]));
 
@@ -175,13 +174,10 @@ export function EmployeeInlineEntry({
 
       const getTotalAmount = (txns: any[]) => txns.reduce((s, t) => s + Number(t.amount), 0);
 
-      // Current month: day salary + allowance (exclude rate_work and payments)
+      // Current month: salary + allowance (exclude rate_work and payments)
       const currentSalaryAllowance = (currentMonthData || []).filter(t => t.type !== 'rate_work' && t.type !== 'payment');
       const currentMonthSalary = getTotalAmount(currentSalaryAllowance);
       const currentMonthPaid = getTotalPaid(currentSalaryAllowance);
-      const currentMonthPayments = (currentMonthData || []).filter(t => t.type === 'payment');
-      const currentMonthPaymentTotal = getTotalPaid(currentMonthPayments) + getTotalAmount(currentMonthPayments.filter(t => t.type === 'payment'));
-      // Actually, payment type transactions: their payments array contains the actual payment
       const paymentTxnsPaid = (currentMonthData || []).filter(t => t.type === 'payment').reduce((s, t) => {
         const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
         return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
@@ -192,8 +188,7 @@ export function EmployeeInlineEntry({
       const prevNonRateWork = (prevData || []).filter(t => t.type !== 'rate_work');
       const prevSalary = getTotalAmount(prevNonRateWork);
       const prevPaid = getTotalPaid(prevNonRateWork);
-      const prevPayments = (prevData || []).filter(t => t.type === 'payment');
-      const prevPaymentPaid = prevPayments.reduce((s, t) => {
+      const prevPaymentPaid = (prevData || []).filter(t => t.type === 'payment').reduce((s, t) => {
         const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
         return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
       }, 0);
@@ -242,7 +237,6 @@ export function EmployeeInlineEntry({
       const presentRows = attendanceRows.filter(r => r.present && !r.saved);
       const removedRows = attendanceRows.filter(r => !r.present && r.saved && r.transactionId);
 
-      // Save new attendance entries
       for (const row of presentRows) {
         const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
           date: selectedDate,
@@ -257,7 +251,6 @@ export function EmployeeInlineEntry({
         await onSave(txn);
       }
 
-      // Remove attendance for employees marked absent who were previously present
       for (const row of removedRows) {
         if (row.transactionId) {
           await onDeleteTransaction(row.transactionId);
@@ -338,6 +331,7 @@ export function EmployeeInlineEntry({
 
     setSaving(true);
     try {
+      // Store paymentDueType in reference so report can distinguish
       const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
         date: selectedDate,
         section: 'employee' as TransactionSection,
@@ -346,9 +340,11 @@ export function EmployeeInlineEntry({
         payments: paymentPayments.filter(p => p.amount > 0),
         employeeId: paymentEmployeeId,
         billNumber: `EP${Date.now().toString().slice(-6)}`,
+        reference: paymentDueType,
       };
       await onSave(txn);
       setPaymentEmployeeId('');
+      setPaymentDueType('present');
       setPaymentPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
       setEmployeeDues(null);
       toast.success('Payment saved');
@@ -391,6 +387,12 @@ export function EmployeeInlineEntry({
     { id: 'allowance', label: 'Allowance', icon: <Gift className="w-3 h-3" /> },
     { id: 'ratework', label: 'Rate Work', icon: <Hammer className="w-3 h-3" /> },
     { id: 'payment', label: 'Pay & Due', icon: <CreditCard className="w-3 h-3" /> },
+  ];
+
+  const dueTypeLabels: { id: PaymentDueType; label: string }[] = [
+    { id: 'present', label: `${currentMonthName} Due` },
+    { id: 'previous', label: 'Previous Due' },
+    { id: 'ratework', label: 'Rate Work Due' },
   ];
 
   return (
@@ -459,7 +461,6 @@ export function EmployeeInlineEntry({
             </div>
 
             <div className="space-y-1 max-h-[300px] overflow-y-auto">
-              {/* Header */}
               <div className="grid grid-cols-12 gap-1 text-[10px] text-muted-foreground font-medium px-1">
                 <div className="col-span-1"></div>
                 <div className="col-span-4">Employee</div>
@@ -526,7 +527,6 @@ export function EmployeeInlineEntry({
           <div className="space-y-2">
             <span className="text-xs font-medium text-accent">Add Allowance</span>
 
-            {/* Existing allowance transactions for today */}
             {employeeTransactions.filter(t => t.type === 'allowance').length > 0 && (
               <div className="text-[10px] text-muted-foreground">
                 Today: {employeeTransactions.filter(t => t.type === 'allowance').length} allowance entries
@@ -637,6 +637,7 @@ export function EmployeeInlineEntry({
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Employee</label>
               <Select value={paymentEmployeeId} onValueChange={v => {
                 setPaymentEmployeeId(v);
+                setPaymentDueType('present');
                 setPaymentPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
               }}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select employee..." /></SelectTrigger>
@@ -651,28 +652,46 @@ export function EmployeeInlineEntry({
             {employeeDues && (
               <div className="space-y-1.5">
                 {/* Current Month Due */}
-                <div className="bg-accent/10 border border-accent/30 rounded-lg p-2 flex justify-between items-center">
-                  <span className="text-xs font-medium text-accent">{currentMonthName} Due</span>
+                <div className={cn(
+                  "border rounded-lg p-2 flex justify-between items-center cursor-pointer transition-colors",
+                  paymentDueType === 'present' ? "bg-accent/20 border-accent" : "bg-accent/5 border-accent/30"
+                )} onClick={() => setPaymentDueType('present')}>
+                  <div className="flex items-center gap-2">
+                    <div className={cn("w-3 h-3 rounded-full border-2", paymentDueType === 'present' ? "border-accent bg-accent" : "border-muted-foreground")} />
+                    <span className="text-xs font-medium text-accent">{currentMonthName} Due</span>
+                  </div>
                   <span className="text-xs font-bold text-accent">{formatINR(employeeDues.currentMonthDue)}</span>
                 </div>
 
                 {/* Previous Dues */}
-                <div className="bg-warning/10 border border-warning/30 rounded-lg p-2 flex justify-between items-center">
-                  <span className="text-xs font-medium text-warning">Previous Dues (till {previousMonthName})</span>
+                <div className={cn(
+                  "border rounded-lg p-2 flex justify-between items-center cursor-pointer transition-colors",
+                  paymentDueType === 'previous' ? "bg-warning/20 border-warning" : "bg-warning/5 border-warning/30"
+                )} onClick={() => setPaymentDueType('previous')}>
+                  <div className="flex items-center gap-2">
+                    <div className={cn("w-3 h-3 rounded-full border-2", paymentDueType === 'previous' ? "border-warning bg-warning" : "border-muted-foreground")} />
+                    <span className="text-xs font-medium text-warning">Previous Dues (till {previousMonthName})</span>
+                  </div>
                   <span className="text-xs font-bold text-warning">{formatINR(employeeDues.previousDues)}</span>
                 </div>
 
                 {/* Rate Work Due */}
                 {employeeDues.rateWorkDue > 0 && (
-                  <div className="bg-info/10 border border-info/30 rounded-lg p-2">
+                  <div className={cn(
+                    "border rounded-lg p-2 cursor-pointer transition-colors",
+                    paymentDueType === 'ratework' ? "bg-info/20 border-info" : "bg-info/5 border-info/30"
+                  )} onClick={() => setPaymentDueType('ratework')}>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-medium text-info">Rate Work Due</span>
+                      <div className="flex items-center gap-2">
+                        <div className={cn("w-3 h-3 rounded-full border-2", paymentDueType === 'ratework' ? "border-info bg-info" : "border-muted-foreground")} />
+                        <span className="text-xs font-medium text-info">Rate Work Due</span>
+                      </div>
                       <span className="text-xs font-bold text-info">{formatINR(employeeDues.rateWorkDue)}</span>
                     </div>
                     {employeeDues.rateWorkBreakdown.length > 0 && (
                       <div className="mt-1 space-y-0.5">
                         {employeeDues.rateWorkBreakdown.map((rb, i) => (
-                          <div key={i} className="flex justify-between text-[10px] text-info/80 pl-2">
+                          <div key={i} className="flex justify-between text-[10px] text-info/80 pl-5">
                             <span>{rb.typeName}</span>
                             <span>{formatINR(rb.amount)}</span>
                           </div>
@@ -693,7 +712,7 @@ export function EmployeeInlineEntry({
             {/* Payment Mode */}
             {paymentEmployeeId && (
               <div>
-                <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
+                <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment for: <span className="font-semibold text-foreground">{dueTypeLabels.find(d => d.id === paymentDueType)?.label}</span></label>
                 <div className="space-y-1">
                   {paymentPayments.map((p, i) => (
                     <div key={p.id} className="flex gap-1">

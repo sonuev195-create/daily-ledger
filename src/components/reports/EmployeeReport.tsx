@@ -136,7 +136,7 @@ export function EmployeeReport() {
   };
 
   // Group transactions by wage category
-  const groupedByCategory: Record<WageCategory, any[]> = { present: [], allowance: [], rate_work: [], payment: [] };
+  const groupedByCategory: Record<WageCategory, any[]> = { present: [], rate_work: [], payment: [] };
   txns.forEach(t => {
     const cat = getWageCategory(t);
     groupedByCategory[cat].push(t);

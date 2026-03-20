@@ -3,7 +3,6 @@ import { Search, X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 interface ItemOption {
   id: string;

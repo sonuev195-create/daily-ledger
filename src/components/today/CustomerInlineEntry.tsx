@@ -289,8 +289,33 @@ export function CustomerInlineEntry({
     return () => clearTimeout(timer);
   }, [entry.customerQuery, entry.customerId]);
 
+  const [customerTotalDue, setCustomerTotalDue] = useState(0);
+
   useEffect(() => {
-    if (entry.type === 'balance_paid' && entry.customerQuery.length >= 2) {
+    if (entry.type === 'balance_paid' && entry.customerId) {
+      // Fetch both due bills and customer's total due balance
+      Promise.all([
+        getDueBillsForCustomer(entry.customerQuery),
+        supabase.from('customers').select('due_balance').eq('id', entry.customerId).single(),
+      ]).then(([bills, { data: custData }]) => {
+        const totalDue = Number(custData?.due_balance || 0);
+        const billDueTotal = bills.reduce((s, b) => s + b.dueAmount, 0);
+        const openingDue = Math.max(0, totalDue - billDueTotal);
+        setCustomerTotalDue(totalDue);
+        // If there's opening due, add it as a virtual "bill" entry
+        const allBills = [...bills];
+        if (openingDue > 0) {
+          allBills.push({
+            id: '__opening_due__',
+            billNumber: 'Opening Due',
+            totalAmount: openingDue,
+            dueAmount: openingDue,
+            createdAt: new Date(0),
+          });
+        }
+        setEntry(prev => ({ ...prev, dueBills: allBills }));
+      });
+    } else if (entry.type === 'balance_paid' && entry.customerQuery.length >= 2) {
       getDueBillsForCustomer(entry.customerQuery).then(bills => {
         setEntry(prev => ({ ...prev, dueBills: bills }));
       });

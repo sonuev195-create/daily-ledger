@@ -86,8 +86,7 @@ export function EmployeeReport() {
   ).size;
 
   const getWageCategory = (t: any): WageCategory => {
-    if (t.type === 'salary' || t.type === 'attendance' || t.type === 'daily_wage') return 'present';
-    if (t.type === 'allowance') return 'allowance';
+    if (t.type === 'salary' || t.type === 'attendance' || t.type === 'daily_wage' || t.type === 'allowance') return 'present';
     if (t.type === 'rate_work') return 'rate_work';
     if (t.type === 'payment') return 'payment';
     return 'present';

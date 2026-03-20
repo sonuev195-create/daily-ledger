@@ -532,13 +532,15 @@ export function CustomerInlineEntry({
         if (advanceUsed > 0) await updateCustomerBalance(finalCustomerId, 0, -advanceUsed);
         if (entry.type === 'customer_advance') await updateCustomerBalance(finalCustomerId, 0, totalPayments);
         if (entry.type === 'balance_paid') {
-          const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id));
+          const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id) && b.id !== '__opening_due__');
+          const hasOpeningDue = entry.selectedBills.includes('__opening_due__');
           let remaining = totalPayments;
           for (const bill of selectedDueBills) {
             const payForBill = Math.min(remaining, bill.dueAmount);
             remaining -= payForBill;
             await supabase.from('transactions').update({ due: bill.dueAmount - payForBill }).eq('id', bill.id);
           }
+          // Opening due is handled via the customer balance update directly
           await updateCustomerBalance(finalCustomerId, -totalPayments, 0);
         }
 

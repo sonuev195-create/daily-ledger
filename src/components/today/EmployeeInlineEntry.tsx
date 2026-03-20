@@ -152,14 +152,14 @@ export function EmployeeInlineEntry({
       const monthEnd = endOfMonth(selectedDate);
 
       const { data: currentMonthData } = await supabase.from('transactions')
-        .select('amount, payments, type, rate_work_type_id')
+        .select('amount, payments, type, rate_work_type_id, reference')
         .eq('employee_id', paymentEmployeeId)
         .eq('section', 'employee')
         .gte('date', format(monthStart, 'yyyy-MM-dd'))
         .lte('date', format(monthEnd, 'yyyy-MM-dd'));
 
       const { data: prevData } = await supabase.from('transactions')
-        .select('amount, payments, type, rate_work_type_id')
+        .select('amount, payments, type, rate_work_type_id, reference')
         .eq('employee_id', paymentEmployeeId)
         .eq('section', 'employee')
         .lt('date', format(monthStart, 'yyyy-MM-dd'));

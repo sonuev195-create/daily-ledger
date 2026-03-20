@@ -379,7 +379,7 @@ export default function BillsPage() {
           <div className="text-center py-12">
             <Receipt className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground">No bills found</p>
-            {filterType === 'due' && (
+            {(filterType === 'sale_due' || filterType === 'purchase_due') && (
               <p className="text-sm text-muted-foreground mt-1">No pending dues</p>
             )}
           </div>

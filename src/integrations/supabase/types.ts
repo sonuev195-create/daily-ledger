@@ -32,6 +32,27 @@ export type Database = {
         }
         Relationships: []
       }
+      allowance_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       app_users: {
         Row: {
           created_at: string
@@ -596,6 +617,27 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_work_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       salary_categories: {
         Row: {
           created_at: string
@@ -652,6 +694,7 @@ export type Database = {
           adjusted_from_sales: number | null
           advance_purpose_id: string | null
           advance_rate: number | null
+          allowance_category_id: string | null
           amount: number
           bill_number: string | null
           bill_type: string | null
@@ -667,6 +710,7 @@ export type Database = {
           id: string
           overpayment: number | null
           payments: Json
+          rate_work_type_id: string | null
           reference: string | null
           salary_category_id: string | null
           section: string
@@ -680,6 +724,7 @@ export type Database = {
           adjusted_from_sales?: number | null
           advance_purpose_id?: string | null
           advance_rate?: number | null
+          allowance_category_id?: string | null
           amount?: number
           bill_number?: string | null
           bill_type?: string | null
@@ -695,6 +740,7 @@ export type Database = {
           id?: string
           overpayment?: number | null
           payments?: Json
+          rate_work_type_id?: string | null
           reference?: string | null
           salary_category_id?: string | null
           section: string
@@ -708,6 +754,7 @@ export type Database = {
           adjusted_from_sales?: number | null
           advance_purpose_id?: string | null
           advance_rate?: number | null
+          allowance_category_id?: string | null
           amount?: number
           bill_number?: string | null
           bill_type?: string | null
@@ -723,6 +770,7 @@ export type Database = {
           id?: string
           overpayment?: number | null
           payments?: Json
+          rate_work_type_id?: string | null
           reference?: string | null
           salary_category_id?: string | null
           section?: string
@@ -738,6 +786,13 @@ export type Database = {
             columns: ["advance_purpose_id"]
             isOneToOne: false
             referencedRelation: "advance_purposes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_allowance_category_id_fkey"
+            columns: ["allowance_category_id"]
+            isOneToOne: false
+            referencedRelation: "allowance_categories"
             referencedColumns: ["id"]
           },
           {
@@ -766,6 +821,13 @@ export type Database = {
             columns: ["home_category_id"]
             isOneToOne: false
             referencedRelation: "home_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_rate_work_type_id_fkey"
+            columns: ["rate_work_type_id"]
+            isOneToOne: false
+            referencedRelation: "rate_work_types"
             referencedColumns: ["id"]
           },
           {

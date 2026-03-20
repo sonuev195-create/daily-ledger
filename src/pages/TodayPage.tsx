@@ -6,6 +6,7 @@ import { CategoryAccordion, CategoryId } from '@/components/today/CategoryAccord
 import { DrawerAccordionContent } from '@/components/today/DrawerAccordionContent';
 import { FullDayBillContent } from '@/components/today/FullDayBillContent';
 import { CategoryTransactionList } from '@/components/today/CategoryTransactionList';
+import { supabase } from '@/integrations/supabase/client';
 import { CustomerInlineEntry } from '@/components/today/CustomerInlineEntry';
 import { PurchaseInlineEntry } from '@/components/today/PurchaseInlineEntry';
 import { EmployeeInlineEntry } from '@/components/today/EmployeeInlineEntry';

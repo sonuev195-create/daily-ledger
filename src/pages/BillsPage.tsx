@@ -241,8 +241,7 @@ export default function BillsPage() {
                       bill.bill_type === 'purchase_bill' || 
                       bill.bill_number?.startsWith('PB');
     } else if (filterType === 'due') {
-      matchesFilter = (bill.due_amount && bill.due_amount > 0) || 
-                     (bill.customer?.due_balance && bill.customer.due_balance > 0);
+      matchesFilter = !!(bill.due_amount && bill.due_amount > 0);
     } else if (filterType === 'advance') {
       matchesFilter = bill.bill_type === 'customer_advance' || 
                       bill.bill_number?.startsWith('CA') ||

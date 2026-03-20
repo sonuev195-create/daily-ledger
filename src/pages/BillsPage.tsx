@@ -56,7 +56,7 @@ export default function BillsPage() {
   const [bills, setBills] = useState<BillWithCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'sale' | 'purchase' | 'due' | 'advance'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'sale' | 'purchase' | 'sale_due' | 'purchase_due' | 'advance'>('all');
   const [expandedBill, setExpandedBill] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<BillWithCustomer | null>(null);
   const [billItems, setBillItems] = useState<BillItem[]>([]);

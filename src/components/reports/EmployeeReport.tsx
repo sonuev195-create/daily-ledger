@@ -214,7 +214,7 @@ export function EmployeeReport() {
     if (!selectedEmp) return;
     const header = ['Date', 'Wage Category', 'Sub Category', 'Amount', 'Payment', 'Balance'];
     const rows: string[][] = [header];
-    const categories: WageCategory[] = ['present', 'allowance', 'rate_work', 'payment'];
+    const categories: WageCategory[] = ['present', 'rate_work', 'payment'];
     categories.forEach(cat => {
       let runBal = 0;
       groupedByCategory[cat].forEach(t => {

@@ -360,6 +360,41 @@ export function EmployeeInlineEntry({
     }
   };
 
+  const saveAdvance = async () => {
+    if (!paymentEmployeeId) { toast.error('Select an employee'); return; }
+    const totalPayment = paymentPayments.reduce((s, p) => s + p.amount, 0);
+    if (totalPayment <= 0) { toast.error('Enter advance amount'); return; }
+
+    setSaving(true);
+    try {
+      const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+        date: selectedDate,
+        section: 'employee' as TransactionSection,
+        type: 'payment',
+        amount: 0,
+        payments: paymentPayments.filter(p => p.amount > 0),
+        employeeId: paymentEmployeeId,
+        billNumber: `EAD${Date.now().toString().slice(-6)}`,
+        reference: 'advance',
+      };
+      await onSave(txn);
+      // Update employee advance_balance
+      const emp = allEmployees.find(e => e.id === paymentEmployeeId);
+      if (emp) {
+        await supabase.from('employees').update({
+          advance_balance: emp.advance_balance + totalPayment,
+        }).eq('id', paymentEmployeeId);
+      }
+      setPaymentEmployeeId('');
+      setPaymentPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+      setShowAdvanceToggle(false);
+      toast.success('Advance recorded');
+    } catch (err) {
+      toast.error('Error saving advance');
+    } finally {
+      setSaving(false);
+    }
+
   const updatePayment = (i: number, field: 'mode' | 'amount', value: string) => {
     setPaymentPayments(prev => {
       const payments = [...prev];

@@ -214,7 +214,8 @@ export default function TodayPage() {
               <CategoryAccordion transactions={transactions} summary={summary} expandedCategory={expandedCategory}
                 onToggle={handleToggleCategory} renderContent={renderCategoryContent}
                 drawerCash={closing ? (closing.manualCoin + closing.manualCash) : currentCash}
-                drawerUpi={closing ? closing.systemUpi : currentUpi} />
+                drawerUpi={closing ? closing.systemUpi : currentUpi}
+                employeeDue={employeeTotalDue} />
             )}
           </>
         )}

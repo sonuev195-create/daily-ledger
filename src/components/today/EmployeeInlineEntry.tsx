@@ -394,6 +394,7 @@ export function EmployeeInlineEntry({
     } finally {
       setSaving(false);
     }
+  };
 
   const updatePayment = (i: number, field: 'mode' | 'amount', value: string) => {
     setPaymentPayments(prev => {

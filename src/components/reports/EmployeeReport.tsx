@@ -20,7 +20,7 @@ function downloadCSV(rows: string[][], filename: string) {
 
 const fmtINR = (n: number) => `Rs.${Math.abs(n).toLocaleString('en-IN')}`;
 
-type WageCategory = 'present' | 'allowance' | 'rate_work' | 'payment';
+type WageCategory = 'present' | 'rate_work' | 'payment';
 
 interface ReportRow {
   date: string;

@@ -177,22 +177,24 @@ export function EmployeeInlineEntry({
       // Current month: salary + allowance (exclude rate_work and payments)
       const currentSalaryAllowance = (currentMonthData || []).filter(t => t.type !== 'rate_work' && t.type !== 'payment');
       const currentMonthSalary = getTotalAmount(currentSalaryAllowance);
-      const currentMonthPaid = getTotalPaid(currentSalaryAllowance);
-      const paymentTxnsPaid = (currentMonthData || []).filter(t => t.type === 'payment').reduce((s, t) => {
+      const currentMonthInlinePaid = getTotalPaid(currentSalaryAllowance);
+      const currentPaymentTxns = (currentMonthData || []).filter(t => t.type === 'payment' && t.reference !== 'ratework');
+      const currentPaymentPaid = currentPaymentTxns.reduce((s, t) => {
         const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
         return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
       }, 0);
-      const currentMonthDue = Math.max(0, currentMonthSalary - currentMonthPaid - paymentTxnsPaid);
+      const currentMonthDue = Math.max(0, currentMonthSalary - currentMonthInlinePaid - currentPaymentPaid);
 
-      // Previous dues: all non-rate-work before this month
-      const prevNonRateWork = (prevData || []).filter(t => t.type !== 'rate_work');
-      const prevSalary = getTotalAmount(prevNonRateWork);
-      const prevPaid = getTotalPaid(prevNonRateWork);
-      const prevPaymentPaid = (prevData || []).filter(t => t.type === 'payment').reduce((s, t) => {
+      // Previous dues: salary + allowance before this month (exclude rate_work AND payment types)
+      const prevSalaryAllowance = (prevData || []).filter(t => t.type !== 'rate_work' && t.type !== 'payment');
+      const prevSalary = getTotalAmount(prevSalaryAllowance);
+      const prevInlinePaid = getTotalPaid(prevSalaryAllowance);
+      const prevPaymentTxns = (prevData || []).filter(t => t.type === 'payment' && t.reference !== 'ratework');
+      const prevPaymentPaid = prevPaymentTxns.reduce((s, t) => {
         const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
         return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
       }, 0);
-      const previousDues = Math.max(0, prevSalary - prevPaid - prevPaymentPaid);
+      const previousDues = Math.max(0, prevSalary - prevInlinePaid - prevPaymentPaid);
 
       // Rate work due: all rate_work across all time
       const allRateWork = [...(currentMonthData || []), ...(prevData || [])].filter(t => t.type === 'rate_work');

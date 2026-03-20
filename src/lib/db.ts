@@ -287,6 +287,8 @@ async function syncPartyBalancesFromTransactions(): Promise<void> {
         customerAdvance.set(customerId, (customerAdvance.get(customerId) || 0) + amount);
       } else if (tx.type === 'balance_paid') {
         customerDue.set(customerId, (customerDue.get(customerId) || 0) - amount);
+      } else if (tx.type === 'opening_due') {
+        customerDue.set(customerId, (customerDue.get(customerId) || 0) + amount);
       }
     }
 
@@ -296,6 +298,8 @@ async function syncPartyBalancesFromTransactions(): Promise<void> {
         supplierBalance.set(supplierId, (supplierBalance.get(supplierId) || 0) + amount);
       } else if (tx.type === 'purchase_return' || tx.type === 'purchase_payment') {
         supplierBalance.set(supplierId, (supplierBalance.get(supplierId) || 0) - amount);
+      } else if (tx.type === 'opening_due' || tx.type === 'purchase_opening_due') {
+        supplierBalance.set(supplierId, (supplierBalance.get(supplierId) || 0) + amount);
       }
     }
   });

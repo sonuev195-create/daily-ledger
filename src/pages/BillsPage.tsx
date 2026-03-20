@@ -348,24 +348,27 @@ export default function BillsPage() {
             />
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {(['all', 'sale', 'purchase', 'due', 'advance'] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={cn(
-                  "px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap",
-                  filterType === type
-                    ? type === 'due' 
-                      ? "bg-warning text-warning-foreground"
-                      : type === 'advance'
-                      ? "bg-accent text-accent-foreground"
-                      : "bg-primary text-primary-foreground"
-                    : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
-                )}
-              >
-                {type === 'due' ? 'Due Bills' : type === 'advance' ? 'Advance' : type.charAt(0).toUpperCase() + type.slice(1)}
-              </button>
-            ))}
+            {(['all', 'sale', 'purchase', 'sale_due', 'purchase_due', 'advance'] as const).map((type) => {
+              const labels: Record<string, string> = { all: 'All', sale: 'Sale', purchase: 'Purchase', sale_due: 'Sale Due', purchase_due: 'Purchase Due', advance: 'Advance' };
+              return (
+                <button
+                  key={type}
+                  onClick={() => setFilterType(type)}
+                  className={cn(
+                    "px-3 py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap",
+                    filterType === type
+                      ? (type === 'sale_due' || type === 'purchase_due')
+                        ? "bg-warning text-warning-foreground"
+                        : type === 'advance'
+                        ? "bg-accent text-accent-foreground"
+                        : "bg-primary text-primary-foreground"
+                      : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+                  )}
+                >
+                  {labels[type]}
+                </button>
+              );
+            })}
           </div>
         </div>
 

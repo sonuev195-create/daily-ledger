@@ -288,7 +288,7 @@ export function EmployeeReport() {
           ) : (
             <div className="space-y-3">
               {/* Each wage category section */}
-              {(['present', 'allowance', 'rate_work', 'payment'] as WageCategory[]).map(cat => {
+              {(['present', 'rate_work', 'payment'] as WageCategory[]).map(cat => {
                 const catTxns = groupedByCategory[cat];
                 if (catTxns.length === 0) return null;
 

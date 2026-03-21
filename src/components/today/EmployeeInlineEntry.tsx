@@ -121,6 +121,39 @@ export function EmployeeInlineEntry({
     });
   }, [transactions]);
 
+  useEffect(() => {
+    if (!editingTransaction) return;
+
+    if (editingTransaction.type === 'allowance') {
+      setActiveTab('allowance');
+      setAllowanceEmployeeId(editingTransaction.employeeId || '');
+      setAllowanceCategoryId(editingTransaction.allowanceCategoryId || editingTransaction.reference || '');
+      setAllowanceAmount(editingTransaction.amount ? String(editingTransaction.amount) : '');
+      return;
+    }
+
+    if (editingTransaction.type === 'rate_work') {
+      setActiveTab('ratework');
+      setRateWorkEmployeeId(editingTransaction.employeeId || '');
+      setRateWorkTypeId(editingTransaction.rateWorkTypeId || editingTransaction.reference || '');
+      setRateWorkAmount(editingTransaction.amount ? String(editingTransaction.amount) : '');
+      return;
+    }
+
+    if (editingTransaction.type === 'payment') {
+      setActiveTab('payment');
+      setPaymentEmployeeId(editingTransaction.employeeId || '');
+      setPaymentPayments(editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+      setShowAdvanceToggle(editingTransaction.reference === 'advance');
+      if (editingTransaction.reference === 'previous' || editingTransaction.reference === 'ratework' || editingTransaction.reference === 'present') {
+        setPaymentDueType(editingTransaction.reference);
+      }
+      return;
+    }
+
+    setActiveTab('attendance');
+  }, [editingTransaction]);
+
   // Build attendance rows - rate_work entries should NOT count as present
   useEffect(() => {
     if (allEmployees.length === 0) return;
@@ -200,8 +233,8 @@ export function EmployeeInlineEntry({
       // Rate work due: all rate_work across all time
       const allRateWork = [...(currentMonthData || []), ...(prevData || [])].filter(t => t.type === 'rate_work');
       const rateWorkByType: Record<string, number> = {};
-      allRateWork.forEach(t => {
-        const typeId = t.rate_work_type_id || 'other';
+        allRateWork.forEach(t => {
+        const typeId = t.rate_work_type_id || t.reference || 'other';
         rateWorkByType[typeId] = (rateWorkByType[typeId] || 0) + Number(t.amount);
         const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
         const paid = payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);

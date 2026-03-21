@@ -39,7 +39,13 @@ const reportTabs: { id: ReportTab; label: string; icon: any }[] = [
 ];
 
 export default function ReportsPage() {
+  const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<ReportTab>('daily');
+  const visibleTabs = isAdmin ? reportTabs : reportTabs.filter((tab) => tab.id !== 'profit');
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'profit') setActiveTab('daily');
+  }, [isAdmin, activeTab]);
 
   return (
     <AppLayout title="Reports">
@@ -50,7 +56,7 @@ export default function ReportsPage() {
         </div>
 
         <div className="flex gap-1 bg-secondary rounded-xl p-1 mb-6 overflow-x-auto">
-          {reportTabs.map(tab => {
+          {visibleTabs.map(tab => {
             const Icon = tab.icon;
             return (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -144,7 +150,14 @@ function DailyReport() {
       return sum + payments.filter((p: any) => p.mode === 'advance').reduce((s2: number, p: any) => s2 + Number(p.amount), 0);
     }, 0);
     const totalPaid = cashIn + upiIn + chequeIn + advanceUsed;
-    const totalDue = txns.reduce((sum, t) => sum + (Number(t.due) || 0), 0);
+    const totalDue = s === 'employee'
+      ? txns.reduce((sum, t) => {
+          if (t.type === 'payment') return sum;
+          const payments = Array.isArray(t.payments) ? t.payments : [];
+          const inlinePaid = payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
+          return sum + Math.max(0, Number(t.amount) - inlinePaid);
+        }, 0)
+      : txns.reduce((sum, t) => sum + (Number(t.due) || 0), 0);
     return { section: s, label: sectionLabels[s], count: txns.length, total, cashIn, upiIn, chequeIn, advanceUsed, totalPaid, totalDue };
   });
 
@@ -343,7 +356,10 @@ function MonthlyReport() {
 
   // Employee
   const empTxns = bySection('employee');
-  const totalSalaryPaid = sum(empTxns);
+  const totalSalaryPaid = empTxns.reduce((sum, txn) => {
+    const payments = Array.isArray(txn.payments) ? txn.payments : [];
+    return sum + payments.reduce((ps: number, payment: any) => ps + Number(payment.amount || 0), 0);
+  }, 0);
 
   // Expenses
   const expTxns = bySection('expenses');
@@ -457,8 +473,8 @@ function MonthlyReport() {
               <Row label="PURCHASE PAID" value={totalPurchasePayment} />
               <Row label="PURCHASE EXPENSE" value={totalPurchaseExpenses} />
 
-              <div className="font-semibold underline mt-2">EMPLOYEE</div>
-              <Row label="TOTAL SALARY PAID" value={totalSalaryPaid} />
+               <div className="font-semibold underline mt-2">EMPLOYEE</div>
+               <Row label="TOTAL EMPLOYEE PAID" value={totalSalaryPaid} />
 
               {isAdmin && (
                 <div className="border-t-2 border-border mt-3 pt-2 space-y-1">

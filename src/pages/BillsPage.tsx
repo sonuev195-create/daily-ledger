@@ -521,11 +521,14 @@ export default function BillsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        const billDate = new Date(selectedBill.created_at);
+                        const editDate = new Date(selectedBill.created_at).toISOString();
+                        const editTransactionId = selectedBill.transaction_id;
                         setSelectedBill(null);
-                        setTimeout(() => {
-                          navigate('/', { state: { date: billDate.toISOString(), editTransactionId: selectedBill.transaction_id } });
-                        }, 100);
+                        requestAnimationFrame(() => {
+                          if (editTransactionId) {
+                            navigate('/', { state: { date: editDate, editTransactionId } });
+                          }
+                        });
                       }}
                       className="gap-2"
                     >

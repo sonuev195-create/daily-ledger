@@ -118,6 +118,7 @@ export function SupplierReport() {
   const returnCTxns = txns.filter(t => t.type === 'purchase_return' && t.bill_type === 'ng_bill');
   const paymentTxns = txns.filter(t => t.type === 'purchase_payment');
   const expenseTxns = txns.filter(t => t.type === 'purchase_expenses');
+  const openingDueTxns = txns.filter(t => t.type === 'purchase_opening_due' || t.type === 'opening_due');
 
   const totalBillA = sum(billATxns);
   const totalBillB = sum(billBTxns);
@@ -127,7 +128,7 @@ export function SupplierReport() {
   const totalRetC = sum(returnCTxns);
   const totalPayments = sum(paymentTxns);
   const totalExpenses = sum(expenseTxns);
-  const totalBills = totalBillA + totalBillB + totalBillC;
+  const totalBills = totalBillA + totalBillB + totalBillC + sum(openingDueTxns);
   const totalReturns = totalRetA + totalRetB + totalRetC;
   const netBillA = totalBillA - totalRetA + totalBillC - totalRetC;
   const netBillB = totalBillB - totalRetB - totalBillC + totalRetC;
@@ -142,6 +143,7 @@ export function SupplierReport() {
 
     const runningBalance = txns.slice(0, i + 1).reduce((bal, x) => {
       if (x.type === 'purchase_bill' && (x.bill_type === 'g_bill' || x.bill_type === 'n_bill')) return bal + Number(x.amount);
+      if (x.type === 'purchase_opening_due' || x.type === 'opening_due') return bal + Number(x.amount);
       if (x.type === 'purchase_return') return bal - Number(x.amount);
       if (x.type === 'purchase_payment') return bal - Number(x.amount);
       return bal;
@@ -158,6 +160,7 @@ export function SupplierReport() {
       const bt = billTypeLabel(billType);
       return bt ? `Return ${bt}` : 'Return';
     }
+    if (type === 'purchase_opening_due' || type === 'opening_due') return 'Opening Due';
     const map: Record<string, string> = {
       purchase_payment: 'Payment', purchase_expenses: 'Expense', purchase_delivered: 'Delivered',
     };

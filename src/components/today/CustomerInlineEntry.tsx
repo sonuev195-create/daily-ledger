@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
-import { searchCustomers, getDueBillsForCustomer, getOrCreateCustomer, updateCustomerBalance, saveBillToSupabase, deductFromBatch, getBatchesForItem, getBillItemsForTransaction, restoreInventoryForBillItems } from '@/hooks/useSupabaseData';
+import { searchCustomers, getDueBillsForCustomer, getOrCreateCustomer, saveBillToSupabase, deductFromBatch, getBatchesForItem, getBillItemsForTransaction, restoreInventoryForBillItems } from '@/hooks/useSupabaseData';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -192,7 +192,9 @@ export function CustomerInlineEntry({
 
   const customerTransactions = transactions.filter(t => t.section === 'sale');
 
-  useEffect(() => { generateBillNumber(entry.type); }, [entry.type]);
+  useEffect(() => {
+    if (!editingTransaction) generateBillNumber(entry.type);
+  }, [entry.type, editingTransaction]);
   useEffect(() => {
     supabase.from('welders').select('id, name').order('name').then(({ data }) => setWelders(data || []));
   }, []);
@@ -458,7 +460,9 @@ export function CustomerInlineEntry({
       const amountNum = parseFloat(entry.amount) || 0;
       const advanceUsed = parseFloat(entry.useAdvance) || 0;
       const effectivePayment = totalPayments + advanceUsed;
-      const due = entry.type === 'sale' ? Math.max(0, amountNum - effectivePayment) : 0;
+      const rawBalance = entry.type === 'sale' ? amountNum - effectivePayment : 0;
+      const due = Math.max(0, rawBalance);
+      const overpayment = Math.max(0, -rawBalance);
 
       const advancePayments: PaymentEntry[] = advanceUsed > 0
         ? [{ id: uuidv4(), mode: 'advance' as PaymentMode, amount: advanceUsed }] : [];
@@ -476,7 +480,7 @@ export function CustomerInlineEntry({
         customerId: finalCustomerId,
         customerName: entry.customerQuery || undefined,
         due: due > 0 ? due : undefined,
-        overpayment: due < 0 ? Math.abs(due) : undefined,
+        overpayment: overpayment > 0 ? overpayment : undefined,
         welderId: entry.welderId || undefined,
       };
 
@@ -540,25 +544,19 @@ export function CustomerInlineEntry({
       }
 
       if (finalCustomerId) {
-        if (due > 0) await updateCustomerBalance(finalCustomerId, due, 0);
-        if (advanceUsed > 0) await updateCustomerBalance(finalCustomerId, 0, -advanceUsed);
-        if (entry.type === 'customer_advance') await updateCustomerBalance(finalCustomerId, 0, totalPayments);
         if (entry.type === 'balance_paid') {
           const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id) && b.id !== '__opening_due__');
-          const hasOpeningDue = entry.selectedBills.includes('__opening_due__');
           let remaining = totalPayments;
           for (const bill of selectedDueBills) {
             const payForBill = Math.min(remaining, bill.dueAmount);
             remaining -= payForBill;
             await supabase.from('transactions').update({ due: bill.dueAmount - payForBill }).eq('id', bill.id);
           }
-          // Opening due is handled via the customer balance update directly
-          await updateCustomerBalance(finalCustomerId, -totalPayments, 0);
         }
 
         // Auto-create Customer Advance transaction for overpayment saved as advance
-        if (entry.type === 'sale' && saveAsAdvance && due < 0) {
-          const overpaymentAmt = Math.abs(due);
+        if (entry.type === 'sale' && saveAsAdvance && overpayment > 0) {
+          const overpaymentAmt = overpayment;
           const totalGivenBack = giveBackPayments.reduce((s, g) => s + g.amount, 0);
           const advanceAmount = overpaymentAmt - totalGivenBack;
           if (advanceAmount > 0) {
@@ -584,7 +582,6 @@ export function CustomerInlineEntry({
               reference: `From sale overpayment ${entry.billNumber}`,
             };
             await onSave(advanceTxn);
-            await updateCustomerBalance(finalCustomerId, 0, advanceAmount);
             toast.success(`₹${advanceAmount.toLocaleString('en-IN')} saved as Customer Advance (${caBillNumber})`);
           }
         }

@@ -44,6 +44,7 @@ const COLUMN_FIELDS = [
 ];
 
 export default function SettingsPage() {
+  const { isAdmin } = useAuth();
   const { items: allItems } = useItems();
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedItems, setExtractedItems] = useState<ExtractedItem[]>([]);
@@ -66,6 +67,8 @@ export default function SettingsPage() {
   });
   const [savingConfig, setSavingConfig] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [editLockDays, setEditLockDays] = useState('7');
+  const [savingEditLock, setSavingEditLock] = useState(false);
 
   // Font size
   const [fontSize, setFontSize] = useState(() => localStorage.getItem('app-font-size') || 'medium');
@@ -79,6 +82,7 @@ export default function SettingsPage() {
   // Load existing config
   useEffect(() => {
     loadFormatConfig();
+    loadEditLockDays();
   }, []);
 
   const loadFormatConfig = async () => {
@@ -92,6 +96,41 @@ export default function SettingsPage() {
       setFormatConfig(data as BillFormatConfig);
     }
     setConfigLoaded(true);
+  };
+
+  const loadEditLockDays = async () => {
+    const { data } = await supabase
+      .from('bill_format_config')
+      .select('total_columns')
+      .eq('config_name', 'edit_lock_days')
+      .maybeSingle();
+
+    if (data?.total_columns) setEditLockDays(String(data.total_columns));
+  };
+
+  const saveEditLockDays = async () => {
+    setSavingEditLock(true);
+    try {
+      const days = Math.max(1, parseInt(editLockDays || '7', 10) || 7);
+      await supabase.from('bill_format_config').upsert({
+        config_name: 'edit_lock_days',
+        bill_type: 'both',
+        total_columns: days,
+        item_name_column: 1,
+        quantity_column: 2,
+        quantity_type: 'primary',
+        rate_column: null,
+        amount_column: 3,
+        has_rate: false,
+        has_amount: false,
+      }, { onConflict: 'config_name' });
+      setEditLockDays(String(days));
+      toast.success('Edit lock days saved');
+    } catch {
+      toast.error('Failed to save edit lock days');
+    } finally {
+      setSavingEditLock(false);
+    }
   };
 
   const saveFormatConfig = async () => {
@@ -268,6 +307,28 @@ export default function SettingsPage() {
           <h1 className="text-2xl font-bold text-foreground">Settings</h1>
           <p className="text-muted-foreground">Application settings and training</p>
         </div>
+
+        {isAdmin && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-secondary/30 rounded-2xl p-5 space-y-4"
+          >
+            <div>
+              <h2 className="font-semibold text-foreground">Employee edit lock</h2>
+              <p className="text-xs text-muted-foreground">Employees can edit only the last N days; admins are always allowed.</p>
+            </div>
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Editable days</label>
+                <Input type="number" min="1" value={editLockDays} onChange={(e) => setEditLockDays(e.target.value)} />
+              </div>
+              <Button onClick={saveEditLockDays} disabled={savingEditLock}>
+                {savingEditLock ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          </motion.div>
+        )}
 
         {/* ========== Bill Format Training Section ========== */}
         <motion.div

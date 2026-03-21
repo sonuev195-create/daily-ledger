@@ -123,6 +123,18 @@ export function EmployeeReport() {
     return payments.filter((p: any) => p.amount > 0).map((p: any) => `${p.mode}: ${formatINR(Number(p.amount))}`).join(', ');
   };
 
+  const getDisplayAmount = (t: any): number => {
+    if (t.type === 'payment') return getPaymentTotal(t);
+    return Number(t.amount);
+  };
+
+  const getBalanceDelta = (t: any): number => {
+    const amt = Number(t.amount);
+    const paid = getPaymentTotal(t);
+    if (t.type === 'payment') return -paid;
+    return amt - paid;
+  };
+
   const wageCategoryLabel: Record<WageCategory, string> = {
     present: 'Present & Allowance',
     rate_work: 'Rate Work',
@@ -150,7 +162,7 @@ export function EmployeeReport() {
   };
   (Object.keys(groupedByCategory) as WageCategory[]).forEach(cat => {
     groupedByCategory[cat].forEach(t => {
-      categoryTotals[cat].amount += Number(t.amount);
+      categoryTotals[cat].amount += getDisplayAmount(t);
       categoryTotals[cat].paid += getPaymentTotal(t);
     });
   });
@@ -183,9 +195,9 @@ export function EmployeeReport() {
 
       let runBal = 0;
       const body = catTxns.map(t => {
-        const amt = Number(t.amount);
+        const amt = getDisplayAmount(t);
         const paid = getPaymentTotal(t);
-        runBal += amt - paid;
+        runBal += getBalanceDelta(t);
         return [
           format(parseISO(t.date), 'dd MMM'),
           getSubCategory(t),
@@ -199,7 +211,7 @@ export function EmployeeReport() {
         startY: y,
         head: [['Date', 'Sub Category', 'Amount', 'Payment', 'Balance']],
         body,
-        foot: [['', 'Total', fmtINR(categoryTotals[cat].amount), fmtINR(categoryTotals[cat].paid), fmtINR(categoryTotals[cat].amount - categoryTotals[cat].paid)]],
+        foot: [['', 'Total', fmtINR(categoryTotals[cat].amount), fmtINR(categoryTotals[cat].paid), fmtINR(cat === 'payment' ? -categoryTotals[cat].paid : categoryTotals[cat].amount - categoryTotals[cat].paid)]],
         theme: 'striped',
         headStyles: { fillColor: [66, 66, 66] },
         styles: { fontSize: 8 },
@@ -218,9 +230,9 @@ export function EmployeeReport() {
     categories.forEach(cat => {
       let runBal = 0;
       groupedByCategory[cat].forEach(t => {
-        const amt = Number(t.amount);
+        const amt = getDisplayAmount(t);
         const paid = getPaymentTotal(t);
-        runBal += amt - paid;
+        runBal += getBalanceDelta(t);
         rows.push([
           format(parseISO(t.date), 'dd MMM yyyy'),
           wageCategoryLabel[cat],
@@ -320,9 +332,9 @@ export function EmployeeReport() {
 
                     {/* Rows */}
                     {catTxns.map(t => {
-                      const amt = Number(t.amount);
+                      const amt = getDisplayAmount(t);
                       const paid = getPaymentTotal(t);
-                      runBal += amt - paid;
+                      runBal += getBalanceDelta(t);
                       return (
                         <div key={t.id} className="grid grid-cols-[55px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 border-b border-border/50 last:border-0 text-[11px] items-start">
                           <span className="text-muted-foreground">{format(parseISO(t.date), 'dd MMM')}</span>

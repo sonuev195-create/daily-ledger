@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useItems, saveBillToSupabase, createBatchFromPurchase } from '@/hooks/useSupabaseData';
+import { useItems, saveBillToSupabase, createBatchFromPurchase, deductFromBatch, getBatchesForItem } from '@/hooks/useSupabaseData';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
 import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
 
@@ -180,10 +180,10 @@ export function PurchaseInlineEntry({
 
   // Generate bill number
   useEffect(() => {
-    if (['purchase_bill_a', 'purchase_bill_b', 'purchase_bill_c', 'purchase_return_a', 'purchase_return_b'].includes(entry.type)) {
+    if (!editingTransaction && ['purchase_bill_a', 'purchase_bill_b', 'purchase_bill_c', 'purchase_return_a', 'purchase_return_b'].includes(entry.type)) {
       generateBillNumber();
     }
-  }, [entry.type]);
+  }, [entry.type, editingTransaction]);
 
   const generateBillNumber = async () => {
     const prefix = 'PB';
@@ -315,7 +315,7 @@ export function PurchaseInlineEntry({
 
       await onSave(transaction);
 
-      // Save bill items and create batches for purchase bills with extracted items
+      // Save bill items and sync inventory
       if (isBillType && extractedBillItems.length > 0) {
         const { data: savedTxn } = await supabase.from('transactions')
           .select('id').eq('bill_number', entry.billNumber).order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -334,13 +334,29 @@ export function PurchaseInlineEntry({
             };
           });
 
-          // Create batches for each item
+          const isPurchaseInward = ['purchase_bill_a', 'purchase_bill_b', 'purchase_bill_c', 'purchase_delivered'].includes(entry.type);
+          const isPurchaseReturn = ['purchase_return_a', 'purchase_return_b'].includes(entry.type);
+
           for (const bi of billItemsData) {
-            if (bi.itemId) {
+            if (!bi.itemId) continue;
+
+            if (isPurchaseInward) {
               const batchId = await createBatchFromPurchase(
                 bi.itemId, bi.itemName, entry.billNumber, bi.rate, bi.primaryQty, bi.secondaryQty
               );
               if (batchId) bi.batchId = batchId;
+            }
+
+            if (isPurchaseReturn) {
+              const batches = await getBatchesForItem(bi.itemId);
+              const withStock = batches
+                .filter(b => b.primaryQuantity > 0 || b.secondaryQuantity > 0)
+                .sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
+
+              if (withStock.length > 0) {
+                bi.batchId = withStock[0].id;
+                await deductFromBatch(withStock[0].id, bi.primaryQty, bi.secondaryQty);
+              }
             }
           }
 
@@ -348,22 +364,7 @@ export function PurchaseInlineEntry({
         }
       }
 
-      // Update supplier balance for bill types and returns
-      if (entry.supplierId) {
-        const affectsDue = ['purchase_bill_a', 'purchase_bill_b', 'purchase_return_a', 'purchase_return_b'].includes(entry.type);
-        if (affectsDue) {
-          const isReturn = entry.type.includes('return');
-          const change = isReturn ? -amountNum : amountNum;
-          const { data: supplier } = await supabase.from('suppliers').select('balance').eq('id', entry.supplierId).single();
-          if (supplier) {
-            await supabase.from('suppliers').update({ balance: Number(supplier.balance) + change }).eq('id', entry.supplierId);
-          }
-        }
-        if (entry.type === 'purchase_payment') {
-          const { data: supplier } = await supabase.from('suppliers').select('balance').eq('id', entry.supplierId).single();
-          if (supplier) {
-            await supabase.from('suppliers').update({ balance: Number(supplier.balance) - totalPayments }).eq('id', entry.supplierId);
-          }
+      if (entry.supplierId && entry.type === 'purchase_payment') {
           let remaining = totalPayments;
           for (const billId of entry.selectedBills) {
             const bill = entry.dueBills.find(b => b.id === billId);
@@ -373,7 +374,6 @@ export function PurchaseInlineEntry({
               await supabase.from('transactions').update({ due: bill.due - pay }).eq('id', bill.id);
             }
           }
-        }
       }
 
       setEntry(createEmptyRow());

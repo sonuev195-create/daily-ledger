@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
-import { searchCustomers, getDueBillsForCustomer, getOrCreateCustomer, saveBillToSupabase, deductFromBatch, getBatchesForItem, getBillItemsForTransaction, restoreInventoryForBillItems } from '@/hooks/useSupabaseData';
+import { searchCustomers, getDueBillsForCustomer, getOrCreateCustomer, saveBillToSupabase, deductFromBatch, getBatchesForItem, getBillItemsForTransaction, restoreInventoryForBillItems, planBatchAllocations } from '@/hooks/useSupabaseData';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -76,6 +76,14 @@ const SUB_TYPES: { value: CustomerSubType; label: string }[] = [
   { value: 'customer_advance', label: 'Customer Advance' },
 ];
 
+const shortCustomerTypeLabel: Record<string, string> = {
+  sale: 'SALE',
+  sales_return: 'S-RTN',
+  balance_paid: 'BAL PAY',
+  customer_advance: 'ADV',
+  opening_due: 'OP DUE',
+};
+
 // Expandable transaction row showing bill items
 function SaleTransactionRow({ transaction: txn, onEdit, onDelete }: { transaction: Transaction; onEdit: (t: Transaction) => void; onDelete: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
@@ -101,7 +109,7 @@ function SaleTransactionRow({ transaction: txn, onEdit, onDelete }: { transactio
     <div className="hover:bg-secondary/20">
       <button onClick={handleToggle} className="w-full px-2 py-2 text-left space-y-0.5">
         <div className="flex items-center gap-1.5 text-xs">
-          <span className="text-[10px] font-medium text-muted-foreground capitalize w-14 shrink-0 truncate">{txn.type.replace(/_/g, ' ')}</span>
+          <span className="text-[10px] font-medium text-muted-foreground w-16 shrink-0 truncate">{shortCustomerTypeLabel[txn.type] || txn.type.replace(/_/g, ' ').toUpperCase()}</span>
           <span className="font-medium truncate flex-1">{txn.customerName || '-'}</span>
           {txn.billNumber && <span className="text-[10px] text-muted-foreground shrink-0">#{txn.billNumber}</span>}
           <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
@@ -436,6 +444,19 @@ export function CustomerInlineEntry({
   const handleSave = async () => {
     const totalPayments = entry.payments.reduce((s, p) => s + p.amount, 0);
 
+    if ((entry.type === 'sale' || entry.type === 'sales_return') && extractedBillItems.length > 0) {
+      for (const item of extractedBillItems) {
+        if (!item.selectedItemId || entry.type !== 'sale') continue;
+        const primaryQty = Number(item.quantity || item.primaryQty || 0);
+        const secondaryQty = Number(item.secondaryQty || 0);
+        const { remainingPrimary, remainingSecondary } = await planBatchAllocations(item.selectedItemId, primaryQty, secondaryQty);
+        if (remainingPrimary > 0 || remainingSecondary > 0) {
+          toast.error(`Insufficient stock for ${item.matchedName || item.extractedName || 'selected item'}`);
+          return;
+        }
+      }
+    }
+
     if (entry.type === 'customer_advance') {
       if (totalPayments <= 0) { toast.error('Payment required'); return; }
       if (!entry.customerQuery) { toast.error('Customer required'); return; }
@@ -513,30 +534,39 @@ export function CustomerInlineEntry({
             };
           });
 
+          const expandedBillItemsData: typeof billItemsData = [];
+
           // Auto-select batches and deduct for sales, restore for returns
           for (const bi of billItemsData) {
             if (bi.itemId) {
-              const batches = await getBatchesForItem(bi.itemId);
               if (entry.type === 'sale') {
-                const withStock = batches.filter(b => b.primaryQuantity > 0)
-                  .sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
-                if (withStock.length > 0) {
-                  bi.batchId = withStock[0].id;
-                  await deductFromBatch(withStock[0].id, bi.primaryQty, bi.secondaryQty);
+                const { allocations } = await planBatchAllocations(bi.itemId, bi.primaryQty, bi.secondaryQty);
+                for (const allocation of allocations) {
+                  await deductFromBatch(allocation.batchId, allocation.primaryQty, allocation.secondaryQty);
+                  expandedBillItemsData.push({
+                    ...bi,
+                    batchId: allocation.batchId,
+                    primaryQty: allocation.primaryQty,
+                    secondaryQty: allocation.secondaryQty,
+                    total: bi.primaryQty > 0 ? Number(((bi.total * allocation.primaryQty) / bi.primaryQty).toFixed(2)) : bi.total,
+                  });
                 }
               } else if (entry.type === 'sales_return') {
-                // For returns, restore inventory - add back to earliest batch
+                const batches = await getBatchesForItem(bi.itemId);
                 const sorted = batches.sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
                 if (sorted.length > 0) {
-                  bi.batchId = sorted[0].id;
-                  // Restore: add qty back (negative deduction)
                   await deductFromBatch(sorted[0].id, -bi.primaryQty, -bi.secondaryQty);
+                  expandedBillItemsData.push({ ...bi, batchId: sorted[0].id });
                 }
+              } else {
+                expandedBillItemsData.push(bi);
               }
+            } else {
+              expandedBillItemsData.push(bi);
             }
           }
 
-          await saveBillToSupabase(targetTxnId, entry.billNumber, entry.type, amountNum, entry.customerQuery, undefined, billItemsData);
+          await saveBillToSupabase(targetTxnId, entry.billNumber, entry.type, amountNum, entry.customerQuery, undefined, expandedBillItemsData);
         }
       } else if (editingTransaction && (entry.type === 'sale' || entry.type === 'sales_return') && extractedBillItems.length === 0) {
         // Editing but items cleared - restore inventory and remove bill
@@ -552,6 +582,9 @@ export function CustomerInlineEntry({
             remaining -= payForBill;
             await supabase.from('transactions').update({ due: bill.dueAmount - payForBill }).eq('id', bill.id);
           }
+            if (entry.selectedBills.includes('__opening_due__') && remaining > 0) {
+              remaining = 0;
+            }
         }
 
         // Auto-create Customer Advance transaction for overpayment saved as advance
@@ -632,7 +665,7 @@ export function CustomerInlineEntry({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Customer Transactions</span>
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Business Transactions</span>
         <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => navigate('/customers')}>
           <Plus className="w-3 h-3" /> Add Customer
         </Button>
@@ -894,7 +927,7 @@ export function CustomerInlineEntry({
                             className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
                           />
                           <ItemSearchSelect
-                            items={allItems.map(i => ({ id: i.id, name: i.name, paperBillName: i.paperBillName }))}
+                            items={allItems.map(i => ({ id: i.id, name: i.name, paperBillName: i.paperBillName, sellingPrice: i.sellingPrice, primaryStock: i.primaryQuantity, secondaryStock: i.secondaryQuantity, secondaryUnit: i.secondaryUnit }))}
                             value={item.selectedItemId}
                             onChange={(id) => updateExtractedItemMatch(idx, id || '')}
                             className="flex-1"

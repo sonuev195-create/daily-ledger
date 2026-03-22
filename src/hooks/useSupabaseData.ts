@@ -71,8 +71,30 @@ export function useItems() {
   const [loading, setLoading] = useState(true);
 
   const fetchItems = useCallback(async () => {
-    const { data, error } = await supabase.from('items').select('*').order('sort_order', { ascending: true });
+    const [{ data, error }, { data: batchData }] = await Promise.all([
+      supabase.from('items').select('*').order('sort_order', { ascending: true }),
+      supabase.from('batches').select('item_id, primary_quantity, secondary_quantity, purchase_rate'),
+    ]);
+
     if (!error && data) {
+      const batchMap: Record<string, { totalPrimary: number; totalSecondary: number; totalValue: number; avgRate: number }> = {};
+      (batchData || []).forEach((batch) => {
+        const itemId = batch.item_id;
+        if (!batchMap[itemId]) {
+          batchMap[itemId] = { totalPrimary: 0, totalSecondary: 0, totalValue: 0, avgRate: 0 };
+        }
+        const primaryQty = Number(batch.primary_quantity || 0);
+        const secondaryQty = Number(batch.secondary_quantity || 0);
+        const purchaseRate = Number(batch.purchase_rate || 0);
+        batchMap[itemId].totalPrimary += primaryQty;
+        batchMap[itemId].totalSecondary += secondaryQty;
+        batchMap[itemId].totalValue += primaryQty * purchaseRate;
+      });
+
+      Object.values(batchMap).forEach((entry) => {
+        entry.avgRate = entry.totalPrimary > 0 ? entry.totalValue / entry.totalPrimary : 0;
+      });
+
       setItems(data.map(i => ({
         id: i.id,
         name: i.name,
@@ -83,6 +105,10 @@ export function useItems() {
         secondaryUnit: i.secondary_unit || undefined,
         conversionRate: i.conversion_rate ? Number(i.conversion_rate) : undefined,
         conversionType: i.conversion_type as 'permanent' | 'batch_wise' | undefined,
+        primaryQuantity: batchMap[i.id]?.totalPrimary || 0,
+        secondaryQuantity: batchMap[i.id]?.totalSecondary || 0,
+        purchaseRate: batchMap[i.id]?.avgRate || 0,
+        inventoryValue: batchMap[i.id]?.totalValue || 0,
         sortOrder: (i as any).sort_order ?? 0,
         createdAt: new Date(i.created_at),
         updatedAt: new Date(i.updated_at),
@@ -321,6 +347,71 @@ export async function deductFromBatch(
     .eq('id', batchId);
   
   return !error;
+}
+
+export interface BatchAllocation {
+  batchId: string;
+  primaryQty: number;
+  secondaryQty: number;
+  purchaseRate: number;
+}
+
+export async function planBatchAllocations(
+  itemId: string,
+  primaryQty: number,
+  secondaryQty: number
+): Promise<{ allocations: BatchAllocation[]; remainingPrimary: number; remainingSecondary: number }> {
+  const [{ data: itemData }, batches] = await Promise.all([
+    supabase.from('items').select('batch_preference').eq('id', itemId).maybeSingle(),
+    getBatchesForItem(itemId),
+  ]);
+
+  const preference = itemData?.batch_preference === 'oldest' ? 'oldest' : 'latest';
+  const sortedBatches = [...batches]
+    .filter((batch) => Number(batch.primaryQuantity) > 0 || Number(batch.secondaryQuantity) > 0)
+    .sort((a, b) => {
+      const diff = new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime();
+      return preference === 'oldest' ? diff : -diff;
+    });
+
+  let remainingPrimary = Number(primaryQty || 0);
+  let remainingSecondary = Number(secondaryQty || 0);
+  const requestedPrimary = Number(primaryQty || 0);
+  const allocations: BatchAllocation[] = [];
+
+  for (const batch of sortedBatches) {
+    if (remainingPrimary <= 0 && remainingSecondary <= 0) break;
+
+    const availablePrimary = Number(batch.primaryQuantity || 0);
+    const availableSecondary = Number(batch.secondaryQuantity || 0);
+
+    const primaryTaken = Math.min(availablePrimary, remainingPrimary);
+    let secondaryTaken = 0;
+
+    if (remainingSecondary > 0) {
+      if (requestedPrimary > 0 && remainingPrimary > primaryTaken) {
+        secondaryTaken = Math.min(
+          availableSecondary,
+          Number(((secondaryQty * primaryTaken) / requestedPrimary).toFixed(4))
+        );
+      } else {
+        secondaryTaken = Math.min(availableSecondary, remainingSecondary);
+      }
+    }
+
+    if (primaryTaken > 0 || secondaryTaken > 0) {
+      allocations.push({
+        batchId: batch.id,
+        primaryQty: primaryTaken,
+        secondaryQty: secondaryTaken,
+        purchaseRate: Number(batch.purchaseRate || 0),
+      });
+      remainingPrimary = Math.max(0, remainingPrimary - primaryTaken);
+      remainingSecondary = Math.max(0, Number((remainingSecondary - secondaryTaken).toFixed(4)));
+    }
+  }
+
+  return { allocations, remainingPrimary, remainingSecondary };
 }
 
 // Update batch in Supabase

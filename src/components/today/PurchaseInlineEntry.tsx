@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useItems, saveBillToSupabase, createBatchFromPurchase, deductFromBatch, getBatchesForItem } from '@/hooks/useSupabaseData';
+import { useItems, saveBillToSupabase, createBatchFromPurchase, deductFromBatch, getBatchesForItem, planBatchAllocations } from '@/hooks/useSupabaseData';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
 import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
 
@@ -67,6 +67,14 @@ const SUB_TYPES: { value: PurchaseSubType; label: string }[] = [
   { value: 'purchase_return_b', label: 'Return B' },
   { value: 'purchase_expenses', label: 'Expenses' },
 ];
+
+const shortPurchaseTypeLabel: Record<string, string> = {
+  purchase_bill: 'PUR',
+  purchase_payment: 'PAY',
+  purchase_return: 'RET',
+  purchase_delivered: 'DLV',
+  purchase_expenses: 'EXP',
+};
 
 interface PurchaseInlineEntryProps {
   transactions: Transaction[];
@@ -163,7 +171,17 @@ export function PurchaseInlineEntry({
   const updateExtractedItemMatch = (index: number, itemId: string) => {
     const updated = [...extractedBillItems];
     const masterItem = allItems.find(i => i.id === itemId);
-    updated[index] = { ...updated[index], selectedItemId: itemId || null, matchedName: masterItem?.name || null, confirmed: !!itemId };
+    const primaryQty = Number(updated[index].primaryQty || updated[index].quantity || 0);
+    const secondaryQty = masterItem?.conversionType === 'permanent' && masterItem.conversionRate
+      ? Number((primaryQty * masterItem.conversionRate).toFixed(4))
+      : Number(updated[index].secondaryQty || 0);
+    updated[index] = {
+      ...updated[index],
+      selectedItemId: itemId || null,
+      matchedName: masterItem?.name || null,
+      confirmed: !!itemId,
+      secondaryQty,
+    };
     setExtractedBillItems(updated);
   };
 
@@ -278,6 +296,19 @@ export function PurchaseInlineEntry({
     const amountNum = parseFloat(entry.amount) || 0;
     const totalPayments = entry.payments.reduce((s, p) => s + p.amount, 0);
 
+    if (['purchase_return_a', 'purchase_return_b'].includes(entry.type) && extractedBillItems.length > 0) {
+      for (const item of extractedBillItems) {
+        if (!item.selectedItemId) continue;
+        const primaryQty = Number(item.primaryQty || item.quantity || 0);
+        const secondaryQty = Number(item.secondaryQty || 0);
+        const { remainingPrimary, remainingSecondary } = await planBatchAllocations(item.selectedItemId, primaryQty, secondaryQty);
+        if (remainingPrimary > 0 || remainingSecondary > 0) {
+          toast.error(`Insufficient stock for ${item.matchedName || item.extractedName || 'selected item'}`);
+          return;
+        }
+      }
+    }
+
     if (entry.type === 'purchase_expenses') {
       if (amountNum <= 0) { toast.error('Amount required'); return; }
     } else if (entry.type === 'purchase_payment') {
@@ -334,6 +365,8 @@ export function PurchaseInlineEntry({
             };
           });
 
+          const expandedBillItemsData: typeof billItemsData = [];
+
           const isPurchaseInward = ['purchase_bill_a', 'purchase_bill_b', 'purchase_bill_c', 'purchase_delivered'].includes(entry.type);
           const isPurchaseReturn = ['purchase_return_a', 'purchase_return_b'].includes(entry.type);
 
@@ -344,23 +377,29 @@ export function PurchaseInlineEntry({
               const batchId = await createBatchFromPurchase(
                 bi.itemId, bi.itemName, entry.billNumber, bi.rate, bi.primaryQty, bi.secondaryQty
               );
-              if (batchId) bi.batchId = batchId;
+              if (batchId) expandedBillItemsData.push({ ...bi, batchId });
             }
 
             if (isPurchaseReturn) {
-              const batches = await getBatchesForItem(bi.itemId);
-              const withStock = batches
-                .filter(b => b.primaryQuantity > 0 || b.secondaryQuantity > 0)
-                .sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
-
-              if (withStock.length > 0) {
-                bi.batchId = withStock[0].id;
-                await deductFromBatch(withStock[0].id, bi.primaryQty, bi.secondaryQty);
+              const { allocations } = await planBatchAllocations(bi.itemId, bi.primaryQty, bi.secondaryQty);
+              for (const allocation of allocations) {
+                await deductFromBatch(allocation.batchId, allocation.primaryQty, allocation.secondaryQty);
+                expandedBillItemsData.push({
+                  ...bi,
+                  batchId: allocation.batchId,
+                  primaryQty: allocation.primaryQty,
+                  secondaryQty: allocation.secondaryQty,
+                  total: bi.primaryQty > 0 ? Number(((bi.total * allocation.primaryQty) / bi.primaryQty).toFixed(2)) : bi.total,
+                });
               }
+            }
+
+            if (!isPurchaseInward && !isPurchaseReturn) {
+              expandedBillItemsData.push(bi);
             }
           }
 
-          await saveBillToSupabase(savedTxn.id, entry.billNumber, dbType, amountNum, undefined, entry.supplierQuery, billItemsData);
+          await saveBillToSupabase(savedTxn.id, entry.billNumber, dbType, amountNum, undefined, entry.supplierQuery, expandedBillItemsData);
         }
       }
 
@@ -409,7 +448,7 @@ export function PurchaseInlineEntry({
             {purchaseTransactions.map((txn) => (
               <div key={txn.id} className="px-2 py-2 hover:bg-secondary/20 space-y-0.5">
                 <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-[10px] font-medium text-muted-foreground capitalize w-16 shrink-0 truncate">{txn.type.replace(/_/g, ' ')}</span>
+                  <span className="text-[10px] font-medium text-muted-foreground w-16 shrink-0 truncate">{shortPurchaseTypeLabel[txn.type] || txn.type.replace(/_/g, ' ').toUpperCase()}</span>
                   <span className="font-medium truncate flex-1">{txn.supplierName || '-'}</span>
                   {txn.billNumber && <span className="text-[10px] text-muted-foreground">#{txn.billNumber}</span>}
                   <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
@@ -633,7 +672,7 @@ export function PurchaseInlineEntry({
                             className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate"
                           />
                           <ItemSearchSelect
-                            items={allItems.map(i => ({ id: i.id, name: i.name, paperBillName: i.paperBillName }))}
+                            items={allItems.map(i => ({ id: i.id, name: i.name, paperBillName: i.paperBillName, sellingPrice: i.sellingPrice, primaryStock: i.primaryQuantity, secondaryStock: i.secondaryQuantity, secondaryUnit: i.secondaryUnit }))}
                             value={item.selectedItemId}
                             onChange={(id) => updateExtractedItemMatch(idx, id || '')}
                             className="flex-1"
@@ -643,7 +682,15 @@ export function PurchaseInlineEntry({
                           <input type="number" value={item.primaryQty || item.quantity || ''} onChange={(e) => {
                             const updated = [...extractedBillItems];
                             const qty = parseFloat(e.target.value) || 0;
-                            updated[idx] = { ...updated[idx], primaryQty: qty, quantity: qty };
+                            const masterItem = allItems.find(i => i.id === updated[idx].selectedItemId);
+                            updated[idx] = {
+                              ...updated[idx],
+                              primaryQty: qty,
+                              quantity: qty,
+                              secondaryQty: masterItem?.conversionType === 'permanent' && masterItem.conversionRate
+                                ? Number((qty * masterItem.conversionRate).toFixed(4))
+                                : updated[idx].secondaryQty,
+                            };
                             if (updated[idx].rate && qty > 0) {
                               updated[idx].amount = qty * updated[idx].rate;
                             }
@@ -652,7 +699,15 @@ export function PurchaseInlineEntry({
                           {secUnit && (
                             <input type="number" value={item.secondaryQty || ''} onChange={(e) => {
                               const updated = [...extractedBillItems];
-                              updated[idx] = { ...updated[idx], secondaryQty: parseFloat(e.target.value) || 0 };
+                              const secondaryValue = parseFloat(e.target.value) || 0;
+                              const masterItem = allItems.find(i => i.id === updated[idx].selectedItemId);
+                              updated[idx] = {
+                                ...updated[idx],
+                                secondaryQty: secondaryValue,
+                                primaryQty: masterItem?.conversionType === 'permanent' && masterItem.conversionRate
+                                  ? Number((secondaryValue / masterItem.conversionRate).toFixed(4))
+                                  : updated[idx].primaryQty,
+                              };
                               setExtractedBillItems(updated);
                             }} placeholder={secUnit} className="w-16 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
                           )}

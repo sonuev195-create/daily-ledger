@@ -36,6 +36,7 @@ export function CustomerReport() {
   const [dateMode, setDateMode] = useState<DateMode>('month');
   const [fromDate, setFromDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [toDate, setToDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [openingBalance, setOpeningBalance] = useState(0);
 
   useEffect(() => {
     supabase.from('customers').select('*').order('name').then(({ data }) => {
@@ -61,9 +62,25 @@ export function CustomerReport() {
   const fetchData = async () => {
     setLoading(true);
     const { start, end } = getDateRange();
-    const { data } = await supabase
-      .from('transactions').select('*').eq('customer_id', selectedCustId)
-      .gte('date', start).lte('date', end).order('date');
+    const [{ data }, { data: previousData }] = await Promise.all([
+      supabase
+        .from('transactions').select('*').eq('customer_id', selectedCustId)
+        .gte('date', start).lte('date', end).order('date'),
+      supabase
+        .from('transactions').select('*').eq('customer_id', selectedCustId)
+        .lt('date', start).order('date'),
+    ]);
+
+    const previousBalance = (previousData || []).reduce((bal, x: any) => {
+      if (x.type === 'sale') return bal + (Number(x.due) || 0);
+      if (x.type === 'opening_due') return bal + Number(x.amount || 0);
+      if (x.type === 'sales_return') return bal - Number(x.amount || 0);
+      if (x.type === 'balance_paid') return bal - Number(x.amount || 0);
+      if (x.type === 'customer_advance') return bal - Number(x.amount || 0);
+      return bal;
+    }, 0);
+
+    setOpeningBalance(previousBalance);
     setTxns(data || []);
     setLoading(false);
   };
@@ -90,6 +107,7 @@ export function CustomerReport() {
     const map: Record<string, string> = {
       sale: 'Sale', sales_return: 'Return', balance_paid: 'Bal Paid',
       customer_advance: 'Advance',
+      opening_due: 'Opening Due',
     };
     return map[type] || type.replace(/_/g, ' ');
   };
@@ -103,11 +121,12 @@ export function CustomerReport() {
   const ledgerTxns = txns.map((t, i) => {
     const runningBalance = txns.slice(0, i + 1).reduce((bal, x) => {
       if (x.type === 'sale') return bal + (Number(x.due) || 0);
+      if (x.type === 'opening_due') return bal + Number(x.amount || 0);
       if (x.type === 'sales_return') return bal - Number(x.amount);
       if (x.type === 'balance_paid') return bal - Number(x.amount);
       if (x.type === 'customer_advance') return bal - Number(x.amount);
       return bal;
-    }, 0);
+    }, openingBalance);
     const direction = t.type === 'sale' ? 'debit' : 'credit';
     return { ...t, runningBalance, direction };
   });

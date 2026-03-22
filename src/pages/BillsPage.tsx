@@ -62,6 +62,17 @@ export default function BillsPage() {
   const [billItems, setBillItems] = useState<BillItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
 
+  const startEditFromBill = (bill: BillWithCustomer) => {
+    const editDate = new Date(bill.created_at).toISOString();
+    const editTransactionId = bill.transaction_id;
+    setSelectedBill(null);
+    window.setTimeout(() => {
+      if (editTransactionId) {
+        navigate('/', { state: { date: editDate, editTransactionId } });
+      }
+    }, 220);
+  };
+
   useEffect(() => {
     fetchBills();
   }, []);
@@ -520,16 +531,7 @@ export default function BillsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        const editDate = new Date(selectedBill.created_at).toISOString();
-                        const editTransactionId = selectedBill.transaction_id;
-                        setSelectedBill(null);
-                        requestAnimationFrame(() => {
-                          if (editTransactionId) {
-                            navigate('/', { state: { date: editDate, editTransactionId } });
-                          }
-                        });
-                      }}
+                      onClick={() => startEditFromBill(selectedBill)}
                       className="gap-2"
                     >
                       <Edit2 className="w-4 h-4" />

@@ -31,6 +31,8 @@ export default function TodayPage() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [viewingBill, setViewingBill] = useState<Bill | null>(null);
   const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null);
+  const [businessDue, setBusinessDue] = useState(0);
+  const [purchaseDue, setPurchaseDue] = useState(0);
 
   const { transactions, loading, add, update, remove, getSummary } = useTransactions(selectedDate);
   const { opening, closing, previousClosing, updateOpening, updateClosing } = useDrawer(selectedDate);
@@ -77,6 +79,39 @@ export default function TodayPage() {
       setEmployeeTotalDue(totalDue);
     })();
   }, [transactions]);
+
+  useEffect(() => {
+    (async () => {
+      const selectedDateKey = format(selectedDate, 'yyyy-MM-dd');
+      const { data: allTxns } = await supabase
+        .from('transactions')
+        .select('section, type, amount, due, bill_type')
+        .lte('date', selectedDateKey);
+
+      let nextBusinessDue = 0;
+      let nextPurchaseDue = 0;
+
+      (allTxns || []).forEach((txn) => {
+        const amount = Number(txn.amount || 0);
+        const due = Number(txn.due || 0);
+
+        if (txn.section === 'sale') {
+          if (txn.type === 'sale') nextBusinessDue += due;
+          if (txn.type === 'opening_due') nextBusinessDue += amount;
+          if (txn.type === 'balance_paid') nextBusinessDue -= amount;
+        }
+
+        if (txn.section === 'purchase') {
+          if (txn.type === 'purchase_bill' && txn.bill_type !== 'ng_bill') nextPurchaseDue += amount;
+          if (txn.type === 'purchase_return' || txn.type === 'purchase_payment') nextPurchaseDue -= amount;
+          if (txn.type === 'opening_due' || txn.type === 'purchase_opening_due') nextPurchaseDue += amount;
+        }
+      });
+
+      setBusinessDue(Math.max(0, nextBusinessDue));
+      setPurchaseDue(Math.max(0, nextPurchaseDue));
+    })();
+  }, [selectedDate, transactions]);
 
   useEffect(() => {
     if (location.state?.date) setSelectedDate(new Date(location.state.date));
@@ -215,7 +250,10 @@ export default function TodayPage() {
                 onToggle={handleToggleCategory} renderContent={renderCategoryContent}
                 drawerCash={closing ? (closing.manualCoin + closing.manualCash) : currentCash}
                 drawerUpi={closing ? closing.systemUpi : currentUpi}
-                employeeDue={employeeTotalDue} />
+                employeeDue={employeeTotalDue}
+                businessDue={businessDue}
+                purchaseDue={purchaseDue}
+                drawerError={closing?.difference || 0} />
             )}
           </>
         )}

@@ -19,7 +19,7 @@ interface CategoryConfig {
 
 export const CATEGORIES: CategoryConfig[] = [
   { id: 'drawer', label: 'Drawer', icon: Wallet, colorClass: 'text-accent', bgClass: 'bg-accent/10' },
-  { id: 'customer', label: 'Customer', icon: CreditCard, colorClass: 'text-success', bgClass: 'bg-success/10' },
+  { id: 'customer', label: 'Business', icon: CreditCard, colorClass: 'text-success', bgClass: 'bg-success/10' },
   { id: 'purchase', label: 'Purchase', icon: ShoppingCart, colorClass: 'text-warning', bgClass: 'bg-warning/10' },
   { id: 'employee', label: 'Salary', icon: Users, colorClass: 'text-info', bgClass: 'bg-info/10' },
   { id: 'expense', label: 'Expense', icon: Banknote, colorClass: 'text-destructive', bgClass: 'bg-destructive/10' },
@@ -130,10 +130,13 @@ interface CategoryAccordionProps {
   drawerCash?: number;
   drawerUpi?: number;
   employeeDue?: number;
+  businessDue?: number;
+  purchaseDue?: number;
+  drawerError?: number;
 }
 
 export function CategoryAccordion({ 
-  transactions, summary, expandedCategory, onToggle, renderContent, drawerCash = 0, drawerUpi = 0, employeeDue = 0,
+  transactions, summary, expandedCategory, onToggle, renderContent, drawerCash = 0, drawerUpi = 0, employeeDue = 0, businessDue = 0, purchaseDue = 0, drawerError = 0,
 }: CategoryAccordionProps) {
   return (
     <div className="space-y-2">
@@ -173,6 +176,17 @@ export function CategoryAccordion({
                   <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
                     <span className="text-success font-medium">💵 {formatINR(drawerCash)}</span>
                     <span className="text-info font-medium">📱 {formatINR(drawerUpi)}</span>
+                    {drawerError !== 0 && <span className="text-warning font-medium">⚠️ Err: {formatINR(Math.abs(drawerError))}</span>}
+                  </div>
+                )}
+                {cat.id === 'customer' && businessDue > 0 && (
+                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
+                    <span className="text-warning font-medium">⚠️ Due: {formatINR(businessDue)}</span>
+                  </div>
+                )}
+                {cat.id === 'purchase' && purchaseDue > 0 && (
+                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
+                    <span className="text-warning font-medium">⚠️ Due: {formatINR(purchaseDue)}</span>
                   </div>
                 )}
                 {cat.id === 'employee' && employeeDue > 0 && (

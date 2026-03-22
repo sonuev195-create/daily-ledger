@@ -8,6 +8,10 @@ interface ItemOption {
   id: string;
   name: string;
   paperBillName?: string | null;
+  sellingPrice?: number;
+  primaryStock?: number;
+  secondaryStock?: number;
+  secondaryUnit?: string | null;
 }
 
 interface ItemSearchSelectProps {
@@ -109,6 +113,19 @@ export function ItemSearchSelect({ items, value, onChange, placeholder = 'Search
                       {item.paperBillName && item.paperBillName !== item.name && (
                         <span className="text-muted-foreground ml-2 text-xs">({item.paperBillName})</span>
                       )}
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                        {typeof item.sellingPrice === 'number' && (
+                          <span>Sell ₹{item.sellingPrice.toFixed(2)}</span>
+                        )}
+                        {typeof item.primaryStock === 'number' && (
+                          <span>
+                            Stock {item.primaryStock}
+                            {typeof item.secondaryStock === 'number' && item.secondaryStock > 0
+                              ? ` / ${item.secondaryStock}${item.secondaryUnit ? ` ${item.secondaryUnit}` : ''}`
+                              : ''}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {item.id === value && <Check className="w-4 h-4 text-accent shrink-0" />}
                   </button>

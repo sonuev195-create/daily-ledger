@@ -1235,7 +1235,7 @@ export function FullDayBillContent({ transactions, selectedDate, onSave, onDelet
                               onChange={e => updateBillItem(idx, 'extractedName', e.target.value)}
                               placeholder="Name" className="w-20 h-7 px-1 text-[11px] bg-background/50 border border-border rounded truncate" />
                             <ItemSearchSelect
-                              items={allItems.map(i => ({ id: i.id, name: i.name, paperBillName: i.paperBillName }))}
+                              items={allItems.map(i => ({ id: i.id, name: i.name, paperBillName: i.paperBillName, sellingPrice: i.sellingPrice, primaryStock: i.primaryQuantity, secondaryStock: i.secondaryQuantity, secondaryUnit: i.secondaryUnit }))}
                               value={item.selectedItemId}
                               onChange={(id) => updateBillItem(idx, 'selectedItemId', id)}
                               className="flex-1"

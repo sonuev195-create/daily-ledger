@@ -173,10 +173,10 @@ export function CategoryAccordion({
                   </div>
                 )}
                 {cat.id === 'drawer' && (
-                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
-                    <span className="text-success font-medium">💵 {formatINR(drawerCash)}</span>
-                    <span className="text-info font-medium">📱 {formatINR(drawerUpi)}</span>
-                    {drawerError !== 0 && <span className="text-warning font-medium">⚠️ Err: {formatINR(Math.abs(drawerError))}</span>}
+                  <div className="flex gap-3 mt-1 text-xs lg:text-sm">
+                    <span className="text-success font-semibold">💵 {formatINR(drawerCash)}</span>
+                    <span className="text-info font-semibold">📱 {formatINR(drawerUpi)}</span>
+                    {drawerError !== 0 && <span className="text-warning font-semibold">⚠️ Err: {formatINR(Math.abs(drawerError))}</span>}
                   </div>
                 )}
                 {cat.id === 'customer' && businessDue > 0 && (

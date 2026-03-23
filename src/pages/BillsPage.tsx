@@ -7,7 +7,6 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 interface BillItem {

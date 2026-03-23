@@ -190,8 +190,8 @@ export function CategoryAccordion({
                   </div>
                 )}
                 {cat.id === 'employee' && employeeDue > 0 && (
-                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
-                    <span className="text-warning font-medium">⚠️ Due: {formatINR(employeeDue)}</span>
+                  <div className="flex gap-3 mt-1 text-xs lg:text-sm">
+                    <span className="text-warning font-semibold">⚠️ Due: {formatINR(employeeDue)}</span>
                   </div>
                 )}
               </div>

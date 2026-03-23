@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen, Tag } from 'lucide-react';
+import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen, Tag, Table2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Item, Category } from '@/types';
 import { useItems, useCategories } from '@/hooks/useSupabaseData';
@@ -12,6 +12,7 @@ import { Fab } from '@/components/ui/fab';
 import { toast } from 'sonner';
 import { CategorySheet } from '@/components/items/CategorySheet';
 import { BatchList } from '@/components/items/BatchList';
+import { BulkItemEdit } from '@/components/items/BulkItemEdit';
 import { cn } from '@/lib/utils';
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';

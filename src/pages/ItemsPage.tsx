@@ -370,6 +370,10 @@ export default function ItemsPage() {
             className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-secondary/30 text-muted-foreground border border-dashed border-border hover:bg-secondary transition-all flex items-center gap-1">
             <Plus className="w-3 h-3" /> Manage
           </button>
+          <button onClick={() => setIsBulkEditOpen(true)}
+            className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-warning/10 text-warning border border-warning/20 hover:bg-warning/20 transition-all flex items-center gap-1">
+            <Table2 className="w-3 h-3" /> Bulk Edit
+          </button>
         </div>
 
         {/* Search */}

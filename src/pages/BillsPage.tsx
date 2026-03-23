@@ -525,18 +525,9 @@ export default function BillsPage() {
           <div className="flex flex-col h-full">
             <SheetHeader className="px-6 py-4 border-b border-border shrink-0">
               <div className="flex items-center justify-between">
-                <SheetTitle className="text-lg font-semibold">Bill Details</SheetTitle>
+               <SheetTitle className="text-lg font-semibold">Bill Details</SheetTitle>
                 {selectedBill && (
                   <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => startEditFromBill(selectedBill)}
-                      className="gap-2"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                      Edit
-                    </Button>
                     <Button
                       variant="destructive"
                       size="sm"

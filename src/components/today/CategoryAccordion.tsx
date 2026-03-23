@@ -158,7 +158,7 @@ export function CategoryAccordion({
                 <Icon className={cn("w-5 h-5 lg:w-6 lg:h-6", cat.colorClass)} />
               </div>
               <div className="flex-1 text-left min-w-0">
-                <span className="text-sm lg:text-lg font-semibold text-foreground">{cat.label}</span>
+                <span className="text-base lg:text-xl font-bold text-foreground">{cat.label}</span>
                 {/* Per-section flow summary */}
                 {flow && flow.count > 0 && (
                   <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">

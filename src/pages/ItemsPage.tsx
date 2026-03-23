@@ -320,6 +320,9 @@ export default function ItemsPage() {
             <button onClick={() => setIsCategoryOpen(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors">
               <FolderOpen className="w-4 h-4" /> Categories
             </button>
+            <button onClick={() => setIsBulkEditOpen(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-warning/10 text-warning hover:bg-warning/20 transition-colors">
+              <Table2 className="w-4 h-4" /> Bulk Edit
+            </button>
             <button onClick={() => { resetForm(); setIsAddOpen(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
               <Plus className="w-4 h-4" /> Add Item
             </button>

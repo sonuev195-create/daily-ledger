@@ -557,6 +557,13 @@ export default function ItemsPage() {
 
       {/* Category Sheet */}
       <CategorySheet isOpen={isCategoryOpen} onClose={() => setIsCategoryOpen(false)} onCategoriesChange={() => refetchCategories()} />
+
+      {/* Bulk Edit Sheet */}
+      <Sheet open={isBulkEditOpen} onOpenChange={setIsBulkEditOpen}>
+        <SheetContent side="bottom" className="h-[90vh] rounded-t-3xl p-0 bg-background" onOpenAutoFocus={e => e.preventDefault()}>
+          <BulkItemEdit onClose={() => setIsBulkEditOpen(false)} onSaved={() => refetchItems()} />
+        </SheetContent>
+      </Sheet>
     </AppLayout>
   );
 }

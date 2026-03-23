@@ -51,7 +51,6 @@ interface BillWithCustomer {
 }
 
 export default function BillsPage() {
-  const navigate = useNavigate();
   const [bills, setBills] = useState<BillWithCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,17 +59,6 @@ export default function BillsPage() {
   const [selectedBill, setSelectedBill] = useState<BillWithCustomer | null>(null);
   const [billItems, setBillItems] = useState<BillItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
-
-  const startEditFromBill = (bill: BillWithCustomer) => {
-    const editDate = new Date(bill.created_at).toISOString();
-    const editTransactionId = bill.transaction_id;
-    setSelectedBill(null);
-    window.setTimeout(() => {
-      if (editTransactionId) {
-        navigate('/', { state: { date: editDate, editTransactionId } });
-      }
-    }, 220);
-  };
 
   useEffect(() => {
     fetchBills();

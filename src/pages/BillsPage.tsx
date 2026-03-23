@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Receipt, Search, Phone, MapPin, AlertCircle, CreditCard, ChevronDown, Wallet, Package, Edit2, Trash2 } from 'lucide-react';
+import { Receipt, Search, Phone, MapPin, AlertCircle, CreditCard, ChevronDown, Wallet, Package, Trash2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';

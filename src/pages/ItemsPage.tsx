@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen, Tag } from 'lucide-react';
+import { Package, Plus, Search, Edit2, Trash2, FileSpreadsheet, X, FolderOpen, Tag, Table2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Item, Category } from '@/types';
 import { useItems, useCategories } from '@/hooks/useSupabaseData';
@@ -12,6 +12,7 @@ import { Fab } from '@/components/ui/fab';
 import { toast } from 'sonner';
 import { CategorySheet } from '@/components/items/CategorySheet';
 import { BatchList } from '@/components/items/BatchList';
+import { BulkItemEdit } from '@/components/items/BulkItemEdit';
 import { cn } from '@/lib/utils';
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -27,6 +28,7 @@ export default function ItemsPage() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [activeTab, setActiveTab] = useState('single');
   const [bulkData, setBulkData] = useState('');
@@ -318,6 +320,9 @@ export default function ItemsPage() {
             <button onClick={() => setIsCategoryOpen(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors">
               <FolderOpen className="w-4 h-4" /> Categories
             </button>
+            <button onClick={() => setIsBulkEditOpen(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-warning/10 text-warning hover:bg-warning/20 transition-colors">
+              <Table2 className="w-4 h-4" /> Bulk Edit
+            </button>
             <button onClick={() => { resetForm(); setIsAddOpen(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
               <Plus className="w-4 h-4" /> Add Item
             </button>
@@ -364,6 +369,10 @@ export default function ItemsPage() {
           <button onClick={() => setIsCategoryOpen(true)}
             className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-secondary/30 text-muted-foreground border border-dashed border-border hover:bg-secondary transition-all flex items-center gap-1">
             <Plus className="w-3 h-3" /> Manage
+          </button>
+          <button onClick={() => setIsBulkEditOpen(true)}
+            className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-warning/10 text-warning border border-warning/20 hover:bg-warning/20 transition-all flex items-center gap-1">
+            <Table2 className="w-3 h-3" /> Bulk Edit
           </button>
         </div>
 
@@ -552,6 +561,13 @@ export default function ItemsPage() {
 
       {/* Category Sheet */}
       <CategorySheet isOpen={isCategoryOpen} onClose={() => setIsCategoryOpen(false)} onCategoriesChange={() => refetchCategories()} />
+
+      {/* Bulk Edit Sheet */}
+      <Sheet open={isBulkEditOpen} onOpenChange={setIsBulkEditOpen}>
+        <SheetContent side="bottom" className="h-[90vh] rounded-t-3xl p-0 bg-background" onOpenAutoFocus={e => e.preventDefault()}>
+          <BulkItemEdit onClose={() => setIsBulkEditOpen(false)} onSaved={() => refetchItems()} />
+        </SheetContent>
+      </Sheet>
     </AppLayout>
   );
 }

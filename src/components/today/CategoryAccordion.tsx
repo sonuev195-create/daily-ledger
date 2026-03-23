@@ -113,10 +113,10 @@ interface FlowBadgeProps {
 function FlowBadge({ icon: Icon, inAmount, outAmount, inColor, outColor }: FlowBadgeProps) {
   if (inAmount === 0 && outAmount === 0) return null;
   return (
-    <div className="flex items-center gap-1 text-[10px] lg:text-xs">
-      <Icon className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-muted-foreground" />
-      {inAmount > 0 && <span className={cn("font-medium", inColor)}>+{formatINR(inAmount)}</span>}
-      {outAmount > 0 && <span className={cn("font-medium", outColor)}>-{formatINR(outAmount)}</span>}
+    <div className="flex items-center gap-1.5 text-xs lg:text-sm">
+      <Icon className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-muted-foreground" />
+      {inAmount > 0 && <span className={cn("font-semibold", inColor)}>+{formatINR(inAmount)}</span>}
+      {outAmount > 0 && <span className={cn("font-semibold", outColor)}>-{formatINR(outAmount)}</span>}
     </div>
   );
 }
@@ -158,10 +158,10 @@ export function CategoryAccordion({
                 <Icon className={cn("w-5 h-5 lg:w-6 lg:h-6", cat.colorClass)} />
               </div>
               <div className="flex-1 text-left min-w-0">
-                <span className="text-sm lg:text-lg font-semibold text-foreground">{cat.label}</span>
+                <span className="text-base lg:text-xl font-bold text-foreground">{cat.label}</span>
                 {/* Per-section flow summary */}
                 {flow && flow.count > 0 && (
-                  <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                     <FlowBadge icon={Wallet} inAmount={flow.cashIn} outAmount={flow.cashOut} inColor="text-success" outColor="text-destructive" />
                     <FlowBadge icon={CreditCard} inAmount={flow.upiIn} outAmount={flow.upiOut} inColor="text-info" outColor="text-destructive" />
                     {(flow.chequeIn > 0 || flow.chequeOut > 0) && (
@@ -173,25 +173,25 @@ export function CategoryAccordion({
                   </div>
                 )}
                 {cat.id === 'drawer' && (
-                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
-                    <span className="text-success font-medium">💵 {formatINR(drawerCash)}</span>
-                    <span className="text-info font-medium">📱 {formatINR(drawerUpi)}</span>
-                    {drawerError !== 0 && <span className="text-warning font-medium">⚠️ Err: {formatINR(Math.abs(drawerError))}</span>}
+                  <div className="flex gap-3 mt-1 text-xs lg:text-sm">
+                    <span className="text-success font-semibold">💵 {formatINR(drawerCash)}</span>
+                    <span className="text-info font-semibold">📱 {formatINR(drawerUpi)}</span>
+                    {drawerError !== 0 && <span className="text-warning font-semibold">⚠️ Err: {formatINR(Math.abs(drawerError))}</span>}
                   </div>
                 )}
                 {cat.id === 'customer' && businessDue > 0 && (
-                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
-                    <span className="text-warning font-medium">⚠️ Due: {formatINR(businessDue)}</span>
+                  <div className="flex gap-3 mt-1 text-xs lg:text-sm">
+                    <span className="text-warning font-semibold">⚠️ Due: {formatINR(businessDue)}</span>
                   </div>
                 )}
                 {cat.id === 'purchase' && purchaseDue > 0 && (
-                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
-                    <span className="text-warning font-medium">⚠️ Due: {formatINR(purchaseDue)}</span>
+                  <div className="flex gap-3 mt-1 text-xs lg:text-sm">
+                    <span className="text-warning font-semibold">⚠️ Due: {formatINR(purchaseDue)}</span>
                   </div>
                 )}
                 {cat.id === 'employee' && employeeDue > 0 && (
-                  <div className="flex gap-2 mt-0.5 text-[10px] lg:text-xs">
-                    <span className="text-warning font-medium">⚠️ Due: {formatINR(employeeDue)}</span>
+                  <div className="flex gap-3 mt-1 text-xs lg:text-sm">
+                    <span className="text-warning font-semibold">⚠️ Due: {formatINR(employeeDue)}</span>
                   </div>
                 )}
               </div>

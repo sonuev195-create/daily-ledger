@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Receipt, Search, Phone, MapPin, AlertCircle, CreditCard, ChevronDown, Wallet, Package, Edit2, Trash2 } from 'lucide-react';
+import { Receipt, Search, Phone, MapPin, AlertCircle, CreditCard, ChevronDown, Wallet, Package, Trash2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 interface BillItem {
@@ -52,7 +51,6 @@ interface BillWithCustomer {
 }
 
 export default function BillsPage() {
-  const navigate = useNavigate();
   const [bills, setBills] = useState<BillWithCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,17 +59,6 @@ export default function BillsPage() {
   const [selectedBill, setSelectedBill] = useState<BillWithCustomer | null>(null);
   const [billItems, setBillItems] = useState<BillItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
-
-  const startEditFromBill = (bill: BillWithCustomer) => {
-    const editDate = new Date(bill.created_at).toISOString();
-    const editTransactionId = bill.transaction_id;
-    setSelectedBill(null);
-    window.setTimeout(() => {
-      if (editTransactionId) {
-        navigate('/', { state: { date: editDate, editTransactionId } });
-      }
-    }, 220);
-  };
 
   useEffect(() => {
     fetchBills();
@@ -525,18 +512,9 @@ export default function BillsPage() {
           <div className="flex flex-col h-full">
             <SheetHeader className="px-6 py-4 border-b border-border shrink-0">
               <div className="flex items-center justify-between">
-                <SheetTitle className="text-lg font-semibold">Bill Details</SheetTitle>
+               <SheetTitle className="text-lg font-semibold">Bill Details</SheetTitle>
                 {selectedBill && (
                   <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => startEditFromBill(selectedBill)}
-                      className="gap-2"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                      Edit
-                    </Button>
                     <Button
                       variant="destructive"
                       size="sm"

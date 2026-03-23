@@ -28,6 +28,7 @@ export default function ItemsPage() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [activeTab, setActiveTab] = useState('single');
   const [bulkData, setBulkData] = useState('');

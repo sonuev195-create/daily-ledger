@@ -161,7 +161,7 @@ export function CategoryAccordion({
                 <span className="text-base lg:text-xl font-bold text-foreground">{cat.label}</span>
                 {/* Per-section flow summary */}
                 {flow && flow.count > 0 && (
-                  <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                     <FlowBadge icon={Wallet} inAmount={flow.cashIn} outAmount={flow.cashOut} inColor="text-success" outColor="text-destructive" />
                     <FlowBadge icon={CreditCard} inAmount={flow.upiIn} outAmount={flow.upiOut} inColor="text-info" outColor="text-destructive" />
                     {(flow.chequeIn > 0 || flow.chequeOut > 0) && (

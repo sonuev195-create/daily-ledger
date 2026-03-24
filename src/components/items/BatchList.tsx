@@ -115,6 +115,7 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
     setPurchaseRate('');
     setPrimaryQty('');
     setSecondaryQty('');
+    setBatchName('');
     setIsAdding(false);
     setEditingBatchId(null);
     setSplittingBatchId(null);

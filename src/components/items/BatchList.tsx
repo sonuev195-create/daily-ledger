@@ -487,7 +487,17 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                   })}
 
                   {isAdding ? (
-                    <div className="p-3 rounded-xl bg-secondary/30 space-y-3">
+                  <div className="p-3 rounded-xl bg-secondary/30 space-y-3">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Batch Name (optional)</label>
+                        <input
+                          type="text"
+                          value={batchName}
+                          onChange={(e) => setBatchName(e.target.value)}
+                          placeholder="Auto: qty*rate"
+                          className="input-field text-sm py-2"
+                        />
+                      </div>
                       <div className="grid grid-cols-2 gap-2">
                         <input
                           type="date"
@@ -518,9 +528,6 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                           placeholder="Secondary Qty"
                           className="input-field text-sm py-2"
                         />
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Auto Batch Name: {buildAutoBatchName(parseFloat(primaryQty) || 0, parseFloat(purchaseRate) || 0)}
                       </div>
                       <div className="flex gap-2">
                         <button

@@ -332,16 +332,18 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                     const isSplitting = splittingBatchId === batch.id;
 
                     if (isEditing) {
-                      const qtyNum = parseFloat(primaryQty) || 0;
-                      const rateNum = parseFloat(purchaseRate) || 0;
-                      const secNum = parseFloat(secondaryQty) || 0;
-                      const existing = batches.find((b) => b.id === batch.id);
-                      const previewName = isOpeningBatchName(existing?.batchNumber)
-                        ? buildOpeningBatchName(qtyNum, secNum, item.secondaryUnit, rateNum)
-                        : buildAutoBatchName(qtyNum, rateNum);
-
                       return (
                         <div key={batch.id} className="p-3 rounded-xl bg-accent/10 border border-accent/30 space-y-3">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Batch Name</label>
+                            <input
+                              type="text"
+                              value={batchName}
+                              onChange={(e) => setBatchName(e.target.value)}
+                              placeholder="Auto-generated if empty"
+                              className="input-field text-sm py-2"
+                            />
+                          </div>
                           <div className="grid grid-cols-2 gap-2">
                             <input
                               type="date"
@@ -373,7 +375,6 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                               className="input-field text-sm py-2"
                             />
                           </div>
-                          <div className="text-xs text-muted-foreground">Batch Name: {previewName}</div>
                           <div className="flex gap-2">
                             <button
                               onClick={resetForm}

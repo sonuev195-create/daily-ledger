@@ -169,10 +169,9 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
     const rate = parseFloat(purchaseRate) || 0;
     const secQty = parseFloat(secondaryQty) || 0;
 
+    // Use manually entered batch name, or keep existing name
     const existing = batches.find((b) => b.id === batchId);
-    const nextBatchNumber = isOpeningBatchName(existing?.batchNumber)
-      ? buildOpeningBatchName(qty, secQty, item.secondaryUnit, rate)
-      : buildAutoBatchName(qty, rate);
+    const nextBatchNumber = batchName.trim() || existing?.batchNumber || buildAutoBatchName(qty, rate);
 
     const { error } = await supabase
       .from('batches')

@@ -128,7 +128,7 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
     const rate = parseFloat(purchaseRate) || 0;
     const secQty = parseFloat(secondaryQty) || 0;
 
-    const batchNumber = buildAutoBatchName(qty, rate);
+    const batchNumber = batchName.trim() || buildAutoBatchName(qty, rate);
 
     const { error } = await supabase.from('batches').insert({
       id: uuidv4(),

@@ -161,6 +161,7 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
     setPurchaseRate(batch.purchaseRate.toString());
     setPrimaryQty(batch.primaryQuantity.toString());
     setSecondaryQty(batch.secondaryQuantity.toString());
+    setBatchName(batch.batchNumber || '');
   };
 
   const handleSaveEdit = async (batchId: string) => {

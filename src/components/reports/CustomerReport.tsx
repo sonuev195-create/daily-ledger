@@ -75,7 +75,11 @@ export function CustomerReport() {
       if (x.type === 'sale') return bal + (Number(x.due) || 0);
       if (x.type === 'opening_due') return bal + Number(x.amount || 0);
       if (x.type === 'sales_return') return bal - Number(x.amount || 0);
-      if (x.type === 'balance_paid') return bal - Number(x.amount || 0);
+      if (x.type === 'balance_paid') {
+        const payments = Array.isArray(x.payments) ? x.payments : [];
+        const totalPaid = payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+        return bal - (totalPaid > 0 ? totalPaid : Number(x.amount || 0));
+      }
       if (x.type === 'customer_advance') return bal - Number(x.amount || 0);
       return bal;
     }, 0);
@@ -117,17 +121,22 @@ export function CustomerReport() {
     return payments.map((p: any) => `${p.mode}: ${formatINR(Number(p.amount))}`).join(', ');
   };
 
-  // Running balance
+  // Running balance: sale adds due, balance_paid/return/advance reduces balance
   const ledgerTxns = txns.map((t, i) => {
     const runningBalance = txns.slice(0, i + 1).reduce((bal, x) => {
       if (x.type === 'sale') return bal + (Number(x.due) || 0);
       if (x.type === 'opening_due') return bal + Number(x.amount || 0);
       if (x.type === 'sales_return') return bal - Number(x.amount);
-      if (x.type === 'balance_paid') return bal - Number(x.amount);
+      if (x.type === 'balance_paid') {
+        // Balance paid = payment towards outstanding dues
+        const payments = Array.isArray(x.payments) ? x.payments : [];
+        const totalPaid = payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+        return bal - (totalPaid > 0 ? totalPaid : Number(x.amount));
+      }
       if (x.type === 'customer_advance') return bal - Number(x.amount);
       return bal;
     }, openingBalance);
-    const direction = t.type === 'sale' ? 'debit' : 'credit';
+    const direction = (t.type === 'sale' || t.type === 'opening_due') ? 'debit' : 'credit';
     return { ...t, runningBalance, direction };
   });
 

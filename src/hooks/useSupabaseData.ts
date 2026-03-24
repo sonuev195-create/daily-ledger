@@ -367,8 +367,8 @@ export async function planBatchAllocations(
   ]);
 
   const preference = itemData?.batch_preference === 'oldest' ? 'oldest' : 'latest';
+  // Include all batches, even those with zero or negative stock
   const sortedBatches = [...batches]
-    .filter((batch) => Number(batch.primaryQuantity) > 0 || Number(batch.secondaryQuantity) > 0)
     .sort((a, b) => {
       const diff = new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime();
       return preference === 'oldest' ? diff : -diff;
@@ -383,20 +383,17 @@ export async function planBatchAllocations(
     if (remainingPrimary <= 0 && remainingSecondary <= 0) break;
 
     const availablePrimary = Number(batch.primaryQuantity || 0);
-    const availableSecondary = Number(batch.secondaryQuantity || 0);
 
-    const primaryTaken = Math.min(availablePrimary, remainingPrimary);
+    // Take what's available (or all remaining if this is the last batch with stock)
+    const primaryTaken = Math.min(Math.max(availablePrimary, 0), remainingPrimary);
     let secondaryTaken = 0;
 
-    if (remainingSecondary > 0) {
-      if (requestedPrimary > 0 && remainingPrimary > primaryTaken) {
-        secondaryTaken = Math.min(
-          availableSecondary,
-          Number(((secondaryQty * primaryTaken) / requestedPrimary).toFixed(4))
-        );
-      } else {
-        secondaryTaken = Math.min(availableSecondary, remainingSecondary);
-      }
+    if (remainingSecondary > 0 && primaryTaken > 0) {
+      const availableSecondary = Number(batch.secondaryQuantity || 0);
+      secondaryTaken = Math.min(
+        Math.max(availableSecondary, 0),
+        Number(((secondaryQty * primaryTaken) / requestedPrimary).toFixed(4))
+      );
     }
 
     if (primaryTaken > 0 || secondaryTaken > 0) {
@@ -409,6 +406,25 @@ export async function planBatchAllocations(
       remainingPrimary = Math.max(0, remainingPrimary - primaryTaken);
       remainingSecondary = Math.max(0, Number((remainingSecondary - secondaryTaken).toFixed(4)));
     }
+  }
+
+  // If there's still remaining qty and batches exist, put it on the first/last batch (allow negative)
+  if (remainingPrimary > 0 && sortedBatches.length > 0) {
+    const fallbackBatch = sortedBatches[0];
+    const existing = allocations.find(a => a.batchId === fallbackBatch.id);
+    if (existing) {
+      existing.primaryQty += remainingPrimary;
+      existing.secondaryQty += remainingSecondary;
+    } else {
+      allocations.push({
+        batchId: fallbackBatch.id,
+        primaryQty: remainingPrimary,
+        secondaryQty: remainingSecondary,
+        purchaseRate: Number(fallbackBatch.purchaseRate || 0),
+      });
+    }
+    remainingPrimary = 0;
+    remainingSecondary = 0;
   }
 
   return { allocations, remainingPrimary, remainingSecondary };

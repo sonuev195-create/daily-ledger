@@ -57,6 +57,7 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
   const [purchaseRate, setPurchaseRate] = useState('');
   const [primaryQty, setPrimaryQty] = useState('');
   const [secondaryQty, setSecondaryQty] = useState('');
+  const [batchName, setBatchName] = useState('');
 
   // Split form state
   const [splitQty, setSplitQty] = useState('');
@@ -114,6 +115,7 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
     setPurchaseRate('');
     setPrimaryQty('');
     setSecondaryQty('');
+    setBatchName('');
     setIsAdding(false);
     setEditingBatchId(null);
     setSplittingBatchId(null);
@@ -127,7 +129,7 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
     const rate = parseFloat(purchaseRate) || 0;
     const secQty = parseFloat(secondaryQty) || 0;
 
-    const batchNumber = buildAutoBatchName(qty, rate);
+    const batchNumber = batchName.trim() || buildAutoBatchName(qty, rate);
 
     const { error } = await supabase.from('batches').insert({
       id: uuidv4(),
@@ -160,6 +162,7 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
     setPurchaseRate(batch.purchaseRate.toString());
     setPrimaryQty(batch.primaryQuantity.toString());
     setSecondaryQty(batch.secondaryQuantity.toString());
+    setBatchName(batch.batchNumber || '');
   };
 
   const handleSaveEdit = async (batchId: string) => {
@@ -167,10 +170,9 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
     const rate = parseFloat(purchaseRate) || 0;
     const secQty = parseFloat(secondaryQty) || 0;
 
+    // Use manually entered batch name, or keep existing name
     const existing = batches.find((b) => b.id === batchId);
-    const nextBatchNumber = isOpeningBatchName(existing?.batchNumber)
-      ? buildOpeningBatchName(qty, secQty, item.secondaryUnit, rate)
-      : buildAutoBatchName(qty, rate);
+    const nextBatchNumber = batchName.trim() || existing?.batchNumber || buildAutoBatchName(qty, rate);
 
     const { error } = await supabase
       .from('batches')
@@ -330,16 +332,18 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                     const isSplitting = splittingBatchId === batch.id;
 
                     if (isEditing) {
-                      const qtyNum = parseFloat(primaryQty) || 0;
-                      const rateNum = parseFloat(purchaseRate) || 0;
-                      const secNum = parseFloat(secondaryQty) || 0;
-                      const existing = batches.find((b) => b.id === batch.id);
-                      const previewName = isOpeningBatchName(existing?.batchNumber)
-                        ? buildOpeningBatchName(qtyNum, secNum, item.secondaryUnit, rateNum)
-                        : buildAutoBatchName(qtyNum, rateNum);
-
                       return (
                         <div key={batch.id} className="p-3 rounded-xl bg-accent/10 border border-accent/30 space-y-3">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Batch Name</label>
+                            <input
+                              type="text"
+                              value={batchName}
+                              onChange={(e) => setBatchName(e.target.value)}
+                              placeholder="Auto-generated if empty"
+                              className="input-field text-sm py-2"
+                            />
+                          </div>
                           <div className="grid grid-cols-2 gap-2">
                             <input
                               type="date"
@@ -371,7 +375,6 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                               className="input-field text-sm py-2"
                             />
                           </div>
-                          <div className="text-xs text-muted-foreground">Batch Name: {previewName}</div>
                           <div className="flex gap-2">
                             <button
                               onClick={resetForm}
@@ -484,7 +487,17 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                   })}
 
                   {isAdding ? (
-                    <div className="p-3 rounded-xl bg-secondary/30 space-y-3">
+                  <div className="p-3 rounded-xl bg-secondary/30 space-y-3">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Batch Name (optional)</label>
+                        <input
+                          type="text"
+                          value={batchName}
+                          onChange={(e) => setBatchName(e.target.value)}
+                          placeholder="Auto: qty*rate"
+                          className="input-field text-sm py-2"
+                        />
+                      </div>
                       <div className="grid grid-cols-2 gap-2">
                         <input
                           type="date"
@@ -515,9 +528,6 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
                           placeholder="Secondary Qty"
                           className="input-field text-sm py-2"
                         />
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Auto Batch Name: {buildAutoBatchName(parseFloat(primaryQty) || 0, parseFloat(purchaseRate) || 0)}
                       </div>
                       <div className="flex gap-2">
                         <button

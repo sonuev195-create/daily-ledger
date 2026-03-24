@@ -20,23 +20,14 @@ function downloadCSV(rows: string[][], filename: string) {
 
 const fmtINR = (n: number) => `Rs.${Math.abs(n).toLocaleString('en-IN')}`;
 
-type WageCategory = 'present' | 'rate_work' | 'payment';
-
-interface ReportRow {
-  date: string;
-  wageCategory: WageCategory;
-  subCategory: string;
-  amount: number;
-  payment: number;
-  paymentDetail: string;
-  balance: number;
-}
+type SalarySection = 'day_salary' | 'rate_work';
 
 export function EmployeeReport() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedEmpId, setSelectedEmpId] = useState<string>('');
   const [month, setMonth] = useState(new Date());
   const [txns, setTxns] = useState<any[]>([]);
+  const [prevTxns, setPrevTxns] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [allowanceCategories, setAllowanceCategories] = useState<Record<string, string>>({});
   const [rateWorkTypes, setRateWorkTypes] = useState<Record<string, string>>({});
@@ -58,7 +49,7 @@ export function EmployeeReport() {
   }, []);
 
   useEffect(() => {
-    if (!selectedEmpId) { setTxns([]); return; }
+    if (!selectedEmpId) { setTxns([]); setPrevTxns([]); return; }
     fetchTxns();
   }, [selectedEmpId, month]);
 
@@ -66,48 +57,43 @@ export function EmployeeReport() {
     setLoading(true);
     const start = format(startOfMonth(month), 'yyyy-MM-dd');
     const end = format(endOfMonth(month), 'yyyy-MM-dd');
-    const { data } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('employee_id', selectedEmpId)
-      .gte('date', start)
-      .lte('date', end)
-      .order('date');
+    const [{ data }, { data: prev }] = await Promise.all([
+      supabase.from('transactions').select('*').eq('employee_id', selectedEmpId).gte('date', start).lte('date', end).order('date'),
+      supabase.from('transactions').select('*').eq('employee_id', selectedEmpId).lt('date', start).order('date'),
+    ]);
     setTxns(data || []);
+    setPrevTxns(prev || []);
     setLoading(false);
   };
 
   const selectedEmp = employees.find(e => e.id === selectedEmpId);
   const daysInMonth = getDaysInMonth(month);
 
-  // Count days present: only salary/attendance type, NOT rate_work
   const presentDays = new Set(
     txns.filter(t => t.type === 'salary' || t.type === 'attendance').map(t => t.date)
   ).size;
 
-  const getWageCategory = (t: any): WageCategory => {
-    if (t.type === 'salary' || t.type === 'attendance' || t.type === 'daily_wage' || t.type === 'allowance') return 'present';
+  // Classify transaction into day_salary or rate_work section
+  const getSection = (t: any): SalarySection => {
     if (t.type === 'rate_work') return 'rate_work';
-    if (t.type === 'payment') return 'payment';
-    return 'present';
+    if (t.type === 'payment' && t.reference === 'ratework') return 'rate_work';
+    return 'day_salary'; // salary, attendance, allowance, payment(present/previous/advance)
   };
 
   const getSubCategory = (t: any): string => {
-    // Allowance: check dedicated column first, then reference
     if (t.type === 'allowance') {
       const catId = t.allowance_category_id || t.reference;
-      if (catId) return allowanceCategories[catId] || 'Allowance';
-      return 'Allowance';
+      return catId ? (allowanceCategories[catId] || 'Allowance') : 'Allowance';
     }
-    // Rate work: check dedicated column first, then reference
     if (t.type === 'rate_work') {
       const typeId = t.rate_work_type_id || t.reference;
-      if (typeId) return rateWorkTypes[typeId] || 'Rate Work';
-      return 'Rate Work';
+      return typeId ? (rateWorkTypes[typeId] || 'Rate Work') : 'Rate Work';
     }
-    if (t.type === 'payment' && t.reference) {
-      const labels: Record<string, string> = { present: 'Present Due', previous: 'Previous Due', ratework: 'Rate Work Due' };
-      return labels[t.reference] || t.reference;
+    if (t.type === 'payment') {
+      if (t.reference === 'advance') return 'Advance';
+      if (t.reference === 'previous') return 'Prev Due Pay';
+      if (t.reference === 'ratework') return 'Rate Work Pay';
+      return 'Day Salary Pay';
     }
     if (t.type === 'salary' || t.type === 'attendance') return 'Day Salary';
     return t.type.replace(/_/g, ' ');
@@ -123,53 +109,57 @@ export function EmployeeReport() {
     return payments.filter((p: any) => p.amount > 0).map((p: any) => `${p.mode}: ${formatINR(Number(p.amount))}`).join(', ');
   };
 
-  const getDisplayAmount = (t: any): number => {
-    if (t.type === 'payment') return getPaymentTotal(t);
-    return Number(t.amount);
-  };
-
+  // Balance delta: earned amounts are positive, payments are negative
   const getBalanceDelta = (t: any): number => {
     const amt = Number(t.amount);
     const paid = getPaymentTotal(t);
-    if (t.type === 'payment') return -paid;
-    return amt - paid;
+    if (t.type === 'payment') return -paid; // payment reduces balance
+    return amt - paid; // salary/allowance/rate_work: earn minus any inline payment
   };
 
-  const wageCategoryLabel: Record<WageCategory, string> = {
-    present: 'Present & Allowance',
+  // Calculate previous dues per section
+  const calcPreviousDue = (section: SalarySection): number => {
+    return prevTxns.filter(t => getSection(t) === section).reduce((bal, t) => bal + getBalanceDelta(t), 0);
+  };
+
+  const sectionLabel: Record<SalarySection, string> = {
+    day_salary: 'Day Salary (Present + Allowance)',
     rate_work: 'Rate Work',
-    payment: 'Payment',
   };
 
-  const wageCategoryColor: Record<WageCategory, string> = {
-    present: 'bg-success/10 text-success',
+  const sectionColor: Record<SalarySection, string> = {
+    day_salary: 'bg-success/10 text-success',
     rate_work: 'bg-accent/10 text-accent',
-    payment: 'bg-warning/10 text-warning',
   };
 
-  // Group transactions by wage category
-  const groupedByCategory: Record<WageCategory, any[]> = { present: [], rate_work: [], payment: [] };
+  // Group transactions by section
+  const sections: SalarySection[] = ['day_salary', 'rate_work'];
+  const groupedBySection: Record<SalarySection, any[]> = { day_salary: [], rate_work: [] };
   txns.forEach(t => {
-    const cat = getWageCategory(t);
-    groupedByCategory[cat].push(t);
+    const sec = getSection(t);
+    groupedBySection[sec].push(t);
   });
 
-  // Category totals
-  const categoryTotals: Record<WageCategory, { amount: number; paid: number }> = {
-    present: { amount: 0, paid: 0 },
-    rate_work: { amount: 0, paid: 0 },
-    payment: { amount: 0, paid: 0 },
+  // Section totals
+  const sectionTotals: Record<SalarySection, { earned: number; paid: number; prevDue: number }> = {
+    day_salary: { earned: 0, paid: 0, prevDue: calcPreviousDue('day_salary') },
+    rate_work: { earned: 0, paid: 0, prevDue: calcPreviousDue('rate_work') },
   };
-  (Object.keys(groupedByCategory) as WageCategory[]).forEach(cat => {
-    groupedByCategory[cat].forEach(t => {
-      categoryTotals[cat].amount += getDisplayAmount(t);
-      categoryTotals[cat].paid += getPaymentTotal(t);
+  sections.forEach(sec => {
+    groupedBySection[sec].forEach(t => {
+      if (t.type === 'payment') {
+        sectionTotals[sec].paid += getPaymentTotal(t);
+      } else {
+        sectionTotals[sec].earned += Number(t.amount);
+        sectionTotals[sec].paid += getPaymentTotal(t);
+      }
     });
   });
 
-  const totalAmount = txns.reduce((s, t) => s + Number(t.amount), 0);
-  const totalPaid = txns.reduce((s, t) => s + getPaymentTotal(t), 0);
-  const totalBalance = totalAmount - totalPaid;
+  const totalEarned = sectionTotals.day_salary.earned + sectionTotals.rate_work.earned;
+  const totalPaid = sectionTotals.day_salary.paid + sectionTotals.rate_work.paid;
+  const totalPrevDue = sectionTotals.day_salary.prevDue + sectionTotals.rate_work.prevDue;
+  const totalBalance = totalPrevDue + totalEarned - totalPaid;
 
   const handleExportPDF = () => {
     if (!selectedEmp) return;
@@ -179,39 +169,36 @@ export function EmployeeReport() {
     doc.text(`Employee Report: ${selectedEmp.name}`, pw / 2, 18, { align: 'center' });
     doc.setFontSize(10);
     doc.text(format(month, 'MMMM yyyy'), pw / 2, 25, { align: 'center' });
-    doc.text(`Days Present: ${presentDays}/${daysInMonth} | Total: ${fmtINR(totalAmount)} | Paid: ${fmtINR(totalPaid)} | Balance: ${fmtINR(totalBalance)}`, pw / 2, 31, { align: 'center' });
 
     let y = 36;
-
-    // Each wage category section
-    const categories: WageCategory[] = ['present', 'rate_work', 'payment'];
-    categories.forEach(cat => {
-      const catTxns = groupedByCategory[cat];
-      if (catTxns.length === 0) return;
+    sections.forEach(sec => {
+      const catTxns = groupedBySection[sec];
+      if (catTxns.length === 0 && sectionTotals[sec].prevDue === 0) return;
 
       doc.setFontSize(11);
-      doc.text(wageCategoryLabel[cat], 14, y);
+      doc.text(sectionLabel[sec], 14, y);
       y += 4;
 
-      let runBal = 0;
-      const body = catTxns.map(t => {
-        const amt = getDisplayAmount(t);
-        const paid = getPaymentTotal(t);
+      let runBal = sectionTotals[sec].prevDue;
+      const body: string[][] = [];
+      if (sectionTotals[sec].prevDue !== 0) {
+        body.push(['', 'Previous Due', '', '', fmtINR(runBal)]);
+      }
+      catTxns.forEach(t => {
         runBal += getBalanceDelta(t);
-        return [
+        body.push([
           format(parseISO(t.date), 'dd MMM'),
           getSubCategory(t),
-          fmtINR(amt),
+          t.type === 'payment' ? '' : fmtINR(Number(t.amount)),
           getPaymentStr(t) || '-',
           fmtINR(runBal),
-        ];
+        ]);
       });
 
       autoTable(doc, {
         startY: y,
-        head: [['Date', 'Sub Category', 'Amount', 'Payment', 'Balance']],
+        head: [['Date', 'Type', 'Earned', 'Payment', 'Balance']],
         body,
-        foot: [['', 'Total', fmtINR(categoryTotals[cat].amount), fmtINR(categoryTotals[cat].paid), fmtINR(cat === 'payment' ? -categoryTotals[cat].paid : categoryTotals[cat].amount - categoryTotals[cat].paid)]],
         theme: 'striped',
         headStyles: { fillColor: [66, 66, 66] },
         styles: { fontSize: 8 },
@@ -224,21 +211,19 @@ export function EmployeeReport() {
 
   const handleExportCSV = () => {
     if (!selectedEmp) return;
-    const header = ['Date', 'Wage Category', 'Sub Category', 'Amount', 'Payment', 'Balance'];
+    const header = ['Date', 'Section', 'Type', 'Earned', 'Payment', 'Balance'];
     const rows: string[][] = [header];
-    const categories: WageCategory[] = ['present', 'rate_work', 'payment'];
-    categories.forEach(cat => {
-      let runBal = 0;
-      groupedByCategory[cat].forEach(t => {
-        const amt = getDisplayAmount(t);
-        const paid = getPaymentTotal(t);
+    sections.forEach(sec => {
+      let runBal = sectionTotals[sec].prevDue;
+      if (runBal !== 0) rows.push(['', sectionLabel[sec], 'Previous Due', '', '', String(runBal)]);
+      groupedBySection[sec].forEach(t => {
         runBal += getBalanceDelta(t);
         rows.push([
           format(parseISO(t.date), 'dd MMM yyyy'),
-          wageCategoryLabel[cat],
+          sectionLabel[sec],
           getSubCategory(t),
-          String(amt),
-          String(paid),
+          t.type === 'payment' ? '' : String(Number(t.amount)),
+          String(getPaymentTotal(t)),
           String(runBal),
         ]);
       });
@@ -282,7 +267,7 @@ export function EmployeeReport() {
               </div>
               <div className="bg-card border border-border rounded-xl p-3">
                 <p className="text-xs text-muted-foreground">Total Earned</p>
-                <p className="text-lg font-bold text-primary">{formatINR(totalAmount)}</p>
+                <p className="text-lg font-bold text-primary">{formatINR(totalEarned)}</p>
               </div>
               <div className="bg-card border border-border rounded-xl p-3">
                 <p className="text-xs text-muted-foreground">Balance Due</p>
@@ -295,51 +280,61 @@ export function EmployeeReport() {
 
           {loading ? (
             <div className="h-32 bg-secondary/50 animate-pulse rounded-xl" />
-          ) : txns.length === 0 ? (
+          ) : txns.length === 0 && totalPrevDue === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No transactions this month</p>
           ) : (
             <div className="space-y-3">
-              {/* Each wage category section */}
-              {(['present', 'rate_work', 'payment'] as WageCategory[]).map(cat => {
-                const catTxns = groupedByCategory[cat];
-                if (catTxns.length === 0) return null;
+              {sections.map(sec => {
+                const catTxns = groupedBySection[sec];
+                const prevDue = sectionTotals[sec].prevDue;
+                if (catTxns.length === 0 && prevDue === 0) return null;
 
-                let runBal = 0;
-                const catBalance = categoryTotals[cat].amount - categoryTotals[cat].paid;
+                let runBal = prevDue;
+                const secBalance = prevDue + sectionTotals[sec].earned - sectionTotals[sec].paid;
 
                 return (
-                  <div key={cat} className="bg-card border border-border rounded-xl overflow-hidden">
-                    {/* Category Header */}
+                  <div key={sec} className="bg-card border border-border rounded-xl overflow-hidden">
+                    {/* Section Header */}
                     <div className="px-3 py-2 bg-secondary/50 border-b border-border flex justify-between items-center">
-                      <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", wageCategoryColor[cat])}>
-                        {wageCategoryLabel[cat]}
+                      <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", sectionColor[sec])}>
+                        {sectionLabel[sec]}
                       </span>
                       <div className="flex gap-3 text-[10px] text-muted-foreground">
-                        <span>Amt: <span className="font-semibold text-foreground">{formatINR(categoryTotals[cat].amount)}</span></span>
-                        <span>Paid: <span className="font-semibold text-foreground">{formatINR(categoryTotals[cat].paid)}</span></span>
-                        <span>Bal: <span className={cn("font-semibold", catBalance > 0 ? "text-warning" : "text-success")}>{formatINR(catBalance)}</span></span>
+                        {prevDue > 0 && <span>Prev: <span className="font-semibold text-warning">{formatINR(prevDue)}</span></span>}
+                        <span>Earned: <span className="font-semibold text-foreground">{formatINR(sectionTotals[sec].earned)}</span></span>
+                        <span>Paid: <span className="font-semibold text-foreground">{formatINR(sectionTotals[sec].paid)}</span></span>
+                        <span>Bal: <span className={cn("font-semibold", secBalance > 0 ? "text-warning" : "text-success")}>{formatINR(secBalance)}</span></span>
                       </div>
                     </div>
 
                     {/* Column Header */}
                     <div className="grid grid-cols-[55px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-b border-border">
                       <span>Date</span>
-                      <span>Sub Category</span>
-                      <span className="text-right">Amount</span>
+                      <span>Type</span>
+                      <span className="text-right">Earned</span>
                       <span className="text-right">Payment</span>
                       <span className="text-right">Balance</span>
                     </div>
 
+                    {/* Previous due row */}
+                    {prevDue > 0 && (
+                      <div className="grid grid-cols-[55px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 border-b border-border/50 text-[11px] items-start bg-warning/5">
+                        <span className="text-muted-foreground">-</span>
+                        <span className="font-medium text-warning">Previous Due</span>
+                        <span className="text-right">-</span>
+                        <span className="text-right">-</span>
+                        <span className="text-right font-semibold text-warning">{formatINR(runBal)}</span>
+                      </div>
+                    )}
+
                     {/* Rows */}
                     {catTxns.map(t => {
-                      const amt = getDisplayAmount(t);
-                      const paid = getPaymentTotal(t);
                       runBal += getBalanceDelta(t);
                       return (
                         <div key={t.id} className="grid grid-cols-[55px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 border-b border-border/50 last:border-0 text-[11px] items-start">
                           <span className="text-muted-foreground">{format(parseISO(t.date), 'dd MMM')}</span>
                           <span className="font-medium truncate">{getSubCategory(t)}</span>
-                          <span className="text-right font-semibold">{formatINR(amt)}</span>
+                          <span className="text-right font-semibold">{t.type === 'payment' ? '-' : formatINR(Number(t.amount))}</span>
                           <span className="text-right text-muted-foreground text-[10px]">{getPaymentStr(t) || '-'}</span>
                           <span className={cn("text-right font-semibold", runBal > 0 ? "text-warning" : "text-success")}>{formatINR(runBal)}</span>
                         </div>
@@ -353,7 +348,8 @@ export function EmployeeReport() {
               <div className="bg-card border border-border rounded-xl p-3 flex justify-between items-center">
                 <span className="text-xs font-bold text-foreground">Grand Total</span>
                 <div className="flex gap-4 text-xs">
-                  <span>Earned: <span className="font-bold">{formatINR(totalAmount)}</span></span>
+                  {totalPrevDue > 0 && <span>Prev: <span className="font-bold text-warning">{formatINR(totalPrevDue)}</span></span>}
+                  <span>Earned: <span className="font-bold">{formatINR(totalEarned)}</span></span>
                   <span>Paid: <span className="font-bold">{formatINR(totalPaid)}</span></span>
                   <span className={cn("font-bold", totalBalance > 0 ? "text-warning" : "text-success")}>
                     Balance: {formatINR(totalBalance)}

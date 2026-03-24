@@ -539,7 +539,7 @@ export function EmployeeInlineEntry({
                 <div className="col-span-1"></div>
                 <div className="col-span-4">Employee</div>
                 <div className="col-span-3">Day Salary</div>
-                <div className="col-span-4">Rate Work</div>
+                <div className="col-span-4">Category</div>
               </div>
 
               {attendanceRows.map((row, index) => (
@@ -572,19 +572,17 @@ export function EmployeeInlineEntry({
                     />
                   </div>
                   <div className="col-span-4">
-                    <Select
-                      value={row.rateWorkTypeId || 'none'}
-                      onValueChange={v => updateAttendanceRateWork(index, v === 'none' ? '' : v)}
+                    <select
+                      value={row.rateWorkTypeId || 'day_salary'}
+                      onChange={e => updateAttendanceRateWork(index, e.target.value === 'day_salary' ? '' : e.target.value)}
                       disabled={!row.present}
+                      className="h-6 text-[10px] px-1 w-full bg-background border border-input rounded"
                     >
-                      <SelectTrigger className="h-6 text-[10px] px-1"><SelectValue placeholder="None" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none" className="text-xs">None</SelectItem>
-                        {rateWorkTypes.map(rw => (
-                          <SelectItem key={rw.id} value={rw.id} className="text-xs">{rw.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <option value="day_salary">Day Salary</option>
+                      {rateWorkTypes.map(rw => (
+                        <option key={rw.id} value={rw.id}>{rw.name}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               ))}

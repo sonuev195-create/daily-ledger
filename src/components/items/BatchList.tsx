@@ -57,6 +57,7 @@ export function BatchList({ item, onBatchesChange }: BatchListProps) {
   const [purchaseRate, setPurchaseRate] = useState('');
   const [primaryQty, setPrimaryQty] = useState('');
   const [secondaryQty, setSecondaryQty] = useState('');
+  const [batchName, setBatchName] = useState('');
 
   // Split form state
   const [splitQty, setSplitQty] = useState('');

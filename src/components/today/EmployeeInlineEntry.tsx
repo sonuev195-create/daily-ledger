@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { generateDailyBillNumber, employeeTypePrefixMap } from '@/lib/billNumbers';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

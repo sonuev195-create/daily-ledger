@@ -289,7 +289,14 @@ export default function CustomersPage() {
             <div><label className="text-sm font-medium">Name *</label><Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Customer name" className="mt-1" /></div>
             <div><label className="text-sm font-medium">Phone</label><Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="Mobile number" className="mt-1" /></div>
             <div><label className="text-sm font-medium">Address</label><Input value={formAddress} onChange={e => setFormAddress(e.target.value)} placeholder="Address" className="mt-1" /></div>
-            <div><label className="text-sm font-medium">Previous Due</label><Input type="number" value={formDue} onChange={e => setFormDue(e.target.value)} placeholder="0" className="mt-1" /></div>
+            {!editCustomer && (
+              <>
+                <div><label className="text-sm font-medium">Opening Due</label><Input type="number" value={formDue} onChange={e => setFormDue(e.target.value)} placeholder="0" className="mt-1" /></div>
+                {parseFloat(formDue) > 0 && (
+                  <div><label className="text-sm font-medium">Due Date</label><Input type="date" value={formDueDate} onChange={e => setFormDueDate(e.target.value)} className="mt-1" /></div>
+                )}
+              </>
+            )}
             <Button onClick={handleSaveCustomer} className="w-full">{editCustomer ? 'Update' : 'Add Customer'}</Button>
           </div>
         </SheetContent>

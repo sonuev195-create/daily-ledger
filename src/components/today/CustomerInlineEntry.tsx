@@ -552,27 +552,12 @@ export function CustomerInlineEntry({
 
       if (finalCustomerId) {
         if (entry.type === 'balance_paid') {
-          const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id) && b.id !== '__opening_due__');
+          const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id));
           let remaining = totalPayments;
           for (const bill of selectedDueBills) {
             const payForBill = Math.min(remaining, bill.dueAmount);
             remaining -= payForBill;
             await supabase.from('transactions').update({ due: bill.dueAmount - payForBill }).eq('id', bill.id);
-          }
-          // Handle opening due payment - find opening_due transactions and reduce their due
-          if (entry.selectedBills.includes('__opening_due__') && remaining > 0) {
-            const { data: openingDueTxns } = await supabase.from('transactions')
-              .select('id, amount, due')
-              .eq('customer_id', finalCustomerId)
-              .eq('type', 'opening_due')
-              .gt('due', 0)
-              .order('date');
-            for (const odTxn of (openingDueTxns || [])) {
-              if (remaining <= 0) break;
-              const payForOd = Math.min(remaining, Number(odTxn.due));
-              remaining -= payForOd;
-              await supabase.from('transactions').update({ due: Number(odTxn.due) - payForOd }).eq('id', odTxn.id);
-            }
           }
         }
 

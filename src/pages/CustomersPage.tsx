@@ -129,6 +129,7 @@ export default function CustomersPage() {
   const closeForm = () => {
     setIsAddOpen(false); setEditCustomer(null);
     setFormName(''); setFormPhone(''); setFormAddress(''); setFormDue('0');
+    setFormDueDate(format(new Date(), 'yyyy-MM-dd'));
   };
 
   const filtered = customers.filter(c =>

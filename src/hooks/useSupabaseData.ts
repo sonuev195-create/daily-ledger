@@ -201,8 +201,10 @@ export function useBatches(itemId?: string) {
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
 
   const addBatch = async (batch: Omit<Batch, 'id' | 'createdAt'>) => {
-    // Auto generate batch name as qty*rate
-    const batchName = batch.batchNumber || `${batch.primaryQuantity}*${batch.purchaseRate}`;
+    // Auto generate batch name as sl/date/qty*rate
+    const dateStr = format(batch.purchaseDate, 'yyyy.MM.dd');
+    const qtyPart = batch.secondaryQuantity > 0 ? `${batch.primaryQuantity}(${batch.secondaryQuantity})` : `${batch.primaryQuantity}`;
+    const batchName = batch.batchNumber || `sl/${dateStr}/${qtyPart}*${batch.purchaseRate}`;
     
     const { data, error } = await supabase.from('batches').insert({
       item_id: batch.itemId,

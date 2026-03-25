@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { generateDailyBillNumber, purchaseTypePrefixMap } from '@/lib/billNumbers';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -198,21 +199,16 @@ export function PurchaseInlineEntry({
 
   // Generate bill number
   useEffect(() => {
-    if (!editingTransaction && ['purchase_bill_a', 'purchase_bill_b', 'purchase_bill_c', 'purchase_return_a', 'purchase_return_b'].includes(entry.type)) {
+    if (!editingTransaction && ['purchase_bill_a', 'purchase_bill_b', 'purchase_bill_c', 'purchase_return_a', 'purchase_return_b', 'purchase_payment', 'purchase_expenses', 'purchase_delivered'].includes(entry.type)) {
       generateBillNumber();
     }
   }, [entry.type, editingTransaction]);
 
   const generateBillNumber = async () => {
-    const prefix = 'PB';
-    const { data } = await supabase.from('transactions').select('bill_number')
-      .like('bill_number', `${prefix}%`).order('created_at', { ascending: false }).limit(1);
-    let next = 1;
-    if (data?.[0]?.bill_number) {
-      const last = parseInt(data[0].bill_number.replace(prefix, ''), 10);
-      if (!isNaN(last)) next = last + 1;
-    }
-    setEntry(prev => ({ ...prev, billNumber: `${prefix}${next.toString().padStart(4, '0')}` }));
+    const prefix = purchaseTypePrefixMap[entry.type];
+    if (!prefix) return;
+    const billNumber = await generateDailyBillNumber(prefix, selectedDate);
+    setEntry(prev => ({ ...prev, billNumber }));
   };
 
   const selectSupplier = (s: SupplierResult) => {

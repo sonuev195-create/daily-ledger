@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { searchCustomers, getDueBillsForCustomer, getOrCreateCustomer, saveBillToSupabase, deductFromBatch, getBatchesForItem, getBillItemsForTransaction, restoreInventoryForBillItems, planBatchAllocations } from '@/hooks/useSupabaseData';
+import { generateDailyBillNumber, customerTypePrefixMap } from '@/lib/billNumbers';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -250,36 +251,10 @@ export function CustomerInlineEntry({
   }, [editingTransaction]);
 
   const generateBillNumber = async (type: CustomerSubType) => {
-    const prefixMap: Record<CustomerSubType, string> = {
-      sale: 'S', sales_return: 'SR', balance_paid: 'BP', customer_advance: 'CA',
-    };
-    const prefix = prefixMap[type];
-
-    // Check settings for sale bill series start
-    if (type === 'sale') {
-      const { data: settings } = await supabase.from('bill_format_config')
-        .select('*').eq('config_name', 'bill_series_start').maybeSingle();
-      const startNum = settings ? parseInt((settings as any).total_columns?.toString() || '1') : 1;
-      
-      const { data } = await supabase.from('transactions').select('bill_number')
-        .like('bill_number', `${prefix}%`).order('created_at', { ascending: false }).limit(1);
-      let nextNum = startNum;
-      if (data?.[0]?.bill_number) {
-        const lastNum = parseInt(data[0].bill_number.replace(prefix, ''), 10);
-        if (!isNaN(lastNum)) nextNum = Math.max(startNum, lastNum + 1);
-      }
-      setEntry(prev => ({ ...prev, billNumber: `${prefix}${nextNum.toString().padStart(4, '0')}` }));
-      return;
-    }
-
-    const { data } = await supabase.from('transactions').select('bill_number')
-      .like('bill_number', `${prefix}%`).order('created_at', { ascending: false }).limit(1);
-    let nextNum = 1;
-    if (data?.[0]?.bill_number) {
-      const lastNum = parseInt(data[0].bill_number.replace(prefix, ''), 10);
-      if (!isNaN(lastNum)) nextNum = lastNum + 1;
-    }
-    setEntry(prev => ({ ...prev, billNumber: `${prefix}${nextNum.toString().padStart(4, '0')}` }));
+    const prefix = customerTypePrefixMap[type];
+    if (!prefix) return;
+    const billNumber = await generateDailyBillNumber(prefix, selectedDate);
+    setEntry(prev => ({ ...prev, billNumber }));
   };
 
   useEffect(() => {
@@ -303,26 +278,28 @@ export function CustomerInlineEntry({
 
   useEffect(() => {
     if (entry.type === 'balance_paid' && entry.customerId) {
-      // Fetch both due bills and customer's total due balance
+      // Fetch due bills AND opening_due transactions with remaining due
       Promise.all([
         getDueBillsForCustomer(entry.customerQuery),
-        supabase.from('customers').select('due_balance').eq('id', entry.customerId).single(),
-      ]).then(([bills, { data: custData }]) => {
-        const totalDue = Number(custData?.due_balance || 0);
-        const billDueTotal = bills.reduce((s, b) => s + b.dueAmount, 0);
-        const openingDue = Math.max(0, totalDue - billDueTotal);
-        setCustomerTotalDue(totalDue);
-        // If there's opening due, add it as a virtual "bill" entry
-        const allBills = [...bills];
-        if (openingDue > 0) {
+        supabase.from('transactions')
+          .select('id, bill_number, amount, due, date')
+          .eq('customer_id', entry.customerId)
+          .eq('type', 'opening_due')
+          .gt('due', 0)
+          .order('date'),
+      ]).then(([bills, { data: openingDues }]) => {
+        const allBills: DueBill[] = [...bills];
+        // Add opening due transactions as selectable bills  
+        (openingDues || []).forEach((od, idx) => {
           allBills.push({
-            id: '__opening_due__',
-            billNumber: 'Opening Due',
-            totalAmount: openingDue,
-            dueAmount: openingDue,
-            createdAt: new Date(0),
+            id: od.id,
+            billNumber: od.bill_number || `Opening Due ${idx + 1}`,
+            totalAmount: Number(od.amount),
+            dueAmount: Number(od.due),
+            createdAt: new Date(od.date),
           });
-        }
+        });
+        setCustomerTotalDue(allBills.reduce((s, b) => s + b.dueAmount, 0));
         setEntry(prev => ({ ...prev, dueBills: allBills }));
       });
     } else if (entry.type === 'balance_paid' && entry.customerQuery.length >= 2) {
@@ -575,16 +552,13 @@ export function CustomerInlineEntry({
 
       if (finalCustomerId) {
         if (entry.type === 'balance_paid') {
-          const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id) && b.id !== '__opening_due__');
+          const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id));
           let remaining = totalPayments;
           for (const bill of selectedDueBills) {
             const payForBill = Math.min(remaining, bill.dueAmount);
             remaining -= payForBill;
             await supabase.from('transactions').update({ due: bill.dueAmount - payForBill }).eq('id', bill.id);
           }
-            if (entry.selectedBills.includes('__opening_due__') && remaining > 0) {
-              remaining = 0;
-            }
         }
 
         // Auto-create Customer Advance transaction for overpayment saved as advance
@@ -594,14 +568,7 @@ export function CustomerInlineEntry({
           const advanceAmount = overpaymentAmt - totalGivenBack;
           if (advanceAmount > 0) {
             // Generate CA bill number
-            const { data: lastCA } = await supabase.from('transactions').select('bill_number')
-              .like('bill_number', 'CA%').order('created_at', { ascending: false }).limit(1);
-            let caNum = 1;
-            if (lastCA?.[0]?.bill_number) {
-              const n = parseInt(lastCA[0].bill_number.replace('CA', ''), 10);
-              if (!isNaN(n)) caNum = n + 1;
-            }
-            const caBillNumber = `CA${caNum.toString().padStart(4, '0')}`;
+            const caBillNumber = await generateDailyBillNumber('CA', selectedDate);
 
             const advanceTxn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
               date: selectedDate,
@@ -741,17 +708,10 @@ export function CustomerInlineEntry({
             </div>
             <div className="max-h-40 overflow-y-auto divide-y divide-border/30">
               {entry.dueBills.map(bill => (
-                <label key={bill.id} className={cn(
-                  "flex items-center gap-2 px-2 py-1.5 hover:bg-secondary/20 cursor-pointer text-xs",
-                  bill.id === '__opening_due__' && "bg-warning/5"
-                )}>
+                <label key={bill.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-secondary/20 cursor-pointer text-xs">
                   <Checkbox checked={entry.selectedBills.includes(bill.id)} onCheckedChange={() => toggleBillSelection(bill.id)} />
-                  <span className={cn("font-medium", bill.id === '__opening_due__' ? "text-warning" : "")}>
-                    {bill.billNumber || '-'}
-                  </span>
-                  {bill.id !== '__opening_due__' && (
-                    <span className="text-muted-foreground">{format(bill.createdAt, 'dd MMM')}</span>
-                  )}
+                  <span className="font-medium">{bill.billNumber || '-'}</span>
+                  <span className="text-muted-foreground">{format(bill.createdAt, 'dd MMM')}</span>
                   <span className="ml-auto text-warning font-medium">{formatINR(bill.dueAmount)}</span>
                 </label>
               ))}

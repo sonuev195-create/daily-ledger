@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Item, Category, Batch, BatchPreference } from '@/types';
+import { format } from 'date-fns';
 
 // Categories
 export function useCategories() {
@@ -200,8 +201,10 @@ export function useBatches(itemId?: string) {
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
 
   const addBatch = async (batch: Omit<Batch, 'id' | 'createdAt'>) => {
-    // Auto generate batch name as qty*rate
-    const batchName = batch.batchNumber || `${batch.primaryQuantity}*${batch.purchaseRate}`;
+    // Auto generate batch name as sl/date/qty*rate
+    const dateStr = format(batch.purchaseDate, 'yyyy.MM.dd');
+    const qtyPart = batch.secondaryQuantity > 0 ? `${batch.primaryQuantity}(${batch.secondaryQuantity})` : `${batch.primaryQuantity}`;
+    const batchName = batch.batchNumber || `sl/${dateStr}/${qtyPart}*${batch.purchaseRate}`;
     
     const { data, error } = await supabase.from('batches').insert({
       item_id: batch.itemId,
@@ -264,7 +267,7 @@ export async function getAllCategoriesAsync(): Promise<Category[]> {
   }));
 }
 
-// Create batch from purchase with auto batch name (serial/date/qty*rate)
+// Create batch from purchase with auto batch name (sl/date/qty(secQty)*rate)
 export async function createBatchFromPurchase(
   itemId: string,
   itemName: string,
@@ -277,7 +280,6 @@ export async function createBatchFromPurchase(
   let actualItemId = itemId;
   
   if (!itemId) {
-    // Create the item first
     const { data: newItem, error: itemError } = await supabase
       .from('items')
       .insert({
@@ -292,19 +294,12 @@ export async function createBatchFromPurchase(
     actualItemId = newItem.id;
   }
   
-  // Get the next serial number for this item
-  const { data: existingBatches } = await supabase
-    .from('batches')
-    .select('batch_number')
-    .eq('item_id', actualItemId)
-    .order('created_at', { ascending: true });
-  
-  // Serial starts from 0 for opening, 1 for first purchase, etc.
-  const nextSerial = existingBatches ? existingBatches.length : 0;
   const purchaseDate = new Date().toISOString().split('T')[0];
+  const dateStr = format(new Date(), 'yyyy.MM.dd');
   
-  // Batch name format: serial/date/qty*rate
-  const batchName = `${nextSerial}/${purchaseDate}/${primaryQty}*${rate}`;
+  // Batch name format: sl/YYYY.MM.DD/qty(secQty if)*rate
+  const qtyPart = secondaryQty > 0 ? `${primaryQty}(${secondaryQty})` : `${primaryQty}`;
+  const batchName = `sl/${dateStr}/${qtyPart}*${rate}`;
   
   // Create the batch
   const { data, error } = await supabase

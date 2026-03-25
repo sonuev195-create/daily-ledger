@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { generateDailyBillNumber, employeeTypePrefixMap } from '@/lib/billNumbers';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -281,7 +282,7 @@ export function EmployeeInlineEntry({
           amount: parseFloat(row.daySalary) || 0,
           payments: [],
           employeeId: row.employeeId,
-          billNumber: `EM${Date.now().toString().slice(-6)}`,
+          billNumber: await generateDailyBillNumber('EM', selectedDate),
           reference: row.rateWorkTypeId || undefined,
         };
         await onSave(txn);
@@ -316,7 +317,7 @@ export function EmployeeInlineEntry({
         amount: parseFloat(allowanceAmount),
         payments: [],
         employeeId: allowanceEmployeeId,
-        billNumber: `EA${Date.now().toString().slice(-6)}`,
+        billNumber: await generateDailyBillNumber('EA', selectedDate),
         allowanceCategoryId: allowanceCategoryId,
         reference: allowanceCategoryId,
       };
@@ -346,7 +347,7 @@ export function EmployeeInlineEntry({
         amount: parseFloat(rateWorkAmount),
         payments: [],
         employeeId: rateWorkEmployeeId,
-        billNumber: `RW${Date.now().toString().slice(-6)}`,
+        billNumber: await generateDailyBillNumber('RW', selectedDate),
         rateWorkTypeId: rateWorkTypeId,
         reference: rateWorkTypeId,
       };
@@ -377,7 +378,7 @@ export function EmployeeInlineEntry({
         amount: 0,
         payments: paymentPayments.filter(p => p.amount > 0),
         employeeId: paymentEmployeeId,
-        billNumber: `EP${Date.now().toString().slice(-6)}`,
+        billNumber: await generateDailyBillNumber('EP', selectedDate),
         reference: paymentDueType,
       };
       await onSave(txn);
@@ -407,7 +408,7 @@ export function EmployeeInlineEntry({
         amount: 0,
         payments: paymentPayments.filter(p => p.amount > 0),
         employeeId: paymentEmployeeId,
-        billNumber: `EAD${Date.now().toString().slice(-6)}`,
+        billNumber: await generateDailyBillNumber('EP', selectedDate),
         reference: 'advance',
       };
       await onSave(txn);

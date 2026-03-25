@@ -10,6 +10,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { generateDailyBillNumber } from '@/lib/billNumbers';
+import { v4 as uuidv4 } from 'uuid';
 
 interface Customer {
   id: string;
@@ -43,7 +45,7 @@ export default function CustomersPage() {
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formDue, setFormDue] = useState('0');
-
+  const [formDueDate, setFormDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   useEffect(() => { fetchCustomers(); }, []);
 
   const fetchCustomers = async () => {
@@ -70,17 +72,37 @@ export default function CustomersPage() {
   const handleSaveCustomer = async () => {
     if (!formName.trim()) { toast.error('Name is required'); return; }
     try {
+      const dueAmount = parseFloat(formDue) || 0;
+      
       if (editCustomer) {
         await supabase.from('customers').update({
           name: formName, phone: formPhone || null, address: formAddress || null,
-          due_balance: parseFloat(formDue) || 0,
         }).eq('id', editCustomer.id);
         toast.success('Customer updated');
       } else {
-        await supabase.from('customers').insert({
+        const { data: newCust } = await supabase.from('customers').insert({
           name: formName, phone: formPhone || null, address: formAddress || null,
-          due_balance: parseFloat(formDue) || 0,
-        });
+          due_balance: 0,
+        }).select().single();
+        
+        // If opening due provided, create an opening_due transaction
+        if (newCust && dueAmount > 0) {
+          const billNumber = await generateDailyBillNumber('OD', new Date(formDueDate));
+          await supabase.from('transactions').insert({
+            id: uuidv4(),
+            date: formDueDate,
+            section: 'sale',
+            type: 'opening_due',
+            amount: dueAmount,
+            payments: [],
+            customer_id: newCust.id,
+            customer_name: formName,
+            bill_number: billNumber,
+            due: dueAmount,
+          });
+          // Sync balance
+          await supabase.from('customers').update({ due_balance: dueAmount }).eq('id', newCust.id);
+        }
         toast.success('Customer added');
       }
       closeForm(); fetchCustomers();
@@ -107,6 +129,7 @@ export default function CustomersPage() {
   const closeForm = () => {
     setIsAddOpen(false); setEditCustomer(null);
     setFormName(''); setFormPhone(''); setFormAddress(''); setFormDue('0');
+    setFormDueDate(format(new Date(), 'yyyy-MM-dd'));
   };
 
   const filtered = customers.filter(c =>
@@ -266,7 +289,14 @@ export default function CustomersPage() {
             <div><label className="text-sm font-medium">Name *</label><Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Customer name" className="mt-1" /></div>
             <div><label className="text-sm font-medium">Phone</label><Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="Mobile number" className="mt-1" /></div>
             <div><label className="text-sm font-medium">Address</label><Input value={formAddress} onChange={e => setFormAddress(e.target.value)} placeholder="Address" className="mt-1" /></div>
-            <div><label className="text-sm font-medium">Previous Due</label><Input type="number" value={formDue} onChange={e => setFormDue(e.target.value)} placeholder="0" className="mt-1" /></div>
+            {!editCustomer && (
+              <>
+                <div><label className="text-sm font-medium">Opening Due</label><Input type="number" value={formDue} onChange={e => setFormDue(e.target.value)} placeholder="0" className="mt-1" /></div>
+                {parseFloat(formDue) > 0 && (
+                  <div><label className="text-sm font-medium">Due Date</label><Input type="date" value={formDueDate} onChange={e => setFormDueDate(e.target.value)} className="mt-1" /></div>
+                )}
+              </>
+            )}
             <Button onClick={handleSaveCustomer} className="w-full">{editCustomer ? 'Update' : 'Add Customer'}</Button>
           </div>
         </SheetContent>

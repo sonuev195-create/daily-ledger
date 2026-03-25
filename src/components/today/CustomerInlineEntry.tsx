@@ -569,14 +569,7 @@ export function CustomerInlineEntry({
           const advanceAmount = overpaymentAmt - totalGivenBack;
           if (advanceAmount > 0) {
             // Generate CA bill number
-            const { data: lastCA } = await supabase.from('transactions').select('bill_number')
-              .like('bill_number', 'CA%').order('created_at', { ascending: false }).limit(1);
-            let caNum = 1;
-            if (lastCA?.[0]?.bill_number) {
-              const n = parseInt(lastCA[0].bill_number.replace('CA', ''), 10);
-              if (!isNaN(n)) caNum = n + 1;
-            }
-            const caBillNumber = `CA${caNum.toString().padStart(4, '0')}`;
+            const caBillNumber = await generateDailyBillNumber('CA', selectedDate);
 
             const advanceTxn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
               date: selectedDate,

@@ -278,26 +278,28 @@ export function CustomerInlineEntry({
 
   useEffect(() => {
     if (entry.type === 'balance_paid' && entry.customerId) {
-      // Fetch both due bills and customer's total due balance
+      // Fetch due bills AND opening_due transactions with remaining due
       Promise.all([
         getDueBillsForCustomer(entry.customerQuery),
-        supabase.from('customers').select('due_balance').eq('id', entry.customerId).single(),
-      ]).then(([bills, { data: custData }]) => {
-        const totalDue = Number(custData?.due_balance || 0);
-        const billDueTotal = bills.reduce((s, b) => s + b.dueAmount, 0);
-        const openingDue = Math.max(0, totalDue - billDueTotal);
-        setCustomerTotalDue(totalDue);
-        // If there's opening due, add it as a virtual "bill" entry
-        const allBills = [...bills];
-        if (openingDue > 0) {
+        supabase.from('transactions')
+          .select('id, bill_number, amount, due, date')
+          .eq('customer_id', entry.customerId)
+          .eq('type', 'opening_due')
+          .gt('due', 0)
+          .order('date'),
+      ]).then(([bills, { data: openingDues }]) => {
+        const allBills: DueBill[] = [...bills];
+        // Add opening due transactions as selectable bills  
+        (openingDues || []).forEach((od, idx) => {
           allBills.push({
-            id: '__opening_due__',
-            billNumber: 'Opening Due',
-            totalAmount: openingDue,
-            dueAmount: openingDue,
-            createdAt: new Date(0),
+            id: od.id,
+            billNumber: od.bill_number || `Opening Due ${idx + 1}`,
+            totalAmount: Number(od.amount),
+            dueAmount: Number(od.due),
+            createdAt: new Date(od.date),
           });
-        }
+        });
+        setCustomerTotalDue(allBills.reduce((s, b) => s + b.dueAmount, 0));
         setEntry(prev => ({ ...prev, dueBills: allBills }));
       });
     } else if (entry.type === 'balance_paid' && entry.customerQuery.length >= 2) {

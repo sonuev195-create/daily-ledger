@@ -557,9 +557,21 @@ export function CustomerInlineEntry({
             remaining -= payForBill;
             await supabase.from('transactions').update({ due: bill.dueAmount - payForBill }).eq('id', bill.id);
           }
-            if (entry.selectedBills.includes('__opening_due__') && remaining > 0) {
-              remaining = 0;
+          // Handle opening due payment - find opening_due transactions and reduce their due
+          if (entry.selectedBills.includes('__opening_due__') && remaining > 0) {
+            const { data: openingDueTxns } = await supabase.from('transactions')
+              .select('id, amount, due')
+              .eq('customer_id', finalCustomerId)
+              .eq('type', 'opening_due')
+              .gt('due', 0)
+              .order('date');
+            for (const odTxn of (openingDueTxns || [])) {
+              if (remaining <= 0) break;
+              const payForOd = Math.min(remaining, Number(odTxn.due));
+              remaining -= payForOd;
+              await supabase.from('transactions').update({ due: Number(odTxn.due) - payForOd }).eq('id', odTxn.id);
             }
+          }
         }
 
         // Auto-create Customer Advance transaction for overpayment saved as advance

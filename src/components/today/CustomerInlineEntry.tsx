@@ -708,17 +708,10 @@ export function CustomerInlineEntry({
             </div>
             <div className="max-h-40 overflow-y-auto divide-y divide-border/30">
               {entry.dueBills.map(bill => (
-                <label key={bill.id} className={cn(
-                  "flex items-center gap-2 px-2 py-1.5 hover:bg-secondary/20 cursor-pointer text-xs",
-                  bill.id === '__opening_due__' && "bg-warning/5"
-                )}>
+                <label key={bill.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-secondary/20 cursor-pointer text-xs">
                   <Checkbox checked={entry.selectedBills.includes(bill.id)} onCheckedChange={() => toggleBillSelection(bill.id)} />
-                  <span className={cn("font-medium", bill.id === '__opening_due__' ? "text-warning" : "")}>
-                    {bill.billNumber || '-'}
-                  </span>
-                  {bill.id !== '__opening_due__' && (
-                    <span className="text-muted-foreground">{format(bill.createdAt, 'dd MMM')}</span>
-                  )}
+                  <span className="font-medium">{bill.billNumber || '-'}</span>
+                  <span className="text-muted-foreground">{format(bill.createdAt, 'dd MMM')}</span>
                   <span className="ml-auto text-warning font-medium">{formatINR(bill.dueAmount)}</span>
                 </label>
               ))}

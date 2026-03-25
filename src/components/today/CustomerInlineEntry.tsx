@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { searchCustomers, getDueBillsForCustomer, getOrCreateCustomer, saveBillToSupabase, deductFromBatch, getBatchesForItem, getBillItemsForTransaction, restoreInventoryForBillItems, planBatchAllocations } from '@/hooks/useSupabaseData';
+import { generateDailyBillNumber, customerTypePrefixMap } from '@/lib/billNumbers';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -250,36 +251,10 @@ export function CustomerInlineEntry({
   }, [editingTransaction]);
 
   const generateBillNumber = async (type: CustomerSubType) => {
-    const prefixMap: Record<CustomerSubType, string> = {
-      sale: 'S', sales_return: 'SR', balance_paid: 'BP', customer_advance: 'CA',
-    };
-    const prefix = prefixMap[type];
-
-    // Check settings for sale bill series start
-    if (type === 'sale') {
-      const { data: settings } = await supabase.from('bill_format_config')
-        .select('*').eq('config_name', 'bill_series_start').maybeSingle();
-      const startNum = settings ? parseInt((settings as any).total_columns?.toString() || '1') : 1;
-      
-      const { data } = await supabase.from('transactions').select('bill_number')
-        .like('bill_number', `${prefix}%`).order('created_at', { ascending: false }).limit(1);
-      let nextNum = startNum;
-      if (data?.[0]?.bill_number) {
-        const lastNum = parseInt(data[0].bill_number.replace(prefix, ''), 10);
-        if (!isNaN(lastNum)) nextNum = Math.max(startNum, lastNum + 1);
-      }
-      setEntry(prev => ({ ...prev, billNumber: `${prefix}${nextNum.toString().padStart(4, '0')}` }));
-      return;
-    }
-
-    const { data } = await supabase.from('transactions').select('bill_number')
-      .like('bill_number', `${prefix}%`).order('created_at', { ascending: false }).limit(1);
-    let nextNum = 1;
-    if (data?.[0]?.bill_number) {
-      const lastNum = parseInt(data[0].bill_number.replace(prefix, ''), 10);
-      if (!isNaN(lastNum)) nextNum = lastNum + 1;
-    }
-    setEntry(prev => ({ ...prev, billNumber: `${prefix}${nextNum.toString().padStart(4, '0')}` }));
+    const prefix = customerTypePrefixMap[type];
+    if (!prefix) return;
+    const billNumber = await generateDailyBillNumber(prefix, selectedDate);
+    setEntry(prev => ({ ...prev, billNumber }));
   };
 
   useEffect(() => {

@@ -288,7 +288,8 @@ async function syncPartyBalancesFromTransactions(): Promise<void> {
       } else if (tx.type === 'balance_paid') {
         customerDue.set(customerId, (customerDue.get(customerId) || 0) - amount);
       } else if (tx.type === 'opening_due') {
-        customerDue.set(customerId, (customerDue.get(customerId) || 0) + amount);
+        // Use remaining due (not original amount) since balance_paid reduces due
+        customerDue.set(customerId, (customerDue.get(customerId) || 0) + Math.max(0, due));
       }
     }
 

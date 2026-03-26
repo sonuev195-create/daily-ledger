@@ -204,7 +204,10 @@ export function useBatches(itemId?: string) {
     // Auto generate batch name as sl/date/qty*rate
     const dateStr = format(batch.purchaseDate, 'yyyy.MM.dd');
     const qtyPart = batch.secondaryQuantity > 0 ? `${batch.primaryQuantity}(${batch.secondaryQuantity})` : `${batch.primaryQuantity}`;
-    const batchName = batch.batchNumber || `sl/${dateStr}/${qtyPart}*${batch.purchaseRate}`;
+    // Get serial number for new batches
+    const { count } = await supabase.from('batches').select('*', { count: 'exact', head: true }).eq('item_id', batch.itemId);
+    const serialNo = (count || 0) + 1;
+    const batchName = batch.batchNumber || `${serialNo}/${dateStr}/${qtyPart}*${batch.purchaseRate}`;
     
     const { data, error } = await supabase.from('batches').insert({
       item_id: batch.itemId,
@@ -297,9 +300,12 @@ export async function createBatchFromPurchase(
   const purchaseDate = new Date().toISOString().split('T')[0];
   const dateStr = format(new Date(), 'yyyy.MM.dd');
   
-  // Batch name format: sl/YYYY.MM.DD/qty(secQty if)*rate
+  // Batch name format: serialNo/YYYY.MM.DD/qty(secQty if)*rate
+  // Get serial number (count of existing batches for this item + 1)
+  const { count } = await supabase.from('batches').select('*', { count: 'exact', head: true }).eq('item_id', actualItemId);
+  const serialNo = (count || 0) + 1;
   const qtyPart = secondaryQty > 0 ? `${primaryQty}(${secondaryQty})` : `${primaryQty}`;
-  const batchName = `sl/${dateStr}/${qtyPart}*${rate}`;
+  const batchName = `${serialNo}/${dateStr}/${qtyPart}*${rate}`;
   
   // Create the batch
   const { data, error } = await supabase

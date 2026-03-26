@@ -253,6 +253,7 @@ const ExpensesPage = () => {
     return categories.find(c => c.id === categoryId)?.name || 'Unknown';
   };
 
+  const itemTakenTotal = expenseItems.reduce((s, i) => s + (i.qty * i.rate), 0);
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',

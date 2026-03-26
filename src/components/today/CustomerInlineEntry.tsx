@@ -669,11 +669,11 @@ export function CustomerInlineEntry({
         </div>
 
         {/* Row 1: Bill# + Customer + Welder */}
-        <div className="grid grid-cols-3 gap-2 md:grid-cols-[1fr_2fr_1fr]">
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-[minmax(140px,1.2fr)_2fr_1fr]">
           {(entry.type === 'sale' || entry.type === 'sales_return') && (
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Bill #</label>
-              <Input value={entry.billNumber} onChange={e => setEntry(prev => ({ ...prev, billNumber: e.target.value }))} className="h-8 text-xs" />
+              <Input value={entry.billNumber} onChange={e => setEntry(prev => ({ ...prev, billNumber: e.target.value }))} className="h-8 text-[10px] font-mono" />
             </div>
           )}
 

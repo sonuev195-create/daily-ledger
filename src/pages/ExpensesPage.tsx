@@ -416,7 +416,7 @@ const ExpensesPage = () => {
 
       {/* Expense Sheet */}
       <Sheet open={expenseSheetOpen} onOpenChange={setExpenseSheetOpen}>
-        <SheetContent>
+        <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Add Expense</SheetTitle>
           </SheetHeader>
@@ -436,38 +436,75 @@ const ExpensesPage = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Amount</Label>
-              <Input
-                type="number"
-                value={expenseAmount}
-                onChange={(e) => setExpenseAmount(e.target.value)}
-                placeholder="Enter amount"
-              />
+
+            {/* Item Taken Toggle */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsItemTaken(!isItemTaken)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all",
+                  isItemTaken ? "border-accent bg-accent/10 text-accent" : "border-border bg-secondary/30 text-muted-foreground"
+                )}
+              >
+                <Package className="w-4 h-4" />
+                Item Taken
+              </button>
+              {isItemTaken && <span className="text-xs text-muted-foreground">Amount = purchase cost of items</span>}
             </div>
-            <div className="space-y-2">
-              <Label>Details (Optional)</Label>
-              <Textarea
-                value={expenseDetails}
-                onChange={(e) => setExpenseDetails(e.target.value)}
-                placeholder="Enter details"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Payment Mode</Label>
-              <Select value={paymentMode} onValueChange={setPaymentMode}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="upi">UPI</SelectItem>
-                  <SelectItem value="cheque">Cheque</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button className="w-full" onClick={handleAddExpense}>
-              Record Expense
+
+            {isItemTaken ? (
+              <div className="space-y-2">
+                <Label>Add Items</Label>
+                <ItemSearchSelect onSelect={addExpenseItem} />
+                {expenseItems.length > 0 && (
+                  <div className="space-y-1 border border-border rounded-lg p-2">
+                    {expenseItems.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs">
+                        <span className="flex-1 truncate font-medium">{item.itemName}</span>
+                        <Input type="number" value={item.qty} onChange={e => updateExpenseItem(idx, 'qty', parseInt(e.target.value) || 0)}
+                          className="h-7 w-16 text-xs" />
+                        <span className="text-muted-foreground">×</span>
+                        <Input type="number" value={item.rate} onChange={e => updateExpenseItem(idx, 'rate', parseFloat(e.target.value) || 0)}
+                          className="h-7 w-20 text-xs" />
+                        <span className="font-medium w-16 text-right">{(item.qty * item.rate).toLocaleString('en-IN')}</span>
+                        <button onClick={() => removeExpenseItem(idx)} className="text-destructive hover:bg-destructive/10 rounded p-0.5">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex justify-between pt-1 border-t border-border/50 text-sm font-semibold">
+                      <span>Total</span>
+                      <span>₹{itemTakenTotal.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Amount</Label>
+                  <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="Enter amount" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Details (Optional)</Label>
+                  <Textarea value={expenseDetails} onChange={(e) => setExpenseDetails(e.target.value)} placeholder="Enter details" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Mode</Label>
+                  <Select value={paymentMode} onValueChange={setPaymentMode}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="upi">UPI</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+
+            <Button className="w-full" onClick={handleAddExpense} disabled={isItemTaken ? expenseItems.length === 0 : false}>
+              {isItemTaken ? `Record Item Expense (₹${itemTakenTotal.toLocaleString('en-IN')})` : 'Record Expense'}
             </Button>
           </div>
         </SheetContent>

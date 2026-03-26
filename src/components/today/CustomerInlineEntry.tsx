@@ -784,7 +784,7 @@ export function CustomerInlineEntry({
               )}
             </div>
           )}
-          <div className={entry.type === 'customer_advance' || entry.type === 'balance_paid' ? 'col-span-2' : ''}>
+          <div className={entry.type === 'customer_advance' || entry.type === 'balance_paid' ? '' : ''}>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
             <div className="space-y-1">
               {entry.payments.map((p, i) => (

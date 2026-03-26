@@ -44,6 +44,9 @@ interface EntryRow {
   customerId?: string;
   customerAdvance: number;
   amount: string;
+  saleAmount: string;
+  workshopAmount: string;
+  vehicleAmount: string;
   payments: PaymentEntry[];
   useAdvance: string;
   selectedBills: string[];
@@ -63,6 +66,9 @@ const createEmptyRow = (): EntryRow => ({
   customerId: undefined,
   customerAdvance: 0,
   amount: '',
+  saleAmount: '',
+  workshopAmount: '',
+  vehicleAmount: '',
   payments: [{ id: uuidv4(), mode: 'cash', amount: 0 }],
   useAdvance: '',
   selectedBills: [],
@@ -112,7 +118,7 @@ function SaleTransactionRow({ transaction: txn, onEdit, onDelete }: { transactio
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-[10px] font-medium text-muted-foreground w-16 shrink-0 truncate">{shortCustomerTypeLabel[txn.type] || txn.type.replace(/_/g, ' ').toUpperCase()}</span>
           <span className="font-medium truncate flex-1">{txn.customerName || '-'}</span>
-          {txn.billNumber && <span className="text-[10px] text-muted-foreground shrink-0">#{txn.billNumber}</span>}
+          {txn.billNumber && <span className="text-[10px] text-muted-foreground shrink-0 max-w-[120px] truncate">#{txn.billNumber}</span>}
           <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
           <div className="flex gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
             <button onClick={() => onEdit(txn)} className="p-0.5 hover:text-accent"><Pencil className="w-3 h-3" /></button>
@@ -221,6 +227,9 @@ export function CustomerInlineEntry({
         customerId: editingTransaction.customerId,
         customerAdvance: 0,
         amount: editingTransaction.amount?.toString() || '',
+        saleAmount: '',
+        workshopAmount: '',
+        vehicleAmount: '',
         payments: editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }],
         useAdvance: '',
         selectedBills: [],
@@ -669,11 +678,11 @@ export function CustomerInlineEntry({
         </div>
 
         {/* Row 1: Bill# + Customer + Welder */}
-        <div className="grid grid-cols-3 gap-2 md:grid-cols-[1fr_2fr_1fr]">
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-[minmax(140px,1.2fr)_2fr_1fr]">
           {(entry.type === 'sale' || entry.type === 'sales_return') && (
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Bill #</label>
-              <Input value={entry.billNumber} onChange={e => setEntry(prev => ({ ...prev, billNumber: e.target.value }))} className="h-8 text-xs" />
+              <Input value={entry.billNumber} onChange={e => setEntry(prev => ({ ...prev, billNumber: e.target.value }))} className="h-8 text-[10px] font-mono" />
             </div>
           )}
 
@@ -720,16 +729,62 @@ export function CustomerInlineEntry({
         )}
 
         {/* Row 2: Amount + Payment */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
           {entry.type !== 'balance_paid' && entry.type !== 'customer_advance' && (
             <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Amount</label>
-              <Input type="number" inputMode="numeric" value={entry.amount}
-                onChange={e => setEntry(prev => ({ ...prev, amount: e.target.value }))}
-                placeholder="₹0" className="h-8 text-xs" />
+              {entry.type === 'sale' ? (
+                <div className="grid grid-cols-4 gap-1.5">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-0.5 block">Sale ₹</label>
+                    <Input type="number" inputMode="numeric" value={entry.saleAmount}
+                      onChange={e => {
+                        const sale = parseFloat(e.target.value) || 0;
+                        const workshop = parseFloat(entry.workshopAmount) || 0;
+                        const vehicle = parseFloat(entry.vehicleAmount) || 0;
+                        setEntry(prev => ({ ...prev, saleAmount: e.target.value, amount: String(sale + workshop + vehicle) }));
+                      }}
+                      placeholder="₹0" className="h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-0.5 block">Work ₹</label>
+                    <Input type="number" inputMode="numeric" value={entry.workshopAmount}
+                      onChange={e => {
+                        const sale = parseFloat(entry.saleAmount) || 0;
+                        const workshop = parseFloat(e.target.value) || 0;
+                        const vehicle = parseFloat(entry.vehicleAmount) || 0;
+                        setEntry(prev => ({ ...prev, workshopAmount: e.target.value, amount: String(sale + workshop + vehicle) }));
+                      }}
+                      placeholder="₹0" className="h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-0.5 block">Veh ₹</label>
+                    <Input type="number" inputMode="numeric" value={entry.vehicleAmount}
+                      onChange={e => {
+                        const sale = parseFloat(entry.saleAmount) || 0;
+                        const workshop = parseFloat(entry.workshopAmount) || 0;
+                        const vehicle = parseFloat(e.target.value) || 0;
+                        setEntry(prev => ({ ...prev, vehicleAmount: e.target.value, amount: String(sale + workshop + vehicle) }));
+                      }}
+                      placeholder="₹0" className="h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-0.5 block">Total ₹</label>
+                    <Input type="number" inputMode="numeric" value={entry.amount}
+                      onChange={e => setEntry(prev => ({ ...prev, amount: e.target.value }))}
+                      placeholder="₹0" className="h-8 text-xs font-semibold" />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-0.5 block">Amount</label>
+                  <Input type="number" inputMode="numeric" value={entry.amount}
+                    onChange={e => setEntry(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="₹0" className="h-8 text-xs" />
+                </div>
+              )}
             </div>
           )}
-          <div className={entry.type === 'customer_advance' || entry.type === 'balance_paid' ? 'col-span-2' : ''}>
+          <div className={entry.type === 'customer_advance' || entry.type === 'balance_paid' ? '' : ''}>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
             <div className="space-y-1">
               {entry.payments.map((p, i) => (

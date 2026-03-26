@@ -40,10 +40,10 @@ interface BulkItemEditProps {
 
 /**
  * Batch name format:
- * Opening: op/YYYY.MM.DD/qty(secQty if)*rate
- * Purchase: sl/YYYY.MM.DD/qty(secQty if)*rate
+ * Opening: OP/date/qty(secQty if)*rate
+ * Purchase: serialNo/date/qty(secQty if)*rate
  */
-function formatBatchName(prefix: 'op' | 'sl', date: string, primaryQty: number, secondaryQty: number, rate: number): string {
+function formatBatchName(prefix: string, date: string, primaryQty: number, secondaryQty: number, rate: number): string {
   const dateStr = format(new Date(date), 'yyyy.MM.dd');
   const qtyPart = secondaryQty > 0 ? `${primaryQty}(${secondaryQty})` : `${primaryQty}`;
   return `${prefix}/${dateStr}/${qtyPart}*${rate}`;
@@ -165,13 +165,13 @@ export function BulkItemEdit({ onClose, onSaved }: BulkItemEditProps) {
       .select('*').eq('item_id', itemId).order('purchase_date');
 
     if (batches && batches.length > 0) {
-      const openBatch = batches.find(b => b.batch_number?.startsWith('op/') || b.batch_number?.includes('Opening')) || batches[0];
+      const openBatch = batches.find(b => b.batch_number?.startsWith('OP/') || b.batch_number?.startsWith('op/') || b.batch_number?.includes('Opening')) || batches[0];
       await supabase.from('batches').update({
         primary_quantity: Number(openBatch.primary_quantity) + diffPrimary,
         secondary_quantity: Number(openBatch.secondary_quantity) + diffSecondary,
       }).eq('id', openBatch.id);
     } else {
-      const batchName = formatBatchName('op', adjustDate, targetPrimary, targetSecondary, 0);
+      const batchName = formatBatchName('OP', adjustDate, targetPrimary, targetSecondary, 0);
       await supabase.from('batches').insert({
         item_id: itemId,
         batch_number: batchName,
@@ -243,10 +243,10 @@ export function BulkItemEdit({ onClose, onSaved }: BulkItemEditProps) {
             .select('*').eq('item_id', item.id).order('purchase_date');
 
           if (batches && batches.length > 0) {
-            const openBatch = batches.find(b => b.batch_number?.startsWith('op/') || b.batch_number?.includes('Opening')) || batches[0];
+            const openBatch = batches.find(b => b.batch_number?.startsWith('OP/') || b.batch_number?.startsWith('op/') || b.batch_number?.includes('Opening')) || batches[0];
             const newPri = Number(openBatch.primary_quantity) + diff;
             const newSec = Number(openBatch.secondary_quantity) + secDiff;
-            const batchName = formatBatchName('op', openBatch.purchase_date, newPri, newSec, newRate || Number(openBatch.purchase_rate));
+            const batchName = formatBatchName('OP', openBatch.purchase_date, newPri, newSec, newRate || Number(openBatch.purchase_rate));
             await supabase.from('batches').update({
               primary_quantity: newPri,
               secondary_quantity: newSec,
@@ -255,7 +255,7 @@ export function BulkItemEdit({ onClose, onSaved }: BulkItemEditProps) {
             }).eq('id', openBatch.id);
           } else if (diff !== 0 || secDiff !== 0) {
             const today = new Date().toISOString().split('T')[0];
-            const batchName = formatBatchName('op', today, newPrimary, newSecondary, newRate);
+            const batchName = formatBatchName('OP', today, newPrimary, newSecondary, newRate);
             await supabase.from('batches').insert({
               item_id: item.id,
               batch_number: batchName,
@@ -315,18 +315,18 @@ export function BulkItemEdit({ onClose, onSaved }: BulkItemEditProps) {
 
       <div className="flex-1 overflow-auto">
         {/* Horizontally scrollable table */}
-        <div className="min-w-[900px]">
-          {/* Header: Name, Paper Bill Name, Category, Op.Pri, Op.Sec, Pur.Rate, Sell Rate, Batch Pref, Adj */}
+        <div className="min-w-[950px]">
+          {/* Header: Name, Paper Bill Name, Category, Op.Pri, Op.Sec, Pur.Rate, Sell Rate, Conv, Adj */}
           <div className="grid grid-cols-[minmax(130px,1fr)_100px_90px_65px_65px_65px_65px_80px_36px] gap-1 px-3 py-2 bg-secondary/50 text-[10px] font-medium text-muted-foreground sticky top-0 z-10">
             {sameRateMode && <span className="w-5"></span>}
             <span>Name</span>
             <span>Paper Name</span>
             <span>Category</span>
-            <span>Pri.Stk</span>
-            <span>Sec.Stk</span>
+            <span>Op.Pri</span>
+            <span>Op.Sec</span>
             <span>Pur.₹</span>
             <span>Sell.₹</span>
-            <span>Batch Pref</span>
+            <span>Conv</span>
             <span>Adj</span>
           </div>
 
@@ -394,8 +394,8 @@ export function BulkItemEdit({ onClose, onSaved }: BulkItemEditProps) {
                   onChange={e => updateField(i, 'newBatchPreference', e.target.value)}
                   className="h-7 text-xs px-1 bg-background border border-input rounded"
                 >
-                  <option value="category">Category</option>
-                  <option value="oldest">Oldest</option>
+                  <option value="category">Fixed</option>
+                  <option value="oldest">Batch</option>
                   <option value="latest">Latest</option>
                 </select>
                 <button

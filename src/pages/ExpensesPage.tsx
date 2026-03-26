@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Plus, Edit2, Trash2, Folder, Receipt } from 'lucide-react';
+import { Plus, Edit2, Trash2, Folder, Receipt, Package } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
+import { useItems, deductFromBatch, planBatchAllocations } from '@/hooks/useSupabaseData';
 
 interface ExpenseCategory {
   id: string;
@@ -49,6 +52,9 @@ const ExpensesPage = () => {
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseDetails, setExpenseDetails] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
+  const [isItemTaken, setIsItemTaken] = useState(false);
+  const [expenseItems, setExpenseItems] = useState<{ itemId: string; itemName: string; qty: number; rate: number }[]>([]);
+  const { items: allItems } = useItems();
 
   useEffect(() => {
     fetchCategories();
@@ -156,13 +162,32 @@ const ExpensesPage = () => {
       toast.error('Please select a category');
       return;
     }
-    if (!expenseAmount || parseFloat(expenseAmount) <= 0) {
-      toast.error('Please enter a valid amount');
-      return;
-    }
 
-    const amount = parseFloat(expenseAmount);
-    const payments = [{ mode: paymentMode, amount }];
+    let amount: number;
+    let payments: { mode: string; amount: number }[];
+
+    if (isItemTaken && expenseItems.length > 0) {
+      // Item taken mode: amount = total purchase cost of items
+      amount = expenseItems.reduce((s, item) => s + (item.qty * item.rate), 0);
+      payments = []; // No payment mode needed for item taken
+      
+      // Deduct inventory
+      for (const item of expenseItems) {
+        if (item.itemId) {
+          const { allocations } = await planBatchAllocations(item.itemId, item.qty, 0);
+          for (const alloc of allocations) {
+            await deductFromBatch(alloc.batchId, alloc.primaryQty, alloc.secondaryQty);
+          }
+        }
+      }
+    } else {
+      if (!expenseAmount || parseFloat(expenseAmount) <= 0) {
+        toast.error('Please enter a valid amount');
+        return;
+      }
+      amount = parseFloat(expenseAmount);
+      payments = [{ mode: paymentMode, amount }];
+    }
 
     // Generate bill number
     const today = format(new Date(), 'yyyyMMdd');
@@ -178,11 +203,13 @@ const ExpensesPage = () => {
       .from('transactions')
       .insert({
         section: 'expenses',
-        type: 'out',
+        type: isItemTaken ? 'item_taken' : 'out',
         amount,
         payments,
         expense_category_id: selectedCategoryId,
-        reference: expenseDetails || null,
+        reference: isItemTaken 
+          ? `Items: ${expenseItems.map(i => `${i.itemName}×${i.qty}`).join(', ')}`
+          : (expenseDetails || null),
         bill_number: billNumber,
         date: format(new Date(), 'yyyy-MM-dd')
       });
@@ -198,14 +225,35 @@ const ExpensesPage = () => {
     setExpenseAmount('');
     setExpenseDetails('');
     setPaymentMode('cash');
+    setIsItemTaken(false);
+    setExpenseItems([]);
     fetchExpenses();
   };
+
+  const addExpenseItem = (itemId: string) => {
+    const item = allItems.find(i => i.id === itemId);
+    if (!item) return;
+    // Get avg purchase rate from batches
+    supabase.from('batches').select('purchase_rate, primary_quantity').eq('item_id', itemId).then(({ data }) => {
+      const totalQty = (data || []).reduce((s, b) => s + Number(b.primary_quantity), 0);
+      const totalVal = (data || []).reduce((s, b) => s + Number(b.purchase_rate) * Number(b.primary_quantity), 0);
+      const avgRate = totalQty > 0 ? totalVal / totalQty : 0;
+      setExpenseItems(prev => [...prev, { itemId, itemName: item.name, qty: 1, rate: Math.round(avgRate) }]);
+    });
+  };
+
+  const removeExpenseItem = (idx: number) => setExpenseItems(prev => prev.filter((_, i) => i !== idx));
+  const updateExpenseItem = (idx: number, field: 'qty' | 'rate', value: number) => {
+    setExpenseItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
+  };
+
 
   const getCategoryName = (categoryId: string | null) => {
     if (!categoryId) return 'Uncategorized';
     return categories.find(c => c.id === categoryId)?.name || 'Unknown';
   };
 
+  const itemTakenTotal = expenseItems.reduce((s, i) => s + (i.qty * i.rate), 0);
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -369,7 +417,7 @@ const ExpensesPage = () => {
 
       {/* Expense Sheet */}
       <Sheet open={expenseSheetOpen} onOpenChange={setExpenseSheetOpen}>
-        <SheetContent>
+        <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Add Expense</SheetTitle>
           </SheetHeader>
@@ -389,38 +437,79 @@ const ExpensesPage = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Amount</Label>
-              <Input
-                type="number"
-                value={expenseAmount}
-                onChange={(e) => setExpenseAmount(e.target.value)}
-                placeholder="Enter amount"
-              />
+
+            {/* Item Taken Toggle */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsItemTaken(!isItemTaken)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all",
+                  isItemTaken ? "border-accent bg-accent/10 text-accent" : "border-border bg-secondary/30 text-muted-foreground"
+                )}
+              >
+                <Package className="w-4 h-4" />
+                Item Taken
+              </button>
+              {isItemTaken && <span className="text-xs text-muted-foreground">Amount = purchase cost of items</span>}
             </div>
-            <div className="space-y-2">
-              <Label>Details (Optional)</Label>
-              <Textarea
-                value={expenseDetails}
-                onChange={(e) => setExpenseDetails(e.target.value)}
-                placeholder="Enter details"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Payment Mode</Label>
-              <Select value={paymentMode} onValueChange={setPaymentMode}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="upi">UPI</SelectItem>
-                  <SelectItem value="cheque">Cheque</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button className="w-full" onClick={handleAddExpense}>
-              Record Expense
+
+            {isItemTaken ? (
+              <div className="space-y-2">
+                <Label>Add Items</Label>
+                <ItemSearchSelect 
+                  items={allItems.map(i => ({ id: i.id, name: i.name, sellingPrice: i.sellingPrice }))}
+                  value={null}
+                  onChange={(itemId) => { if (itemId) addExpenseItem(itemId); }}
+                />
+                {expenseItems.length > 0 && (
+                  <div className="space-y-1 border border-border rounded-lg p-2">
+                    {expenseItems.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs">
+                        <span className="flex-1 truncate font-medium">{item.itemName}</span>
+                        <Input type="number" value={item.qty} onChange={e => updateExpenseItem(idx, 'qty', parseInt(e.target.value) || 0)}
+                          className="h-7 w-16 text-xs" />
+                        <span className="text-muted-foreground">×</span>
+                        <Input type="number" value={item.rate} onChange={e => updateExpenseItem(idx, 'rate', parseFloat(e.target.value) || 0)}
+                          className="h-7 w-20 text-xs" />
+                        <span className="font-medium w-16 text-right">{(item.qty * item.rate).toLocaleString('en-IN')}</span>
+                        <button onClick={() => removeExpenseItem(idx)} className="text-destructive hover:bg-destructive/10 rounded p-0.5">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex justify-between pt-1 border-t border-border/50 text-sm font-semibold">
+                      <span>Total</span>
+                      <span>₹{itemTakenTotal.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Amount</Label>
+                  <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="Enter amount" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Details (Optional)</Label>
+                  <Textarea value={expenseDetails} onChange={(e) => setExpenseDetails(e.target.value)} placeholder="Enter details" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Mode</Label>
+                  <Select value={paymentMode} onValueChange={setPaymentMode}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="upi">UPI</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+
+            <Button className="w-full" onClick={handleAddExpense} disabled={isItemTaken ? expenseItems.length === 0 : false}>
+              {isItemTaken ? `Record Item Expense (₹${itemTakenTotal.toLocaleString('en-IN')})` : 'Record Expense'}
             </Button>
           </div>
         </SheetContent>

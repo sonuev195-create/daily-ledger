@@ -729,13 +729,59 @@ export function CustomerInlineEntry({
         )}
 
         {/* Row 2: Amount + Payment */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
           {entry.type !== 'balance_paid' && entry.type !== 'customer_advance' && (
             <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Amount</label>
-              <Input type="number" inputMode="numeric" value={entry.amount}
-                onChange={e => setEntry(prev => ({ ...prev, amount: e.target.value }))}
-                placeholder="₹0" className="h-8 text-xs" />
+              {entry.type === 'sale' ? (
+                <div className="grid grid-cols-4 gap-1.5">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-0.5 block">Sale ₹</label>
+                    <Input type="number" inputMode="numeric" value={entry.saleAmount}
+                      onChange={e => {
+                        const sale = parseFloat(e.target.value) || 0;
+                        const workshop = parseFloat(entry.workshopAmount) || 0;
+                        const vehicle = parseFloat(entry.vehicleAmount) || 0;
+                        setEntry(prev => ({ ...prev, saleAmount: e.target.value, amount: String(sale + workshop + vehicle) }));
+                      }}
+                      placeholder="₹0" className="h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-0.5 block">Work ₹</label>
+                    <Input type="number" inputMode="numeric" value={entry.workshopAmount}
+                      onChange={e => {
+                        const sale = parseFloat(entry.saleAmount) || 0;
+                        const workshop = parseFloat(e.target.value) || 0;
+                        const vehicle = parseFloat(entry.vehicleAmount) || 0;
+                        setEntry(prev => ({ ...prev, workshopAmount: e.target.value, amount: String(sale + workshop + vehicle) }));
+                      }}
+                      placeholder="₹0" className="h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-0.5 block">Veh ₹</label>
+                    <Input type="number" inputMode="numeric" value={entry.vehicleAmount}
+                      onChange={e => {
+                        const sale = parseFloat(entry.saleAmount) || 0;
+                        const workshop = parseFloat(entry.workshopAmount) || 0;
+                        const vehicle = parseFloat(e.target.value) || 0;
+                        setEntry(prev => ({ ...prev, vehicleAmount: e.target.value, amount: String(sale + workshop + vehicle) }));
+                      }}
+                      placeholder="₹0" className="h-8 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-0.5 block">Total ₹</label>
+                    <Input type="number" inputMode="numeric" value={entry.amount}
+                      onChange={e => setEntry(prev => ({ ...prev, amount: e.target.value }))}
+                      placeholder="₹0" className="h-8 text-xs font-semibold" />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-0.5 block">Amount</label>
+                  <Input type="number" inputMode="numeric" value={entry.amount}
+                    onChange={e => setEntry(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="₹0" className="h-8 text-xs" />
+                </div>
+              )}
             </div>
           )}
           <div className={entry.type === 'customer_advance' || entry.type === 'balance_paid' ? 'col-span-2' : ''}>

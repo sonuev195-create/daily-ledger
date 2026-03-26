@@ -455,7 +455,11 @@ const ExpensesPage = () => {
             {isItemTaken ? (
               <div className="space-y-2">
                 <Label>Add Items</Label>
-                <ItemSearchSelect onSelect={addExpenseItem} />
+                <ItemSearchSelect 
+                  items={allItems.map(i => ({ id: i.id, name: i.name, sellingPrice: i.sellingPrice }))}
+                  value={null}
+                  onChange={(itemId) => { if (itemId) addExpenseItem(itemId); }}
+                />
                 {expenseItems.length > 0 && (
                   <div className="space-y-1 border border-border rounded-lg p-2">
                     {expenseItems.map((item, idx) => (

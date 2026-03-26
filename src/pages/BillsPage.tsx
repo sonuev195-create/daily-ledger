@@ -138,7 +138,7 @@ export default function BillsPage() {
           const advanceUsed = getAdvanceUsed(tx.payments);
 
           // Keep it broad: if it has bill_number OR meaningful financial flags, show it
-          if (tx.bill_number || hasDue || tx.type === 'customer_advance' || tx.type === 'balance_paid' || tx.type?.startsWith('purchase_')) {
+          if (tx.bill_number || hasDue || tx.type === 'customer_advance' || tx.type?.startsWith('purchase_')) {
             allBills.push({
               id: tx.id,
               bill_number: tx.bill_number || `TX-${tx.id.slice(0, 8)}`,

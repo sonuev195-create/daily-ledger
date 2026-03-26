@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Plus, Edit2, Trash2, Folder, Receipt } from 'lucide-react';
+import { Plus, Edit2, Trash2, Folder, Receipt, Package } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
+import { useItems, deductFromBatch, planBatchAllocations } from '@/hooks/useSupabaseData';
 
 interface ExpenseCategory {
   id: string;

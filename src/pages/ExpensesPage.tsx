@@ -247,8 +247,8 @@ const ExpensesPage = () => {
     setExpenseItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
   };
 
-  const itemTakenTotal = expenseItems.reduce((s, i) => s + (i.qty * i.rate), 0);
 
+  const getCategoryName = (categoryId: string | null) => {
     if (!categoryId) return 'Uncategorized';
     return categories.find(c => c.id === categoryId)?.name || 'Unknown';
   };

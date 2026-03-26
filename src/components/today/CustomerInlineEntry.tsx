@@ -44,6 +44,9 @@ interface EntryRow {
   customerId?: string;
   customerAdvance: number;
   amount: string;
+  saleAmount: string;
+  workshopAmount: string;
+  vehicleAmount: string;
   payments: PaymentEntry[];
   useAdvance: string;
   selectedBills: string[];
@@ -63,6 +66,9 @@ const createEmptyRow = (): EntryRow => ({
   customerId: undefined,
   customerAdvance: 0,
   amount: '',
+  saleAmount: '',
+  workshopAmount: '',
+  vehicleAmount: '',
   payments: [{ id: uuidv4(), mode: 'cash', amount: 0 }],
   useAdvance: '',
   selectedBills: [],

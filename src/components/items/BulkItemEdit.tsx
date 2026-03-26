@@ -394,8 +394,8 @@ export function BulkItemEdit({ onClose, onSaved }: BulkItemEditProps) {
                   onChange={e => updateField(i, 'newBatchPreference', e.target.value)}
                   className="h-7 text-xs px-1 bg-background border border-input rounded"
                 >
-                  <option value="category">Category</option>
-                  <option value="oldest">Oldest</option>
+                  <option value="category">Fixed</option>
+                  <option value="oldest">Batch</option>
                   <option value="latest">Latest</option>
                 </select>
                 <button

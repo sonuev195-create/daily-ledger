@@ -162,13 +162,32 @@ const ExpensesPage = () => {
       toast.error('Please select a category');
       return;
     }
-    if (!expenseAmount || parseFloat(expenseAmount) <= 0) {
-      toast.error('Please enter a valid amount');
-      return;
-    }
 
-    const amount = parseFloat(expenseAmount);
-    const payments = [{ mode: paymentMode, amount }];
+    let amount: number;
+    let payments: { mode: string; amount: number }[];
+
+    if (isItemTaken && expenseItems.length > 0) {
+      // Item taken mode: amount = total purchase cost of items
+      amount = expenseItems.reduce((s, item) => s + (item.qty * item.rate), 0);
+      payments = []; // No payment mode needed for item taken
+      
+      // Deduct inventory
+      for (const item of expenseItems) {
+        if (item.itemId) {
+          const { allocations } = await planBatchAllocations(item.itemId, item.qty, 0);
+          for (const alloc of allocations) {
+            await deductFromBatch(alloc.batchId, alloc.primaryQty, alloc.secondaryQty);
+          }
+        }
+      }
+    } else {
+      if (!expenseAmount || parseFloat(expenseAmount) <= 0) {
+        toast.error('Please enter a valid amount');
+        return;
+      }
+      amount = parseFloat(expenseAmount);
+      payments = [{ mode: paymentMode, amount }];
+    }
 
     // Generate bill number
     const today = format(new Date(), 'yyyyMMdd');
@@ -184,11 +203,13 @@ const ExpensesPage = () => {
       .from('transactions')
       .insert({
         section: 'expenses',
-        type: 'out',
+        type: isItemTaken ? 'item_taken' : 'out',
         amount,
         payments,
         expense_category_id: selectedCategoryId,
-        reference: expenseDetails || null,
+        reference: isItemTaken 
+          ? `Items: ${expenseItems.map(i => `${i.itemName}×${i.qty}`).join(', ')}`
+          : (expenseDetails || null),
         bill_number: billNumber,
         date: format(new Date(), 'yyyy-MM-dd')
       });
@@ -204,10 +225,29 @@ const ExpensesPage = () => {
     setExpenseAmount('');
     setExpenseDetails('');
     setPaymentMode('cash');
+    setIsItemTaken(false);
+    setExpenseItems([]);
     fetchExpenses();
   };
 
-  const getCategoryName = (categoryId: string | null) => {
+  const addExpenseItem = (itemId: string) => {
+    const item = allItems.find(i => i.id === itemId);
+    if (!item) return;
+    // Get avg purchase rate from batches
+    supabase.from('batches').select('purchase_rate, primary_quantity').eq('item_id', itemId).then(({ data }) => {
+      const totalQty = (data || []).reduce((s, b) => s + Number(b.primary_quantity), 0);
+      const totalVal = (data || []).reduce((s, b) => s + Number(b.purchase_rate) * Number(b.primary_quantity), 0);
+      const avgRate = totalQty > 0 ? totalVal / totalQty : 0;
+      setExpenseItems(prev => [...prev, { itemId, itemName: item.name, qty: 1, rate: Math.round(avgRate) }]);
+    });
+  };
+
+  const removeExpenseItem = (idx: number) => setExpenseItems(prev => prev.filter((_, i) => i !== idx));
+  const updateExpenseItem = (idx: number, field: 'qty' | 'rate', value: number) => {
+    setExpenseItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
+  };
+
+  const itemTakenTotal = expenseItems.reduce((s, i) => s + (i.qty * i.rate), 0);
     if (!categoryId) return 'Uncategorized';
     return categories.find(c => c.id === categoryId)?.name || 'Unknown';
   };

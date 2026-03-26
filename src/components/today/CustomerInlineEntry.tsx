@@ -112,7 +112,7 @@ function SaleTransactionRow({ transaction: txn, onEdit, onDelete }: { transactio
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-[10px] font-medium text-muted-foreground w-16 shrink-0 truncate">{shortCustomerTypeLabel[txn.type] || txn.type.replace(/_/g, ' ').toUpperCase()}</span>
           <span className="font-medium truncate flex-1">{txn.customerName || '-'}</span>
-          {txn.billNumber && <span className="text-[10px] text-muted-foreground shrink-0">#{txn.billNumber}</span>}
+          {txn.billNumber && <span className="text-[10px] text-muted-foreground shrink-0 max-w-[120px] truncate">#{txn.billNumber}</span>}
           <span className="font-semibold shrink-0">{formatINR(txn.amount)}</span>
           <div className="flex gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
             <button onClick={() => onEdit(txn)} className="p-0.5 hover:text-accent"><Pencil className="w-3 h-3" /></button>

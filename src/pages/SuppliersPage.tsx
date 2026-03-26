@@ -49,7 +49,7 @@ export default function SuppliersPage() {
   // Opening due bills
   const [isOpeningBillOpen, setIsOpeningBillOpen] = useState(false);
   const [openingBillSupplier, setOpeningBillSupplier] = useState<Supplier | null>(null);
-  const [openingBills, setOpeningBills] = useState<OpeningBillEntry[]>([{ amount: '' }]);
+  const [openingBills, setOpeningBills] = useState<OpeningBillEntry[]>([{ amount: '', date: format(new Date(), 'yyyy-MM-dd') }]);
 
   useEffect(() => { fetchSuppliers(); }, []);
 

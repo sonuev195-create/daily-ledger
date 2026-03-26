@@ -52,6 +52,9 @@ const ExpensesPage = () => {
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseDetails, setExpenseDetails] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
+  const [isItemTaken, setIsItemTaken] = useState(false);
+  const [expenseItems, setExpenseItems] = useState<{ itemId: string; itemName: string; qty: number; rate: number }[]>([]);
+  const { items: allItems } = useItems();
 
   useEffect(() => {
     fetchCategories();

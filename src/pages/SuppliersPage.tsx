@@ -31,6 +31,7 @@ interface SupplierTransaction {
 
 interface OpeningBillEntry {
   amount: string;
+  date: string;
 }
 
 export default function SuppliersPage() {
@@ -109,11 +110,11 @@ export default function SuppliersPage() {
   // Opening due bills
   const openOpeningBills = (supplier: Supplier) => {
     setOpeningBillSupplier(supplier);
-    setOpeningBills([{ amount: '' }]);
+    setOpeningBills([{ amount: '', date: format(new Date(), 'yyyy-MM-dd') }]);
     setIsOpeningBillOpen(true);
   };
 
-  const addOpeningBillRow = () => setOpeningBills(prev => [...prev, { amount: '' }]);
+  const addOpeningBillRow = () => setOpeningBills(prev => [...prev, { amount: '', date: format(new Date(), 'yyyy-MM-dd') }]);
 
   const saveOpeningBills = async () => {
     if (!openingBillSupplier) return;
@@ -139,7 +140,7 @@ export default function SuppliersPage() {
       nextNum++;
 
       await supabase.from('transactions').insert({
-        date: format(new Date(), 'yyyy-MM-dd'),
+        date: bill.date || format(new Date(), 'yyyy-MM-dd'),
         section: 'purchase',
         type: 'opening_due',
         amount: amt,
@@ -286,9 +287,14 @@ export default function SuppliersPage() {
             {openingBills.map((b, i) => (
               <div key={i} className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground w-20 shrink-0">PUR DUE {i + 1}</span>
+                <Input type="date" value={b.date} onChange={e => {
+                  const updated = [...openingBills];
+                  updated[i] = { ...updated[i], date: e.target.value };
+                  setOpeningBills(updated);
+                }} className="w-36" />
                 <Input type="number" value={b.amount} onChange={e => {
                   const updated = [...openingBills];
-                  updated[i] = { amount: e.target.value };
+                  updated[i] = { ...updated[i], amount: e.target.value };
                   setOpeningBills(updated);
                 }} placeholder="Amount" className="flex-1" />
               </div>

@@ -315,18 +315,18 @@ export function BulkItemEdit({ onClose, onSaved }: BulkItemEditProps) {
 
       <div className="flex-1 overflow-auto">
         {/* Horizontally scrollable table */}
-        <div className="min-w-[900px]">
-          {/* Header: Name, Paper Bill Name, Category, Op.Pri, Op.Sec, Pur.Rate, Sell Rate, Batch Pref, Adj */}
+        <div className="min-w-[950px]">
+          {/* Header: Name, Paper Bill Name, Category, Op.Pri, Op.Sec, Pur.Rate, Sell Rate, Conv, Adj */}
           <div className="grid grid-cols-[minmax(130px,1fr)_100px_90px_65px_65px_65px_65px_80px_36px] gap-1 px-3 py-2 bg-secondary/50 text-[10px] font-medium text-muted-foreground sticky top-0 z-10">
             {sameRateMode && <span className="w-5"></span>}
             <span>Name</span>
             <span>Paper Name</span>
             <span>Category</span>
-            <span>Pri.Stk</span>
-            <span>Sec.Stk</span>
+            <span>Op.Pri</span>
+            <span>Op.Sec</span>
             <span>Pur.₹</span>
             <span>Sell.₹</span>
-            <span>Batch Pref</span>
+            <span>Conv</span>
             <span>Adj</span>
           </div>
 

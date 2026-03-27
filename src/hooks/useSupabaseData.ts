@@ -574,25 +574,27 @@ export async function getBillItemsForTransaction(transactionId: string): Promise
 export async function restoreInventoryForBillItems(transactionId: string): Promise<void> {
   const result = await getBillItemsForTransaction(transactionId);
   if (!result || result.items.length === 0) return;
+  const { data: txn } = await supabase.from('transactions').select('type').eq('id', transactionId).maybeSingle();
+  const isSalesReturn = txn?.type === 'sales_return';
   for (const item of result.items) {
     if (!item.itemId) continue;
-    // If we have a specific batch, restore to it
+    // Reverse previous inventory effect before editing.
     if (item.batchId) {
       const { data: batch } = await supabase.from('batches').select('primary_quantity, secondary_quantity').eq('id', item.batchId).single();
       if (batch) {
         await supabase.from('batches').update({
-          primary_quantity: Number(batch.primary_quantity) + item.primaryQty,
-          secondary_quantity: Number(batch.secondary_quantity) + item.secondaryQty,
+          primary_quantity: Number(batch.primary_quantity) + (isSalesReturn ? -item.primaryQty : item.primaryQty),
+          secondary_quantity: Number(batch.secondary_quantity) + (isSalesReturn ? -item.secondaryQty : item.secondaryQty),
         }).eq('id', item.batchId);
       }
     } else {
-      // No specific batch - restore to earliest batch with this item
+      // No specific batch - reverse on the earliest batch with this item
       const batches = await getBatchesForItem(item.itemId);
       const sorted = batches.sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
       if (sorted.length > 0) {
         await supabase.from('batches').update({
-          primary_quantity: sorted[0].primaryQuantity + item.primaryQty,
-          secondary_quantity: sorted[0].secondaryQuantity + item.secondaryQty,
+          primary_quantity: sorted[0].primaryQuantity + (isSalesReturn ? -item.primaryQty : item.primaryQty),
+          secondary_quantity: sorted[0].secondaryQuantity + (isSalesReturn ? -item.secondaryQty : item.secondaryQty),
         }).eq('id', sorted[0].id);
       }
     }

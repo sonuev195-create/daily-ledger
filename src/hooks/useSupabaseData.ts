@@ -658,6 +658,54 @@ export async function getDueBillsForCustomer(customerName: string): Promise<{
   }));
 }
 
+export async function getDueBillsForCustomerId(customerId: string): Promise<{
+  id: string;
+  billNumber: string;
+  totalAmount: number;
+  dueAmount: number;
+  createdAt: Date;
+}[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id, bill_number, amount, due, date')
+    .eq('customer_id', customerId)
+    .gt('due', 0)
+    .order('date', { ascending: false });
+
+  if (error || !data) return [];
+
+  return data.map(t => ({
+    id: t.id,
+    billNumber: t.bill_number || '',
+    totalAmount: Number(t.amount),
+    dueAmount: Number(t.due),
+    createdAt: new Date(t.date),
+  }));
+}
+
+export async function searchSuppliers(query: string): Promise<{
+  id: string;
+  name: string;
+  phone: string | null;
+  balance: number;
+}[]> {
+  let queryBuilder = supabase.from('suppliers').select('id, name, phone, balance');
+
+  if (query) {
+    queryBuilder = queryBuilder.or(`name.ilike.%${query}%,phone.ilike.%${query}%`);
+  }
+
+  const { data, error } = await queryBuilder.order('name').limit(20);
+  if (error || !data) return [];
+
+  return data.map(s => ({
+    id: s.id,
+    name: s.name,
+    phone: s.phone,
+    balance: Number(s.balance),
+  }));
+}
+
 // Update customer balance
 export async function updateCustomerBalance(
   customerId: string,

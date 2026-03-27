@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { formatINR } from '@/lib/format';
 import { v4 as uuidv4 } from 'uuid';
+import { addTransaction } from '@/lib/db';
 
 interface Supplier {
   id: string;
@@ -30,8 +31,10 @@ interface SupplierTransaction {
 }
 
 interface OpeningBillEntry {
+  id?: string;
   amount: string;
   date: string;
+  billNumber?: string;
 }
 
 export default function SuppliersPage() {
@@ -110,8 +113,24 @@ export default function SuppliersPage() {
   // Opening due bills
   const openOpeningBills = (supplier: Supplier) => {
     setOpeningBillSupplier(supplier);
-    setOpeningBills([{ amount: '', date: format(new Date(), 'yyyy-MM-dd') }]);
-    setIsOpeningBillOpen(true);
+    supabase.from('transactions')
+      .select('id, amount, date, bill_number')
+      .eq('supplier_id', supplier.id)
+      .in('type', ['opening_due', 'purchase_opening_due'])
+      .order('date', { ascending: true })
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setOpeningBills(data.map(row => ({
+            id: row.id,
+            amount: String(Number(row.amount || 0)),
+            date: row.date,
+            billNumber: row.bill_number || undefined,
+          })));
+        } else {
+          setOpeningBills([{ amount: '', date: format(new Date(), 'yyyy-MM-dd') }]);
+        }
+        setIsOpeningBillOpen(true);
+      });
   };
 
   const addOpeningBillRow = () => setOpeningBills(prev => [...prev, { amount: '', date: format(new Date(), 'yyyy-MM-dd') }]);
@@ -124,7 +143,7 @@ export default function SuppliersPage() {
     // Get existing PUR DUE count for this supplier
     const { data: existing } = await supabase.from('transactions')
       .select('bill_number').eq('supplier_id', openingBillSupplier.id)
-      .like('bill_number', 'PUR DUE%').order('created_at', { ascending: false }).limit(1);
+      .like('bill_number', 'PUR DUE%').order('date', { ascending: false }).limit(1);
     
     let nextNum = 1;
     if (existing?.[0]?.bill_number) {
@@ -132,28 +151,36 @@ export default function SuppliersPage() {
       if (match) nextNum = parseInt(match[1]) + 1;
     }
 
-    let totalDue = 0;
     for (const bill of validBills) {
       const amt = parseFloat(bill.amount);
-      totalDue += amt;
-      const billNumber = `PUR DUE ${nextNum}`;
-      nextNum++;
+      const billNumber = bill.billNumber || `PUR DUE ${nextNum}`;
+      if (!bill.billNumber) nextNum++;
 
-      await supabase.from('transactions').insert({
-        date: bill.date || format(new Date(), 'yyyy-MM-dd'),
-        section: 'purchase',
-        type: 'opening_due',
-        amount: amt,
-        payments: [],
-        bill_number: billNumber,
-        supplier_id: openingBillSupplier.id,
-        supplier_name: openingBillSupplier.name,
-        due: amt,
-      });
+      if (bill.id) {
+        await supabase.from('transactions').update({
+          date: bill.date || format(new Date(), 'yyyy-MM-dd'),
+          amount: amt,
+          due: amt,
+          bill_number: billNumber,
+          supplier_name: openingBillSupplier.name,
+        }).eq('id', bill.id);
+      } else {
+        await addTransaction({
+          id: uuidv4(),
+          date: new Date(bill.date || format(new Date(), 'yyyy-MM-dd')),
+          section: 'purchase',
+          type: 'opening_due',
+          amount: amt,
+          payments: [],
+          supplierId: openingBillSupplier.id,
+          supplierName: openingBillSupplier.name,
+          billNumber,
+          due: amt,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
     }
-
-    // Update supplier balance
-    await supabase.from('suppliers').update({ balance: openingBillSupplier.balance + totalDue }).eq('id', openingBillSupplier.id);
 
     toast.success(`${validBills.length} opening bill(s) added`);
     setIsOpeningBillOpen(false);

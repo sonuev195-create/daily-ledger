@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { generateDailyBillNumber } from '@/lib/billNumbers';
 import { v4 as uuidv4 } from 'uuid';
+import { addTransaction } from '@/lib/db';
 
 interface Customer {
   id: string;
@@ -75,9 +76,58 @@ export default function CustomersPage() {
       const dueAmount = parseFloat(formDue) || 0;
       
       if (editCustomer) {
-        await supabase.from('customers').update({
+        const previousName = editCustomer.name;
+        const { error: customerError } = await supabase.from('customers').update({
           name: formName, phone: formPhone || null, address: formAddress || null,
         }).eq('id', editCustomer.id);
+        if (customerError) throw customerError;
+
+        const { data: existingOpeningDue } = await supabase
+          .from('transactions')
+          .select('id, bill_number')
+          .eq('customer_id', editCustomer.id)
+          .eq('type', 'opening_due')
+          .order('date', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (dueAmount > 0) {
+          if (existingOpeningDue) {
+            const { error: dueUpdateError } = await supabase
+              .from('transactions')
+              .update({
+                customer_name: formName,
+                amount: dueAmount,
+                due: dueAmount,
+                date: formDueDate,
+              })
+              .eq('id', existingOpeningDue.id);
+            if (dueUpdateError) throw dueUpdateError;
+          } else {
+            const billNumber = await generateDailyBillNumber('OD', new Date(formDueDate));
+            await addTransaction({
+              id: uuidv4(),
+              date: new Date(formDueDate),
+              section: 'sale',
+              type: 'opening_due',
+              amount: dueAmount,
+              payments: [],
+              customerId: editCustomer.id,
+              customerName: formName,
+              billNumber,
+              due: dueAmount,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+          }
+        } else if (existingOpeningDue) {
+          await supabase.from('transactions').delete().eq('id', existingOpeningDue.id);
+        }
+
+        if (previousName !== formName) {
+          await supabase.from('transactions').update({ customer_name: formName }).eq('customer_id', editCustomer.id);
+          await supabase.from('bills').update({ customer_name: formName }).eq('customer_name', previousName);
+        }
         toast.success('Customer updated');
       } else {
         const { data: newCust } = await supabase.from('customers').insert({
@@ -88,20 +138,20 @@ export default function CustomersPage() {
         // If opening due provided, create an opening_due transaction
         if (newCust && dueAmount > 0) {
           const billNumber = await generateDailyBillNumber('OD', new Date(formDueDate));
-          await supabase.from('transactions').insert({
+          await addTransaction({
             id: uuidv4(),
-            date: formDueDate,
+            date: new Date(formDueDate),
             section: 'sale',
             type: 'opening_due',
             amount: dueAmount,
             payments: [],
-            customer_id: newCust.id,
-            customer_name: formName,
-            bill_number: billNumber,
+            customerId: newCust.id,
+            customerName: formName,
+            billNumber,
             due: dueAmount,
+            createdAt: new Date(),
+            updatedAt: new Date(),
           });
-          // Sync balance
-          await supabase.from('customers').update({ due_balance: dueAmount }).eq('id', newCust.id);
         }
         toast.success('Customer added');
       }
@@ -122,7 +172,20 @@ export default function CustomersPage() {
     setFormName(c.name);
     setFormPhone(c.phone || '');
     setFormAddress(c.address || '');
-    setFormDue(c.due_balance.toString());
+    setFormDue('0');
+    supabase.from('transactions')
+      .select('amount, date')
+      .eq('customer_id', c.id)
+      .eq('type', 'opening_due')
+      .order('date', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setFormDue(String(Number(data.amount || 0)));
+          setFormDueDate(data.date);
+        }
+      });
     setIsAddOpen(true);
   };
 
@@ -289,14 +352,12 @@ export default function CustomersPage() {
             <div><label className="text-sm font-medium">Name *</label><Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Customer name" className="mt-1" /></div>
             <div><label className="text-sm font-medium">Phone</label><Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="Mobile number" className="mt-1" /></div>
             <div><label className="text-sm font-medium">Address</label><Input value={formAddress} onChange={e => setFormAddress(e.target.value)} placeholder="Address" className="mt-1" /></div>
-            {!editCustomer && (
-              <>
-                <div><label className="text-sm font-medium">Opening Due</label><Input type="number" value={formDue} onChange={e => setFormDue(e.target.value)} placeholder="0" className="mt-1" /></div>
-                {parseFloat(formDue) > 0 && (
-                  <div><label className="text-sm font-medium">Due Date</label><Input type="date" value={formDueDate} onChange={e => setFormDueDate(e.target.value)} className="mt-1" /></div>
-                )}
-              </>
-            )}
+             <>
+               <div><label className="text-sm font-medium">Opening Due</label><Input type="number" value={formDue} onChange={e => setFormDue(e.target.value)} placeholder="0" className="mt-1" /></div>
+               {parseFloat(formDue) > 0 && (
+                 <div><label className="text-sm font-medium">Due Date</label><Input type="date" value={formDueDate} onChange={e => setFormDueDate(e.target.value)} className="mt-1" /></div>
+               )}
+             </>
             <Button onClick={handleSaveCustomer} className="w-full">{editCustomer ? 'Update' : 'Add Customer'}</Button>
           </div>
         </SheetContent>

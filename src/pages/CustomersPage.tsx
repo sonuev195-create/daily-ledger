@@ -61,7 +61,7 @@ export default function CustomersPage() {
       .from('transactions')
       .select('id, type, amount, date, created_at, bill_number, due, payments')
       .eq('customer_name', customerName)
-      .order('created_at', { ascending: false });
+      .order('date', { ascending: false });
     setCustomerTransactions(data || []);
   };
 
@@ -324,7 +324,7 @@ export default function CustomersPage() {
                             {tx.bill_number && <span className="text-xs text-accent font-medium">{tx.bill_number}</span>}
                           </div>
                           <p className="font-medium text-foreground mt-1">{formatINR(tx.amount)}</p>
-                          <p className="text-xs text-muted-foreground">{format(new Date(tx.created_at), 'dd MMM yyyy')}</p>
+                          <p className="text-xs text-muted-foreground">{format(new Date(tx.date), 'dd MMM yyyy')}</p>
                         </div>
                         <div className="text-right">
                           {tx.due != null && tx.due > 0 && (

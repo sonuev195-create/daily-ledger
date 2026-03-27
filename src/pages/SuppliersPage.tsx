@@ -25,6 +25,7 @@ interface SupplierTransaction {
   id: string;
   type: string;
   amount: number;
+  date: string;
   created_at: string;
   bill_number: string | null;
   payments: any;
@@ -64,8 +65,8 @@ export default function SuppliersPage() {
   };
 
   const fetchSupplierTransactions = async (supplierId: string) => {
-    const { data } = await supabase.from('transactions').select('id, type, amount, created_at, bill_number, payments')
-      .eq('supplier_id', supplierId).order('created_at', { ascending: false }).limit(50);
+    const { data } = await supabase.from('transactions').select('id, type, amount, date, created_at, bill_number, payments')
+      .eq('supplier_id', supplierId).order('date', { ascending: false }).limit(50);
     setSupplierTransactions(data || []);
   };
 
@@ -278,7 +279,7 @@ export default function SuppliersPage() {
                       <div key={tx.id} className="bg-secondary/30 rounded-lg p-3 flex items-center justify-between">
                         <div>
                           <p className="font-medium text-foreground">{formatINR(tx.amount)}</p>
-                          <p className="text-xs text-muted-foreground">{tx.type.replace(/_/g, ' ')} • {format(new Date(tx.created_at), 'MMM d')}</p>
+                          <p className="text-xs text-muted-foreground">{tx.type.replace(/_/g, ' ')} • {format(new Date(tx.date), 'MMM d')}</p>
                           {tx.bill_number && <p className="text-xs text-accent">{tx.bill_number}</p>}
                         </div>
                         {tx.type === 'purchase_payment' ? <ArrowUpRight className="w-4 h-4 text-success" /> : <ArrowDownLeft className="w-4 h-4 text-destructive" />}

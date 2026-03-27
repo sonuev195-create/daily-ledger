@@ -300,7 +300,7 @@ async function syncPartyBalancesFromTransactions(): Promise<void> {
       } else if (tx.type === 'purchase_return' || tx.type === 'purchase_payment') {
         supplierBalance.set(supplierId, (supplierBalance.get(supplierId) || 0) - amount);
       } else if (tx.type === 'opening_due' || tx.type === 'purchase_opening_due') {
-        supplierBalance.set(supplierId, (supplierBalance.get(supplierId) || 0) + amount);
+        supplierBalance.set(supplierId, (supplierBalance.get(supplierId) || 0) + Math.max(0, toSafeNumber(tx.due ?? tx.amount)));
       }
     }
   });

@@ -97,14 +97,14 @@ export default function TodayPage() {
 
         if (txn.section === 'sale') {
           if (txn.type === 'sale') nextBusinessDue += due;
-          if (txn.type === 'opening_due') nextBusinessDue += amount;
+          if (txn.type === 'opening_due') nextBusinessDue += due;
           if (txn.type === 'balance_paid') nextBusinessDue -= amount;
         }
 
         if (txn.section === 'purchase') {
           if (txn.type === 'purchase_bill' && txn.bill_type !== 'ng_bill') nextPurchaseDue += amount;
           if (txn.type === 'purchase_return' || txn.type === 'purchase_payment') nextPurchaseDue -= amount;
-          if (txn.type === 'opening_due' || txn.type === 'purchase_opening_due') nextPurchaseDue += amount;
+          if (txn.type === 'opening_due' || txn.type === 'purchase_opening_due') nextPurchaseDue += due;
         }
       });
 

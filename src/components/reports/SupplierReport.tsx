@@ -143,7 +143,7 @@ export function SupplierReport() {
 
     const runningBalance = txns.slice(0, i + 1).reduce((bal, x) => {
       if (x.type === 'purchase_bill' && (x.bill_type === 'g_bill' || x.bill_type === 'n_bill')) return bal + Number(x.amount);
-      if (x.type === 'purchase_opening_due' || x.type === 'opening_due') return bal + Number(x.amount);
+      if (x.type === 'purchase_opening_due' || x.type === 'opening_due') return bal + Number(x.due || x.amount);
       if (x.type === 'purchase_return') return bal - Number(x.amount);
       if (x.type === 'purchase_payment') return bal - Number(x.amount);
       return bal;

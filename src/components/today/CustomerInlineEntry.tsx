@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
-import { searchCustomers, getDueBillsForCustomer, getOrCreateCustomer, saveBillToSupabase, deductFromBatch, getBatchesForItem, getBillItemsForTransaction, restoreInventoryForBillItems, planBatchAllocations } from '@/hooks/useSupabaseData';
+import { searchCustomers, getDueBillsForCustomerId, getOrCreateCustomer, saveBillToSupabase, deductFromBatch, getBatchesForItem, getBillItemsForTransaction, restoreInventoryForBillItems, planBatchAllocations } from '@/hooks/useSupabaseData';
 import { generateDailyBillNumber, customerTypePrefixMap } from '@/lib/billNumbers';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
@@ -288,33 +288,12 @@ export function CustomerInlineEntry({
   useEffect(() => {
     if (entry.type === 'balance_paid' && entry.customerId) {
       // Fetch due bills AND opening_due transactions with remaining due
-      Promise.all([
-        getDueBillsForCustomer(entry.customerQuery),
-        supabase.from('transactions')
-          .select('id, bill_number, amount, due, date')
-          .eq('customer_id', entry.customerId)
-          .eq('type', 'opening_due')
-          .gt('due', 0)
-          .order('date'),
-      ]).then(([bills, { data: openingDues }]) => {
-        const allBills: DueBill[] = [...bills];
-        // Add opening due transactions as selectable bills  
-        (openingDues || []).forEach((od, idx) => {
-          allBills.push({
-            id: od.id,
-            billNumber: od.bill_number || `Opening Due ${idx + 1}`,
-            totalAmount: Number(od.amount),
-            dueAmount: Number(od.due),
-            createdAt: new Date(od.date),
-          });
-        });
-        setCustomerTotalDue(allBills.reduce((s, b) => s + b.dueAmount, 0));
-        setEntry(prev => ({ ...prev, dueBills: allBills }));
-      });
-    } else if (entry.type === 'balance_paid' && entry.customerQuery.length >= 2) {
-      getDueBillsForCustomer(entry.customerQuery).then(bills => {
+      getDueBillsForCustomerId(entry.customerId).then((bills) => {
+        setCustomerTotalDue(bills.reduce((s, b) => s + b.dueAmount, 0));
         setEntry(prev => ({ ...prev, dueBills: bills }));
       });
+    } else if (entry.type === 'balance_paid' && entry.customerQuery.length >= 2) {
+      setEntry(prev => ({ ...prev, dueBills: [] }));
     }
   }, [entry.type, entry.customerQuery, entry.customerId]);
 

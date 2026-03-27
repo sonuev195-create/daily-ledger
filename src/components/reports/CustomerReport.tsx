@@ -73,7 +73,7 @@ export function CustomerReport() {
 
     const previousBalance = (previousData || []).reduce((bal, x: any) => {
       if (x.type === 'sale') return bal + (Number(x.due) || 0);
-      if (x.type === 'opening_due') return bal + Number(x.amount || 0);
+      if (x.type === 'opening_due') return bal + (Number(x.due) || 0);
       if (x.type === 'sales_return') return bal - Number(x.amount || 0);
       if (x.type === 'balance_paid') {
         const payments = Array.isArray(x.payments) ? x.payments : [];
@@ -125,7 +125,7 @@ export function CustomerReport() {
   const ledgerTxns = txns.map((t, i) => {
     const runningBalance = txns.slice(0, i + 1).reduce((bal, x) => {
       if (x.type === 'sale') return bal + (Number(x.due) || 0);
-      if (x.type === 'opening_due') return bal + Number(x.amount || 0);
+      if (x.type === 'opening_due') return bal + (Number(x.due) || 0);
       if (x.type === 'sales_return') return bal - Number(x.amount);
       if (x.type === 'balance_paid') {
         // Balance paid = payment towards outstanding dues
@@ -149,7 +149,8 @@ export function CustomerReport() {
   const totalReturns = sum(returnTxns);
   const totalBalancePaid = sum(balancePaidTxns);
   const totalAdvance = sum(advanceTxns);
-  const totalDue = saleTxns.reduce((s, t) => s + (Number(t.due) || 0), 0);
+  const openingDueTxns = txns.filter(t => t.type === 'opening_due');
+  const totalDue = saleTxns.reduce((s, t) => s + (Number(t.due) || 0), 0) + openingDueTxns.reduce((s, t) => s + (Number(t.due) || 0), 0);
 
   // Yearly
   const yearlyMonths = eachMonthOfInterval({ start: startOfYear(year), end: endOfYear(year) });

@@ -496,30 +496,29 @@ export function PurchaseInlineEntry({
 
         {/* Supplier + Sub-type row */}
         <div className="grid grid-cols-2 gap-2">
-          <div className="relative">
+          <div>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Supplier</label>
-            <Input ref={supplierInputRef} value={entry.supplierQuery}
-              onChange={e => setEntry(prev => ({ ...prev, supplierQuery: e.target.value, supplierId: undefined, supplierBalance: 0 }))}
-              placeholder="Supplier name..." className="h-8 text-xs" />
+            <SupplierSearchPopup
+              value={entry.supplierQuery}
+              onChange={(name, supplierId) => {
+                if (supplierId) {
+                  supabase.from('suppliers').select('balance').eq('id', supplierId).maybeSingle().then(({ data }) => {
+                    setEntry(prev => ({
+                      ...prev,
+                      supplierQuery: name,
+                      supplierId,
+                      supplierBalance: Number(data?.balance || 0),
+                    }));
+                  });
+                } else {
+                  setEntry(prev => ({ ...prev, supplierQuery: name, supplierId: undefined, supplierBalance: 0 }));
+                }
+              }}
+              className="w-full"
+            />
             {entry.supplierBalance > 0 && (
               <p className="text-[10px] text-warning mt-0.5">Due: {formatINR(entry.supplierBalance)}</p>
             )}
-            <AnimatePresence>
-              {showSupplierDropdown && supplierResults.length > 0 && (
-                <motion.div ref={dropdownRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                  {supplierResults.map(s => (
-                    <button key={s.id} onClick={() => selectSupplier(s)}
-                      className="w-full px-3 py-2 text-left hover:bg-secondary/50 text-xs border-b border-border/30 last:border-0">
-                      <div className="flex justify-between">
-                        <span className="font-medium">{s.name}</span>
-                        {s.balance > 0 && <span className="text-warning">Due: {formatINR(s.balance)}</span>}
-                      </div>
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
 
           {!isPayment && (

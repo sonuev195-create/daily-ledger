@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Download, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { format, startOfMonth, endOfMonth, getDaysInMonth, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, getDaysInMonth, parseISO, subMonths, isAfter, isBefore, startOfDay } from 'date-fns';
 import { formatINR } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -20,14 +20,20 @@ function downloadCSV(rows: string[][], filename: string) {
 
 const fmtINR = (n: number) => `Rs.${Math.abs(n).toLocaleString('en-IN')}`;
 
-type SalarySection = 'day_salary' | 'rate_work';
+interface MonthDue {
+  monthLabel: string;
+  monthKey: string;
+  earned: number;
+  paid: number;
+  due: number;
+  txns: any[];
+}
 
 export function EmployeeReport() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedEmpId, setSelectedEmpId] = useState<string>('');
   const [month, setMonth] = useState(new Date());
-  const [txns, setTxns] = useState<any[]>([]);
-  const [prevTxns, setPrevTxns] = useState<any[]>([]);
+  const [allTxns, setAllTxns] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [allowanceCategories, setAllowanceCategories] = useState<Record<string, string>>({});
   const [rateWorkTypes, setRateWorkTypes] = useState<Record<string, string>>({});
@@ -49,36 +55,42 @@ export function EmployeeReport() {
   }, []);
 
   useEffect(() => {
-    if (!selectedEmpId) { setTxns([]); setPrevTxns([]); return; }
+    if (!selectedEmpId) { setAllTxns([]); return; }
     fetchTxns();
   }, [selectedEmpId, month]);
 
   const fetchTxns = async () => {
     setLoading(true);
-    const start = format(startOfMonth(month), 'yyyy-MM-dd');
     const end = format(endOfMonth(month), 'yyyy-MM-dd');
-    const [{ data }, { data: prev }] = await Promise.all([
-      supabase.from('transactions').select('*').eq('employee_id', selectedEmpId).gte('date', start).lte('date', end).order('date'),
-      supabase.from('transactions').select('*').eq('employee_id', selectedEmpId).lt('date', start).order('date'),
-    ]);
-    setTxns(data || []);
-    setPrevTxns(prev || []);
+    // Fetch ALL transactions up to end of selected month
+    const { data } = await supabase.from('transactions').select('*')
+      .eq('employee_id', selectedEmpId)
+      .eq('section', 'employee')
+      .lte('date', end)
+      .order('date');
+    setAllTxns(data || []);
     setLoading(false);
   };
 
   const selectedEmp = employees.find(e => e.id === selectedEmpId);
   const daysInMonth = getDaysInMonth(month);
+  const monthStart = startOfMonth(month);
+  const monthEnd = endOfMonth(month);
+  const monthStartStr = format(monthStart, 'yyyy-MM-dd');
+  const monthEndStr = format(monthEnd, 'yyyy-MM-dd');
 
+  // Separate day salary vs rate work
+  const isDaySalary = (t: any) => t.type !== 'rate_work' && !(t.type === 'payment' && t.reference === 'ratework');
+  const isRateWork = (t: any) => t.type === 'rate_work' || (t.type === 'payment' && t.reference === 'ratework');
+
+  // Current month txns
+  const currentMonthTxns = allTxns.filter(t => t.date >= monthStartStr && t.date <= monthEndStr);
+  const prevTxns = allTxns.filter(t => t.date < monthStartStr);
+
+  // Present days count
   const presentDays = new Set(
-    txns.filter(t => t.type === 'salary' || t.type === 'attendance').map(t => t.date)
+    currentMonthTxns.filter(t => t.type === 'salary' || t.type === 'attendance').map(t => t.date)
   ).size;
-
-  // Classify transaction into day_salary or rate_work section
-  const getSection = (t: any): SalarySection => {
-    if (t.type === 'rate_work') return 'rate_work';
-    if (t.type === 'payment' && t.reference === 'ratework') return 'rate_work';
-    return 'day_salary'; // salary, attendance, allowance, payment(present/previous/advance)
-  };
 
   const getSubCategory = (t: any): string => {
     if (t.type === 'allowance') {
@@ -93,7 +105,8 @@ export function EmployeeReport() {
       if (t.reference === 'advance') return 'Advance';
       if (t.reference === 'previous') return 'Prev Due Pay';
       if (t.reference === 'ratework') return 'Rate Work Pay';
-      return 'Day Salary Pay';
+      if (t.reference === 'present') return 'Current Pay';
+      return 'Payment';
     }
     if (t.type === 'salary' || t.type === 'attendance') return 'Day Salary';
     return t.type.replace(/_/g, ' ');
@@ -109,57 +122,90 @@ export function EmployeeReport() {
     return payments.filter((p: any) => p.amount > 0).map((p: any) => `${p.mode}: ${formatINR(Number(p.amount))}`).join(', ');
   };
 
-  // Balance delta: earned amounts are positive, payments are negative
   const getBalanceDelta = (t: any): number => {
     const amt = Number(t.amount);
     const paid = getPaymentTotal(t);
-    if (t.type === 'payment') return -paid; // payment reduces balance
-    return amt - paid; // salary/allowance/rate_work: earn minus any inline payment
+    if (t.type === 'payment') return -paid;
+    return amt - paid;
   };
 
-  // Calculate previous dues per section
-  const calcPreviousDue = (section: SalarySection): number => {
-    return prevTxns.filter(t => getSection(t) === section).reduce((bal, t) => bal + getBalanceDelta(t), 0);
-  };
+  // ===== DAY SALARY SECTION =====
+  // Group previous day salary txns by month to show month-wise dues
+  const prevDaySalaryTxns = prevTxns.filter(isDaySalary);
+  const currentDaySalaryTxns = currentMonthTxns.filter(isDaySalary);
 
-  const sectionLabel: Record<SalarySection, string> = {
-    day_salary: 'Day Salary (Present + Allowance)',
-    rate_work: 'Rate Work',
-  };
-
-  const sectionColor: Record<SalarySection, string> = {
-    day_salary: 'bg-success/10 text-success',
-    rate_work: 'bg-accent/10 text-accent',
-  };
-
-  // Group transactions by section
-  const sections: SalarySection[] = ['day_salary', 'rate_work'];
-  const groupedBySection: Record<SalarySection, any[]> = { day_salary: [], rate_work: [] };
-  txns.forEach(t => {
-    const sec = getSection(t);
-    groupedBySection[sec].push(t);
+  // Build month-wise previous dues
+  const prevMonthDues: MonthDue[] = [];
+  const monthGroups: Record<string, any[]> = {};
+  prevDaySalaryTxns.forEach(t => {
+    const key = t.date.substring(0, 7); // yyyy-MM
+    if (!monthGroups[key]) monthGroups[key] = [];
+    monthGroups[key].push(t);
   });
 
-  // Section totals
-  const sectionTotals: Record<SalarySection, { earned: number; paid: number; prevDue: number }> = {
-    day_salary: { earned: 0, paid: 0, prevDue: calcPreviousDue('day_salary') },
-    rate_work: { earned: 0, paid: 0, prevDue: calcPreviousDue('rate_work') },
-  };
-  sections.forEach(sec => {
-    groupedBySection[sec].forEach(t => {
-      if (t.type === 'payment') {
-        sectionTotals[sec].paid += getPaymentTotal(t);
-      } else {
-        sectionTotals[sec].earned += Number(t.amount);
-        sectionTotals[sec].paid += getPaymentTotal(t);
-      }
-    });
+  Object.keys(monthGroups).sort().forEach(key => {
+    const txns = monthGroups[key];
+    const earned = txns.filter(t => t.type !== 'payment').reduce((s, t) => s + Number(t.amount), 0);
+    const paid = txns.reduce((s, t) => s + getPaymentTotal(t), 0);
+    const due = earned - paid;
+    if (Math.abs(due) > 0.5) {
+      const d = parseISO(key + '-01');
+      prevMonthDues.push({
+        monthLabel: format(d, 'MMM yyyy'),
+        monthKey: key,
+        earned, paid, due,
+        txns,
+      });
+    }
   });
 
-  const totalEarned = sectionTotals.day_salary.earned + sectionTotals.rate_work.earned;
-  const totalPaid = sectionTotals.day_salary.paid + sectionTotals.rate_work.paid;
-  const totalPrevDue = sectionTotals.day_salary.prevDue + sectionTotals.rate_work.prevDue;
-  const totalBalance = totalPrevDue + totalEarned - totalPaid;
+  const totalPrevDaySalaryDue = prevMonthDues.reduce((s, m) => s + m.due, 0);
+
+  // Current month day salary
+  const currentDayEarned = currentDaySalaryTxns.filter(t => t.type !== 'payment').reduce((s, t) => s + Number(t.amount), 0);
+  const currentDayPaid = currentDaySalaryTxns.reduce((s, t) => s + getPaymentTotal(t), 0);
+  const currentDayDue = currentDayEarned - currentDayPaid;
+
+  // ===== RATE WORK SECTION =====
+  const prevRateWorkTxns = prevTxns.filter(isRateWork);
+  const currentRateWorkTxns = currentMonthTxns.filter(isRateWork);
+
+  // Group rate work by month
+  const rwMonthGroups: Record<string, any[]> = {};
+  prevRateWorkTxns.forEach(t => {
+    const key = t.date.substring(0, 7);
+    if (!rwMonthGroups[key]) rwMonthGroups[key] = [];
+    rwMonthGroups[key].push(t);
+  });
+
+  const prevRateWorkDues: MonthDue[] = [];
+  Object.keys(rwMonthGroups).sort().forEach(key => {
+    const txns = rwMonthGroups[key];
+    const earned = txns.filter(t => t.type !== 'payment').reduce((s, t) => s + Number(t.amount), 0);
+    const paid = txns.reduce((s, t) => s + getPaymentTotal(t), 0);
+    const due = earned - paid;
+    if (Math.abs(due) > 0.5) {
+      const d = parseISO(key + '-01');
+      prevRateWorkDues.push({
+        monthLabel: format(d, 'MMM yyyy'),
+        monthKey: key,
+        earned, paid, due,
+        txns,
+      });
+    }
+  });
+
+  const totalPrevRateWorkDue = prevRateWorkDues.reduce((s, m) => s + m.due, 0);
+  const currentRWEarned = currentRateWorkTxns.filter(t => t.type !== 'payment').reduce((s, t) => s + Number(t.amount), 0);
+  const currentRWPaid = currentRateWorkTxns.reduce((s, t) => s + getPaymentTotal(t), 0);
+  const currentRWDue = currentRWEarned - currentRWPaid;
+
+  // Grand totals
+  const totalDaySalaryDue = totalPrevDaySalaryDue + currentDayDue;
+  const totalRateWorkDue = totalPrevRateWorkDue + currentRWDue;
+  const grandTotalDue = totalDaySalaryDue + totalRateWorkDue;
+
+  const currentMonthLabel = format(month, 'MMM');
 
   const handleExportPDF = () => {
     if (!selectedEmp) return;
@@ -171,20 +217,53 @@ export function EmployeeReport() {
     doc.text(format(month, 'MMMM yyyy'), pw / 2, 25, { align: 'center' });
 
     let y = 36;
-    sections.forEach(sec => {
-      const catTxns = groupedBySection[sec];
-      if (catTxns.length === 0 && sectionTotals[sec].prevDue === 0) return;
 
+    // Previous Day Salary Dues
+    if (prevMonthDues.length > 0) {
       doc.setFontSize(11);
-      doc.text(sectionLabel[sec], 14, y);
+      doc.text('Previous Month Dues (Day Salary)', 14, y);
       y += 4;
+      const body = prevMonthDues.map(m => [m.monthLabel, fmtINR(m.earned), fmtINR(m.paid), fmtINR(m.due)]);
+      body.push(['Total', '', '', fmtINR(totalPrevDaySalaryDue)]);
+      autoTable(doc, {
+        startY: y, head: [['Month', 'Earned', 'Paid', 'Due']], body,
+        theme: 'striped', headStyles: { fillColor: [66, 66, 66] }, styles: { fontSize: 8 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 8;
+    }
 
-      let runBal = sectionTotals[sec].prevDue;
+    // Current Month Day Salary
+    if (currentDaySalaryTxns.length > 0) {
+      doc.setFontSize(11);
+      doc.text(`${currentMonthLabel} - Day Salary`, 14, y);
+      y += 4;
+      let runBal = 0;
+      const body = currentDaySalaryTxns.map(t => {
+        runBal += getBalanceDelta(t);
+        return [
+          format(parseISO(t.date), 'dd MMM'),
+          getSubCategory(t),
+          t.type === 'payment' ? '' : fmtINR(Number(t.amount)),
+          getPaymentStr(t) || '-',
+          fmtINR(runBal),
+        ];
+      });
+      autoTable(doc, {
+        startY: y, head: [['Date', 'Type', 'Earned', 'Payment', 'Balance']], body,
+        theme: 'striped', headStyles: { fillColor: [66, 66, 66] }, styles: { fontSize: 8 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    // Rate Work
+    if (prevRateWorkDues.length > 0 || currentRateWorkTxns.length > 0) {
+      doc.setFontSize(11);
+      doc.text('Rate Work', 14, y);
+      y += 4;
       const body: string[][] = [];
-      if (sectionTotals[sec].prevDue !== 0) {
-        body.push(['', 'Previous Due', '', '', fmtINR(runBal)]);
-      }
-      catTxns.forEach(t => {
+      prevRateWorkDues.forEach(m => body.push([m.monthLabel, 'Previous Due', '', '', fmtINR(m.due)]));
+      let runBal = totalPrevRateWorkDue;
+      currentRateWorkTxns.forEach(t => {
         runBal += getBalanceDelta(t);
         body.push([
           format(parseISO(t.date), 'dd MMM'),
@@ -194,17 +273,12 @@ export function EmployeeReport() {
           fmtINR(runBal),
         ]);
       });
-
       autoTable(doc, {
-        startY: y,
-        head: [['Date', 'Type', 'Earned', 'Payment', 'Balance']],
-        body,
-        theme: 'striped',
-        headStyles: { fillColor: [66, 66, 66] },
-        styles: { fontSize: 8 },
+        startY: y, head: [['Date', 'Type', 'Earned', 'Payment', 'Balance']], body,
+        theme: 'striped', headStyles: { fillColor: [66, 66, 66] }, styles: { fontSize: 8 },
       });
       y = (doc as any).lastAutoTable.finalY + 8;
-    });
+    }
 
     doc.save(`Employee_${selectedEmp.name}_${format(month, 'yyyy-MM')}.pdf`);
   };
@@ -213,21 +287,31 @@ export function EmployeeReport() {
     if (!selectedEmp) return;
     const header = ['Date', 'Section', 'Type', 'Earned', 'Payment', 'Balance'];
     const rows: string[][] = [header];
-    sections.forEach(sec => {
-      let runBal = sectionTotals[sec].prevDue;
-      if (runBal !== 0) rows.push(['', sectionLabel[sec], 'Previous Due', '', '', String(runBal)]);
-      groupedBySection[sec].forEach(t => {
-        runBal += getBalanceDelta(t);
-        rows.push([
-          format(parseISO(t.date), 'dd MMM yyyy'),
-          sectionLabel[sec],
-          getSubCategory(t),
-          t.type === 'payment' ? '' : String(Number(t.amount)),
-          String(getPaymentTotal(t)),
-          String(runBal),
-        ]);
-      });
+
+    // Previous dues
+    prevMonthDues.forEach(m => {
+      rows.push([m.monthLabel, 'Day Salary', 'Previous Due', String(m.earned), String(m.paid), String(m.due)]);
     });
+
+    // Current day salary
+    let runBal = 0;
+    currentDaySalaryTxns.forEach(t => {
+      runBal += getBalanceDelta(t);
+      rows.push([format(parseISO(t.date), 'dd MMM yyyy'), 'Day Salary', getSubCategory(t),
+        t.type === 'payment' ? '' : String(Number(t.amount)), String(getPaymentTotal(t)), String(runBal)]);
+    });
+
+    // Rate work
+    let rwBal = totalPrevRateWorkDue;
+    prevRateWorkDues.forEach(m => {
+      rows.push([m.monthLabel, 'Rate Work', 'Previous Due', '', '', String(m.due)]);
+    });
+    currentRateWorkTxns.forEach(t => {
+      rwBal += getBalanceDelta(t);
+      rows.push([format(parseISO(t.date), 'dd MMM yyyy'), 'Rate Work', getSubCategory(t),
+        t.type === 'payment' ? '' : String(Number(t.amount)), String(getPaymentTotal(t)), String(rwBal)]);
+    });
+
     downloadCSV(rows, `Employee_${selectedEmp.name}_${format(month, 'yyyy-MM')}.csv`);
   };
 
@@ -242,14 +326,20 @@ export function EmployeeReport() {
       {selectedEmpId && (
         <>
           <div className="flex items-center justify-between">
-            <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() - 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronLeft className="w-4 h-4" /></button>
+            <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() - 1); setMonth(d); }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
             <span className="text-sm font-medium">{format(month, 'MMMM yyyy')}</span>
             <div className="flex items-center gap-1">
-              <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() + 1); setMonth(d); }} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading || txns.length === 0}>
+              <button onClick={() => { const d = new Date(month); d.setMonth(d.getMonth() + 1); setMonth(d); }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportPDF} disabled={loading || allTxns.length === 0}>
                 <Download className="w-3 h-3" /> PDF
               </Button>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportCSV} disabled={loading || txns.length === 0}>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExportCSV} disabled={loading || allTxns.length === 0}>
                 <FileSpreadsheet className="w-3 h-3" /> CSV
               </Button>
             </div>
@@ -262,17 +352,17 @@ export function EmployeeReport() {
                 <p className="text-lg font-bold">{presentDays} <span className="text-xs text-muted-foreground font-normal">/ {daysInMonth}</span></p>
               </div>
               <div className="bg-card border border-border rounded-xl p-3">
-                <p className="text-xs text-muted-foreground">Salary</p>
+                <p className="text-xs text-muted-foreground">Salary/Day</p>
                 <p className="text-sm font-semibold">{formatINR(Number(selectedEmp.salary || 0))}</p>
               </div>
               <div className="bg-card border border-border rounded-xl p-3">
-                <p className="text-xs text-muted-foreground">Total Earned</p>
-                <p className="text-lg font-bold text-primary">{formatINR(totalEarned)}</p>
+                <p className="text-xs text-muted-foreground">{currentMonthLabel} Earned</p>
+                <p className="text-lg font-bold text-primary">{formatINR(currentDayEarned + currentRWEarned)}</p>
               </div>
               <div className="bg-card border border-border rounded-xl p-3">
-                <p className="text-xs text-muted-foreground">Balance Due</p>
-                <p className={cn("text-lg font-bold", totalBalance > 0 ? "text-warning" : "text-success")}>
-                  {formatINR(totalBalance)}
+                <p className="text-xs text-muted-foreground">Total Due</p>
+                <p className={cn("text-lg font-bold", grandTotalDue > 0 ? "text-warning" : "text-success")}>
+                  {formatINR(grandTotalDue)}
                 </p>
               </div>
             </div>
@@ -280,58 +370,63 @@ export function EmployeeReport() {
 
           {loading ? (
             <div className="h-32 bg-secondary/50 animate-pulse rounded-xl" />
-          ) : txns.length === 0 && totalPrevDue === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No transactions this month</p>
+          ) : allTxns.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No transactions</p>
           ) : (
             <div className="space-y-3">
-              {sections.map(sec => {
-                const catTxns = groupedBySection[sec];
-                const prevDue = sectionTotals[sec].prevDue;
-                if (catTxns.length === 0 && prevDue === 0) return null;
-
-                let runBal = prevDue;
-                const secBalance = prevDue + sectionTotals[sec].earned - sectionTotals[sec].paid;
-
-                return (
-                  <div key={sec} className="bg-card border border-border rounded-xl overflow-hidden">
-                    {/* Section Header */}
-                    <div className="px-3 py-2 bg-secondary/50 border-b border-border flex justify-between items-center">
-                      <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", sectionColor[sec])}>
-                        {sectionLabel[sec]}
-                      </span>
-                      <div className="flex gap-3 text-[10px] text-muted-foreground">
-                        {prevDue > 0 && <span>Prev: <span className="font-semibold text-warning">{formatINR(prevDue)}</span></span>}
-                        <span>Earned: <span className="font-semibold text-foreground">{formatINR(sectionTotals[sec].earned)}</span></span>
-                        <span>Paid: <span className="font-semibold text-foreground">{formatINR(sectionTotals[sec].paid)}</span></span>
-                        <span>Bal: <span className={cn("font-semibold", secBalance > 0 ? "text-warning" : "text-success")}>{formatINR(secBalance)}</span></span>
-                      </div>
+              {/* 1. Previous Month Dues (Day Salary) */}
+              {prevMonthDues.length > 0 && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-3 py-2 bg-warning/10 border-b border-border">
+                    <span className="text-xs font-semibold text-warning">Previous Month Dues (Day Salary)</span>
+                  </div>
+                  <div className="grid grid-cols-[1fr_60px_60px_60px] gap-1 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-b border-border">
+                    <span>Month</span>
+                    <span className="text-right">Earned</span>
+                    <span className="text-right">Paid</span>
+                    <span className="text-right">Due</span>
+                  </div>
+                  {prevMonthDues.map(m => (
+                    <div key={m.monthKey} className="grid grid-cols-[1fr_60px_60px_60px] gap-1 px-3 py-1.5 border-b border-border/50 text-[11px]">
+                      <span className="font-medium">{m.monthLabel}</span>
+                      <span className="text-right">{formatINR(m.earned)}</span>
+                      <span className="text-right text-muted-foreground">{formatINR(m.paid)}</span>
+                      <span className={cn("text-right font-semibold", m.due > 0 ? "text-warning" : "text-success")}>{formatINR(m.due)}</span>
                     </div>
+                  ))}
+                  <div className="grid grid-cols-[1fr_60px_60px_60px] gap-1 px-3 py-2 bg-secondary/30 text-[11px] font-bold">
+                    <span>Total Previous</span>
+                    <span></span>
+                    <span></span>
+                    <span className="text-right text-warning">{formatINR(totalPrevDaySalaryDue)}</span>
+                  </div>
+                </div>
+              )}
 
-                    {/* Column Header */}
-                    <div className="grid grid-cols-[55px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-b border-border">
-                      <span>Date</span>
-                      <span>Type</span>
-                      <span className="text-right">Earned</span>
-                      <span className="text-right">Payment</span>
-                      <span className="text-right">Balance</span>
+              {/* 2. Current Month Day Salary */}
+              {(currentDaySalaryTxns.length > 0 || currentDayEarned > 0) && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-3 py-2 bg-success/10 border-b border-border flex justify-between items-center">
+                    <span className="text-xs font-semibold text-success">{currentMonthLabel} - Day Salary + Allowance</span>
+                    <div className="flex gap-2 text-[10px] text-muted-foreground">
+                      <span>Earned: <span className="font-semibold text-foreground">{formatINR(currentDayEarned)}</span></span>
+                      <span>Paid: <span className="font-semibold text-foreground">{formatINR(currentDayPaid)}</span></span>
+                      <span>Due: <span className={cn("font-semibold", currentDayDue > 0 ? "text-warning" : "text-success")}>{formatINR(currentDayDue)}</span></span>
                     </div>
-
-                    {/* Previous due row */}
-                    {prevDue > 0 && (
-                      <div className="grid grid-cols-[55px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 border-b border-border/50 text-[11px] items-start bg-warning/5">
-                        <span className="text-muted-foreground">-</span>
-                        <span className="font-medium text-warning">Previous Due</span>
-                        <span className="text-right">-</span>
-                        <span className="text-right">-</span>
-                        <span className="text-right font-semibold text-warning">{formatINR(runBal)}</span>
-                      </div>
-                    )}
-
-                    {/* Rows */}
-                    {catTxns.map(t => {
+                  </div>
+                  <div className="grid grid-cols-[50px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-b border-border">
+                    <span>Date</span>
+                    <span>Type</span>
+                    <span className="text-right">Earned</span>
+                    <span className="text-right">Payment</span>
+                    <span className="text-right">Balance</span>
+                  </div>
+                  {(() => {
+                    let runBal = 0;
+                    return currentDaySalaryTxns.map(t => {
                       runBal += getBalanceDelta(t);
                       return (
-                        <div key={t.id} className="grid grid-cols-[55px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 border-b border-border/50 last:border-0 text-[11px] items-start">
+                        <div key={t.id} className="grid grid-cols-[50px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 border-b border-border/50 last:border-0 text-[11px]">
                           <span className="text-muted-foreground">{format(parseISO(t.date), 'dd MMM')}</span>
                           <span className="font-medium truncate">{getSubCategory(t)}</span>
                           <span className="text-right font-semibold">{t.type === 'payment' ? '-' : formatINR(Number(t.amount))}</span>
@@ -339,20 +434,87 @@ export function EmployeeReport() {
                           <span className={cn("text-right font-semibold", runBal > 0 ? "text-warning" : "text-success")}>{formatINR(runBal)}</span>
                         </div>
                       );
-                    })}
+                    });
+                  })()}
+                </div>
+              )}
+
+              {/* 3. Rate Work - Previous + Current */}
+              {(prevRateWorkDues.length > 0 || currentRateWorkTxns.length > 0) && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-3 py-2 bg-accent/10 border-b border-border flex justify-between items-center">
+                    <span className="text-xs font-semibold text-accent">Rate Work</span>
+                    <div className="flex gap-2 text-[10px] text-muted-foreground">
+                      {totalPrevRateWorkDue > 0 && <span>Prev: <span className="font-semibold text-warning">{formatINR(totalPrevRateWorkDue)}</span></span>}
+                      <span>{currentMonthLabel}: <span className={cn("font-semibold", currentRWDue > 0 ? "text-warning" : "text-success")}>{formatINR(currentRWDue)}</span></span>
+                    </div>
                   </div>
-                );
-              })}
+
+                  {/* Previous rate work month-wise */}
+                  {prevRateWorkDues.length > 0 && (
+                    <>
+                      <div className="grid grid-cols-[1fr_60px_60px_60px] gap-1 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-b border-border">
+                        <span>Month</span>
+                        <span className="text-right">Earned</span>
+                        <span className="text-right">Paid</span>
+                        <span className="text-right">Due</span>
+                      </div>
+                      {prevRateWorkDues.map(m => (
+                        <div key={m.monthKey} className="grid grid-cols-[1fr_60px_60px_60px] gap-1 px-3 py-1.5 border-b border-border/50 text-[11px]">
+                          <span className="font-medium">{m.monthLabel}</span>
+                          <span className="text-right">{formatINR(m.earned)}</span>
+                          <span className="text-right text-muted-foreground">{formatINR(m.paid)}</span>
+                          <span className={cn("text-right font-semibold", m.due > 0 ? "text-warning" : "text-success")}>{formatINR(m.due)}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Current month rate work detail */}
+                  {currentRateWorkTxns.length > 0 && (
+                    <>
+                      <div className="px-3 py-1 bg-secondary/30 text-[10px] font-semibold text-muted-foreground border-b border-border">
+                        {currentMonthLabel} Rate Work Detail
+                      </div>
+                      <div className="grid grid-cols-[50px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-b border-border">
+                        <span>Date</span>
+                        <span>Type</span>
+                        <span className="text-right">Earned</span>
+                        <span className="text-right">Payment</span>
+                        <span className="text-right">Balance</span>
+                      </div>
+                      {(() => {
+                        let rwRunBal = totalPrevRateWorkDue;
+                        return currentRateWorkTxns.map(t => {
+                          rwRunBal += getBalanceDelta(t);
+                          return (
+                            <div key={t.id} className="grid grid-cols-[50px_1fr_55px_70px_55px] gap-1 px-3 py-1.5 border-b border-border/50 last:border-0 text-[11px]">
+                              <span className="text-muted-foreground">{format(parseISO(t.date), 'dd MMM')}</span>
+                              <span className="font-medium truncate">{getSubCategory(t)}</span>
+                              <span className="text-right font-semibold">{t.type === 'payment' ? '-' : formatINR(Number(t.amount))}</span>
+                              <span className="text-right text-muted-foreground text-[10px]">{getPaymentStr(t) || '-'}</span>
+                              <span className={cn("text-right font-semibold", rwRunBal > 0 ? "text-warning" : "text-success")}>{formatINR(rwRunBal)}</span>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Grand Total */}
-              <div className="bg-card border border-border rounded-xl p-3 flex justify-between items-center">
-                <span className="text-xs font-bold text-foreground">Grand Total</span>
-                <div className="flex gap-4 text-xs">
-                  {totalPrevDue > 0 && <span>Prev: <span className="font-bold text-warning">{formatINR(totalPrevDue)}</span></span>}
-                  <span>Earned: <span className="font-bold">{formatINR(totalEarned)}</span></span>
-                  <span>Paid: <span className="font-bold">{formatINR(totalPaid)}</span></span>
-                  <span className={cn("font-bold", totalBalance > 0 ? "text-warning" : "text-success")}>
-                    Balance: {formatINR(totalBalance)}
+              <div className="bg-card border border-border rounded-xl p-3">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold">Grand Total Due</span>
+                  <div className="flex gap-3">
+                    <span>Day Salary: <span className={cn("font-bold", totalDaySalaryDue > 0 ? "text-warning" : "text-success")}>{formatINR(totalDaySalaryDue)}</span></span>
+                    <span>Rate Work: <span className={cn("font-bold", totalRateWorkDue > 0 ? "text-warning" : "text-success")}>{formatINR(totalRateWorkDue)}</span></span>
+                  </div>
+                </div>
+                <div className="text-right mt-1">
+                  <span className={cn("text-sm font-bold", grandTotalDue > 0 ? "text-warning" : "text-success")}>
+                    Total: {formatINR(grandTotalDue)}
                   </span>
                 </div>
               </div>

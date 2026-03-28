@@ -12,8 +12,9 @@ import { EmployeeReport } from '@/components/reports/EmployeeReport';
 import { SupplierReport } from '@/components/reports/SupplierReport';
 import { CustomerReport } from '@/components/reports/CustomerReport';
 import { ProfitReport } from '@/components/reports/ProfitReport';
+import { ItemReport } from '@/components/reports/ItemReport';
 
-type ReportTab = 'daily' | 'monthly' | 'profit' | 'employee' | 'supplier_detail' | 'customer' | 'supplier' | 'inventory' | 'drawer';
+type ReportTab = 'daily' | 'monthly' | 'profit' | 'employee' | 'supplier_detail' | 'customer' | 'supplier' | 'inventory' | 'item' | 'drawer';
 
 // CSV export helper
 function downloadCSV(rows: string[][], filename: string) {
@@ -35,6 +36,7 @@ const reportTabs: { id: ReportTab; label: string; icon: any }[] = [
   { id: 'customer', label: 'Customers', icon: Users },
   { id: 'supplier', label: 'Ledger', icon: Truck },
   { id: 'inventory', label: 'Inventory', icon: Package },
+  { id: 'item', label: 'Item Ledger', icon: Package },
   { id: 'drawer', label: 'Drawer', icon: ArrowLeftRight },
 ];
 
@@ -77,6 +79,7 @@ export default function ReportsPage() {
         {activeTab === 'customer' && <CustomerReport />}
         {activeTab === 'supplier' && <SupplierLedger />}
         {activeTab === 'inventory' && <InventoryReport />}
+        {activeTab === 'item' && <ItemReport />}
         {activeTab === 'drawer' && <DrawerReport />}
       </div>
     </AppLayout>

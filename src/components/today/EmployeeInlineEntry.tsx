@@ -494,15 +494,32 @@ export function EmployeeInlineEntry({
                 <span className="text-sm font-bold text-foreground">{formatINR(totalDailyAmount)}</span>
               </div>
 
-              {/* Running Due (up to selected date) */}
-              <div className={cn("rounded-lg px-3 py-2 flex justify-between items-center",
-                dailyRunningDue > 0 ? "bg-destructive/10 border border-destructive/30" : "bg-success/10 border border-success/30"
+              {/* Previous Due (before this entry) */}
+              <div className={cn("rounded-lg px-3 py-1.5 flex justify-between items-center",
+                dailyRunningDue > 0 ? "bg-warning/10 border border-warning/30" : "bg-success/10 border border-success/30"
               )}>
-                <span className="text-xs font-medium">{dailyRunningDue > 0 ? 'Running Due' : 'No Due'}</span>
-                <span className={cn("text-sm font-bold", dailyRunningDue > 0 ? "text-destructive" : "text-success")}>
+                <span className="text-[10px] font-medium text-muted-foreground">Previous Due</span>
+                <span className={cn("text-xs font-bold", dailyRunningDue > 0 ? "text-warning" : "text-success")}>
                   {formatINR(dailyRunningDue)}
                 </span>
               </div>
+
+              {/* Current Due (live: previous due + current entry - payments) */}
+              {(() => {
+                const currentEntryAmount = totalDailyAmount;
+                const currentPayment = dailyPayments.reduce((s, p) => s + p.amount, 0);
+                const currentDue = dailyRunningDue + currentEntryAmount - currentPayment;
+                return (
+                  <div className={cn("rounded-lg px-3 py-2 flex justify-between items-center",
+                    currentDue > 0 ? "bg-destructive/10 border border-destructive/30" : "bg-success/10 border border-success/30"
+                  )}>
+                    <span className="text-xs font-medium">{currentDue > 0 ? 'Due (after this entry)' : 'No Due'}</span>
+                    <span className={cn("text-sm font-bold", currentDue > 0 ? "text-destructive" : "text-success")}>
+                      {formatINR(currentDue)}
+                    </span>
+                  </div>
+                );
+              })()}
 
               {/* Payment Modes */}
               <div className="space-y-1">
@@ -521,13 +538,6 @@ export function EmployeeInlineEntry({
                   </Button>
                 )}
               </div>
-
-              {/* After payment, show updated due */}
-              {dailyPayments.reduce((s, p) => s + p.amount, 0) > 0 && (
-                <div className="text-[10px] text-muted-foreground text-center">
-                  After payment: {formatINR(Math.max(0, dailyRunningDue + totalDailyAmount - dailyPayments.reduce((s, p) => s + p.amount, 0)))}
-                </div>
-              )}
             </>
           )}
         </div>
@@ -568,15 +578,32 @@ export function EmployeeInlineEntry({
                 <Input type="number" inputMode="numeric" value={rwAmount} onChange={e => setRwAmount(e.target.value)} placeholder="₹0" className="h-8 text-xs" />
               </div>
 
-              {/* Running Due */}
-              <div className={cn("rounded-lg px-3 py-2 flex justify-between items-center",
-                rwRunningDue > 0 ? "bg-destructive/10 border border-destructive/30" : "bg-success/10 border border-success/30"
+              {/* Previous Due (before this entry) */}
+              <div className={cn("rounded-lg px-3 py-1.5 flex justify-between items-center",
+                rwRunningDue > 0 ? "bg-warning/10 border border-warning/30" : "bg-success/10 border border-success/30"
               )}>
-                <span className="text-xs font-medium">{rwRunningDue > 0 ? 'Rate Work Due' : 'No Due'}</span>
-                <span className={cn("text-sm font-bold", rwRunningDue > 0 ? "text-destructive" : "text-success")}>
+                <span className="text-[10px] font-medium text-muted-foreground">Previous Due</span>
+                <span className={cn("text-xs font-bold", rwRunningDue > 0 ? "text-warning" : "text-success")}>
                   {formatINR(rwRunningDue)}
                 </span>
               </div>
+
+              {/* Current Due (live: previous due + current entry - payments) */}
+              {(() => {
+                const rwAmt = parseFloat(rwAmount) || 0;
+                const rwPay = rwPayments.reduce((s, p) => s + p.amount, 0);
+                const currentDue = rwRunningDue + rwAmt - rwPay;
+                return (
+                  <div className={cn("rounded-lg px-3 py-2 flex justify-between items-center",
+                    currentDue > 0 ? "bg-destructive/10 border border-destructive/30" : "bg-success/10 border border-success/30"
+                  )}>
+                    <span className="text-xs font-medium">{currentDue > 0 ? 'Due (after this entry)' : 'No Due'}</span>
+                    <span className={cn("text-sm font-bold", currentDue > 0 ? "text-destructive" : "text-success")}>
+                      {formatINR(currentDue)}
+                    </span>
+                  </div>
+                );
+              })()}
 
               {/* Payment */}
               <div className="space-y-1">

@@ -38,47 +38,38 @@ export default function TodayPage() {
   const { opening, closing, previousClosing, updateOpening, updateClosing } = useDrawer(selectedDate);
   const summary = getSummary();
 
-  // Calculate total employee due
+  // Calculate total employee running due up to selectedDate
   const [employeeTotalDue, setEmployeeTotalDue] = useState(0);
   useEffect(() => {
     (async () => {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
       const { data: emps } = await supabase.from('employees').select('id, salary');
       if (!emps || emps.length === 0) { setEmployeeTotalDue(0); return; }
       
       const { data: allTxns } = await supabase.from('transactions')
-        .select('amount, payments, type, employee_id')
-        .eq('section', 'employee');
+        .select('amount, payments, type, employee_id, reference')
+        .eq('section', 'employee')
+        .lte('date', dateStr);
       
+      const getTotalPaid = (txns: any[]) => txns.reduce((s: number, t: any) => {
+        const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
+        return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
+      }, 0);
+
       let totalDue = 0;
       for (const emp of emps) {
         const empTxns = (allTxns || []).filter(t => t.employee_id === emp.id);
-        const salaryAllowance = empTxns.filter(t => t.type !== 'rate_work' && t.type !== 'payment');
-        const salaryTotal = salaryAllowance.reduce((s, t) => s + Number(t.amount), 0);
-        const salaryPaid = salaryAllowance.reduce((s, t) => {
-          const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
-          return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
-        }, 0);
-        const paymentTxns = empTxns.filter(t => t.type === 'payment' && (t as any).reference !== 'ratework');
-        const paymentPaid = paymentTxns.reduce((s, t) => {
-          const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
-          return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
-        }, 0);
-        const rateWorkTxns = empTxns.filter(t => t.type === 'rate_work');
-        const rateWorkTotal = rateWorkTxns.reduce((s, t) => s + Number(t.amount), 0);
-        const rateWorkPaid = rateWorkTxns.reduce((s, t) => {
-          const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
-          return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
-        }, 0);
-        const rateWorkPaymentTxns = empTxns.filter(t => t.type === 'payment' && (t as any).reference === 'ratework');
-        const rateWorkPaymentPaid = rateWorkPaymentTxns.reduce((s, t) => {
-          const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
-          return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
-        }, 0);
-        totalDue += Math.max(0, salaryTotal - salaryPaid - paymentPaid) + Math.max(0, rateWorkTotal - rateWorkPaid - rateWorkPaymentPaid);
+        // Daily salary due
+        const salaryTxns = empTxns.filter(t => t.type === 'salary' || t.type === 'attendance' || t.type === 'allowance');
+        const dailyDue = Math.max(0, salaryTxns.reduce((s, t) => s + Number(t.amount), 0) - getTotalPaid(salaryTxns) - getTotalPaid(empTxns.filter(t => t.type === 'payment' && t.reference !== 'ratework' && t.reference !== 'advance')));
+        // Rate work due
+        const rwTxns = empTxns.filter(t => t.type === 'rate_work');
+        const rwDue = Math.max(0, rwTxns.reduce((s, t) => s + Number(t.amount), 0) - getTotalPaid(rwTxns) - getTotalPaid(empTxns.filter(t => t.type === 'payment' && t.reference === 'ratework')));
+        totalDue += dailyDue + rwDue;
       }
       setEmployeeTotalDue(totalDue);
     })();
-  }, [transactions]);
+  }, [selectedDate, transactions]);
 
   useEffect(() => {
     (async () => {

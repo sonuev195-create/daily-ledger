@@ -1,18 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Check, X, Pencil, Trash2, Users, Gift, Hammer, CreditCard } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Check, X, Pencil, Trash2, Users, Hammer, Search } from 'lucide-react';
 import { Transaction, TransactionSection, PaymentEntry, PaymentMode } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
-import { generateDailyBillNumber, employeeTypePrefixMap } from '@/lib/billNumbers';
+import { generateDailyBillNumber } from '@/lib/billNumbers';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface EmployeeResult {
   id: string;
@@ -21,28 +22,10 @@ interface EmployeeResult {
   salary: number;
 }
 
-interface AllowanceCategory {
-  id: string;
-  name: string;
-}
+interface AllowanceCategory { id: string; name: string; }
+interface RateWorkType { id: string; name: string; }
 
-interface RateWorkType {
-  id: string;
-  name: string;
-}
-
-type EmployeeTab = 'attendance' | 'allowance' | 'ratework' | 'payment';
-type PaymentDueType = 'present' | 'previous' | 'ratework';
-
-interface AttendanceRow {
-  employeeId: string;
-  employeeName: string;
-  present: boolean;
-  daySalary: string;
-  rateWorkTypeId: string;
-  saved: boolean;
-  transactionId?: string;
-}
+type SalaryTab = 'daily' | 'ratework';
 
 interface EmployeeInlineEntryProps {
   transactions: Transaction[];
@@ -57,45 +40,38 @@ interface EmployeeInlineEntryProps {
 export function EmployeeInlineEntry({
   transactions, selectedDate, onSave, onEditTransaction, onDeleteTransaction, editingTransaction, onCancelEdit,
 }: EmployeeInlineEntryProps) {
-  const [activeTab, setActiveTab] = useState<EmployeeTab>('attendance');
-  const [employees, setEmployees] = useState<EmployeeResult[]>([]);
+  const [activeTab, setActiveTab] = useState<SalaryTab>('daily');
   const [allEmployees, setAllEmployees] = useState<EmployeeResult[]>([]);
   const [allowanceCategories, setAllowanceCategories] = useState<AllowanceCategory[]>([]);
   const [rateWorkTypes, setRateWorkTypes] = useState<RateWorkType[]>([]);
   const [saving, setSaving] = useState(false);
   const { selectableMethods } = usePaymentMethods();
 
-  // Attendance state
-  const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([]);
+  // Employee selection popup
+  const [showEmpPopup, setShowEmpPopup] = useState(false);
+  const [empSearch, setEmpSearch] = useState('');
 
-  // Allowance state
-  const [allowanceEmployeeId, setAllowanceEmployeeId] = useState('');
-  const [allowanceCategoryId, setAllowanceCategoryId] = useState('');
-  const [allowanceAmount, setAllowanceAmount] = useState('');
+  // Daily salary state
+  const [dailyEmployeeId, setDailyEmployeeId] = useState('');
+  const [dailyAttendance, setDailyAttendance] = useState(true);
+  const [dailyAmount, setDailyAmount] = useState('');
+  const [selectedAllowances, setSelectedAllowances] = useState<string[]>([]);
+  const [allowanceAmounts, setAllowanceAmounts] = useState<Record<string, string>>({});
+  const [dailyPayments, setDailyPayments] = useState<PaymentEntry[]>([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+  const [dailyRunningDue, setDailyRunningDue] = useState(0);
 
   // Rate work state
-  const [rateWorkEmployeeId, setRateWorkEmployeeId] = useState('');
-  const [rateWorkTypeId, setRateWorkTypeId] = useState('');
-  const [rateWorkAmount, setRateWorkAmount] = useState('');
+  const [rwEmployeeId, setRwEmployeeId] = useState('');
+  const [rwTypeId, setRwTypeId] = useState('');
+  const [rwAmount, setRwAmount] = useState('');
+  const [rwPayments, setRwPayments] = useState<PaymentEntry[]>([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+  const [rwRunningDue, setRwRunningDue] = useState(0);
 
-  // Payment state
-  const [paymentEmployeeId, setPaymentEmployeeId] = useState('');
-  const [paymentDueType, setPaymentDueType] = useState<PaymentDueType>('present');
-  const [paymentPayments, setPaymentPayments] = useState<PaymentEntry[]>([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
-  const [showAdvanceToggle, setShowAdvanceToggle] = useState(false);
-  const [employeeDues, setEmployeeDues] = useState<{
-    currentMonthDue: number;
-    previousDues: number;
-    rateWorkDue: number;
-    totalDue: number;
-    rateWorkBreakdown: { typeName: string; amount: number }[];
-  } | null>(null);
+  // Which popup is for
+  const [popupFor, setPopupFor] = useState<'daily' | 'ratework'>('daily');
 
   const employeeTransactions = transactions.filter(t => t.section === 'employee');
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({});
-
-  const currentMonthName = format(selectedDate, 'MMM');
-  const previousMonthName = format(subMonths(selectedDate, 1), 'MMM');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -104,8 +80,7 @@ export function EmployeeInlineEntry({
         supabase.from('allowance_categories').select('id, name').order('name'),
         supabase.from('rate_work_types').select('id, name').order('name'),
       ]);
-      const emps = (empRes.data || []).map(e => ({ id: e.id, name: e.name, advance_balance: Number(e.advance_balance), salary: Number(e.salary) }));
-      setAllEmployees(emps);
+      setAllEmployees((empRes.data || []).map(e => ({ id: e.id, name: e.name, advance_balance: Number(e.advance_balance), salary: Number(e.salary) })));
       setAllowanceCategories(allowRes.data || []);
       setRateWorkTypes(rateRes.data || []);
     };
@@ -122,271 +97,171 @@ export function EmployeeInlineEntry({
     });
   }, [transactions]);
 
+  // Calculate running due for daily salary up to selectedDate
   useEffect(() => {
-    if (!editingTransaction) return;
+    if (!dailyEmployeeId) { setDailyRunningDue(0); return; }
+    calculateRunningDue(dailyEmployeeId, 'daily');
+  }, [dailyEmployeeId, selectedDate, transactions]);
 
-    if (editingTransaction.type === 'allowance') {
-      setActiveTab('allowance');
-      setAllowanceEmployeeId(editingTransaction.employeeId || '');
-      setAllowanceCategoryId(editingTransaction.allowanceCategoryId || editingTransaction.reference || '');
-      setAllowanceAmount(editingTransaction.amount ? String(editingTransaction.amount) : '');
-      return;
-    }
-
-    if (editingTransaction.type === 'rate_work') {
-      setActiveTab('ratework');
-      setRateWorkEmployeeId(editingTransaction.employeeId || '');
-      setRateWorkTypeId(editingTransaction.rateWorkTypeId || editingTransaction.reference || '');
-      setRateWorkAmount(editingTransaction.amount ? String(editingTransaction.amount) : '');
-      return;
-    }
-
-    if (editingTransaction.type === 'payment') {
-      setActiveTab('payment');
-      setPaymentEmployeeId(editingTransaction.employeeId || '');
-      setPaymentPayments(editingTransaction.payments.length > 0 ? editingTransaction.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
-      setShowAdvanceToggle(editingTransaction.reference === 'advance');
-      if (editingTransaction.reference === 'previous' || editingTransaction.reference === 'ratework' || editingTransaction.reference === 'present') {
-        setPaymentDueType(editingTransaction.reference);
-      }
-      return;
-    }
-
-    setActiveTab('attendance');
-  }, [editingTransaction]);
-
-  // Build attendance rows - rate_work entries should NOT count as present
+  // Calculate running due for rate work up to selectedDate
   useEffect(() => {
-    if (allEmployees.length === 0) return;
-    // Only salary/attendance type counts as present, NOT rate_work
-    const todayAttendanceTxns = employeeTransactions.filter(t => t.type === 'salary' || t.type === 'attendance');
-    const todayRateWorkTxns = employeeTransactions.filter(t => t.type === 'rate_work');
+    if (!rwEmployeeId) { setRwRunningDue(0); return; }
+    calculateRunningDue(rwEmployeeId, 'ratework');
+  }, [rwEmployeeId, selectedDate, transactions]);
 
-    const rows: AttendanceRow[] = allEmployees.map(emp => {
-      const existingTxn = todayAttendanceTxns.find(t => t.employeeId === emp.id);
-      const hasRateWork = todayRateWorkTxns.some(t => t.employeeId === emp.id);
-      return {
-        employeeId: emp.id,
-        employeeName: emp.name,
-        // Present only if has attendance/salary txn, rate_work alone does NOT mean present
-        present: !!existingTxn,
-        daySalary: existingTxn ? existingTxn.amount.toString() : emp.salary.toString(),
-        rateWorkTypeId: existingTxn?.reference || '',
-        saved: !!existingTxn,
-        transactionId: existingTxn?.id,
-      };
-    });
-    setAttendanceRows(rows);
-  }, [allEmployees, transactions]);
+  const calculateRunningDue = async (empId: string, type: 'daily' | 'ratework') => {
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const { data: allTxns } = await supabase.from('transactions')
+      .select('amount, payments, type, reference')
+      .eq('employee_id', empId)
+      .eq('section', 'employee')
+      .lte('date', dateStr);
 
-  // Calculate dues when payment employee selected
-  useEffect(() => {
-    if (!paymentEmployeeId) { setEmployeeDues(null); return; }
-    (async () => {
-      const monthStart = startOfMonth(selectedDate);
-      const monthEnd = endOfMonth(selectedDate);
+    if (!allTxns) { type === 'daily' ? setDailyRunningDue(0) : setRwRunningDue(0); return; }
 
-      const { data: currentMonthData } = await supabase.from('transactions')
-        .select('amount, payments, type, rate_work_type_id, reference')
-        .eq('employee_id', paymentEmployeeId)
-        .eq('section', 'employee')
-        .gte('date', format(monthStart, 'yyyy-MM-dd'))
-        .lte('date', format(monthEnd, 'yyyy-MM-dd'));
+    const getTotalPaid = (txns: any[]) => txns.reduce((s, t) => {
+      const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
+      return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
+    }, 0);
 
-      const { data: prevData } = await supabase.from('transactions')
-        .select('amount, payments, type, rate_work_type_id, reference')
-        .eq('employee_id', paymentEmployeeId)
-        .eq('section', 'employee')
-        .lt('date', format(monthStart, 'yyyy-MM-dd'));
-
-      const { data: rwTypes } = await supabase.from('rate_work_types').select('id, name');
-      const rwMap = new Map((rwTypes || []).map(r => [r.id, r.name]));
-
-      const getTotalPaid = (txns: any[]) => txns.reduce((s, t) => {
-        const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
-        return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
-      }, 0);
-
-      const getTotalAmount = (txns: any[]) => txns.reduce((s, t) => s + Number(t.amount), 0);
-
-      // Current month: salary + allowance (exclude rate_work and payments)
-      const currentSalaryAllowance = (currentMonthData || []).filter(t => t.type !== 'rate_work' && t.type !== 'payment');
-      const currentMonthSalary = getTotalAmount(currentSalaryAllowance);
-      const currentMonthInlinePaid = getTotalPaid(currentSalaryAllowance);
-      const currentPaymentTxns = (currentMonthData || []).filter(t => t.type === 'payment' && t.reference !== 'ratework');
-      const currentPaymentPaid = currentPaymentTxns.reduce((s, t) => {
-        const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
-        return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
-      }, 0);
-      const currentMonthDue = Math.max(0, currentMonthSalary - currentMonthInlinePaid - currentPaymentPaid);
-
-      // Previous dues: salary + allowance before this month (exclude rate_work AND payment types)
-      const prevSalaryAllowance = (prevData || []).filter(t => t.type !== 'rate_work' && t.type !== 'payment');
-      const prevSalary = getTotalAmount(prevSalaryAllowance);
-      const prevInlinePaid = getTotalPaid(prevSalaryAllowance);
-      const prevPaymentTxns = (prevData || []).filter(t => t.type === 'payment' && t.reference !== 'ratework');
-      const prevPaymentPaid = prevPaymentTxns.reduce((s, t) => {
-        const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
-        return s + payments.reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
-      }, 0);
-      const previousDues = Math.max(0, prevSalary - prevInlinePaid - prevPaymentPaid);
-
-      // Rate work due: all rate_work across all time
-      const allRateWork = [...(currentMonthData || []), ...(prevData || [])].filter(t => t.type === 'rate_work');
-      const rateWorkByType: Record<string, number> = {};
-        allRateWork.forEach(t => {
-        const typeId = t.rate_work_type_id || t.reference || 'other';
-        rateWorkByType[typeId] = (rateWorkByType[typeId] || 0) + Number(t.amount);
-        const payments = Array.isArray(t.payments) ? t.payments as any[] : [];
-        const paid = payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-        rateWorkByType[typeId] -= paid;
-      });
-      const rateWorkBreakdown = Object.entries(rateWorkByType)
-        .filter(([, amt]) => amt > 0)
-        .map(([typeId, amount]) => ({ typeName: rwMap.get(typeId) || 'Other', amount }));
-      const rateWorkDue = rateWorkBreakdown.reduce((s, r) => s + r.amount, 0);
-
-      setEmployeeDues({
-        currentMonthDue,
-        previousDues,
-        rateWorkDue,
-        totalDue: currentMonthDue + previousDues + rateWorkDue,
-        rateWorkBreakdown,
-      });
-    })();
-  }, [paymentEmployeeId, selectedDate, transactions]);
-
-  const toggleAttendance = (index: number) => {
-    setAttendanceRows(prev => prev.map((r, i) => i === index ? { ...r, present: !r.present } : r));
+    if (type === 'daily') {
+      // Daily salary due = (salary + allowance amounts) - (inline payments) - (payment transactions for present/previous)
+      const salaryTxns = allTxns.filter(t => t.type === 'salary' || t.type === 'attendance' || t.type === 'allowance');
+      const totalEarned = salaryTxns.reduce((s, t) => s + Number(t.amount), 0);
+      const inlinePaid = getTotalPaid(salaryTxns);
+      const paymentTxns = allTxns.filter(t => t.type === 'payment' && t.reference !== 'ratework' && t.reference !== 'advance');
+      const paymentPaid = getTotalPaid(paymentTxns);
+      setDailyRunningDue(Math.max(0, totalEarned - inlinePaid - paymentPaid));
+    } else {
+      // Rate work due = rate work amounts - inline paid - rate work payments
+      const rwTxns = allTxns.filter(t => t.type === 'rate_work');
+      const totalEarned = rwTxns.reduce((s, t) => s + Number(t.amount), 0);
+      const inlinePaid = getTotalPaid(rwTxns);
+      const paymentTxns = allTxns.filter(t => t.type === 'payment' && t.reference === 'ratework');
+      const paymentPaid = getTotalPaid(paymentTxns);
+      setRwRunningDue(Math.max(0, totalEarned - inlinePaid - paymentPaid));
+    }
   };
 
-  const updateAttendanceSalary = (index: number, value: string) => {
-    setAttendanceRows(prev => prev.map((r, i) => i === index ? { ...r, daySalary: value } : r));
+  // Auto-fill salary when employee selected
+  useEffect(() => {
+    if (dailyEmployeeId) {
+      const emp = allEmployees.find(e => e.id === dailyEmployeeId);
+      if (emp) setDailyAmount(emp.salary.toString());
+    }
+  }, [dailyEmployeeId, allEmployees]);
+
+  const openEmployeePopup = (forTab: 'daily' | 'ratework') => {
+    setPopupFor(forTab);
+    setEmpSearch('');
+    setShowEmpPopup(true);
   };
 
-  const updateAttendanceRateWork = (index: number, value: string) => {
-    setAttendanceRows(prev => prev.map((r, i) => i === index ? { ...r, rateWorkTypeId: value } : r));
+  const selectEmployee = (emp: EmployeeResult) => {
+    if (popupFor === 'daily') {
+      setDailyEmployeeId(emp.id);
+      setDailyAmount(emp.salary.toString());
+      setDailyAttendance(true);
+      setSelectedAllowances([]);
+      setAllowanceAmounts({});
+      setDailyPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+    } else {
+      setRwEmployeeId(emp.id);
+      setRwAmount('');
+      setRwTypeId('');
+      setRwPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+    }
+    setShowEmpPopup(false);
   };
 
-  const saveAttendance = async () => {
+  const filteredEmps = allEmployees.filter(e =>
+    e.name.toLowerCase().includes(empSearch.toLowerCase())
+  );
+
+  const toggleAllowance = (id: string) => {
+    setSelectedAllowances(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const totalAllowanceAmount = selectedAllowances.reduce((s, id) => s + (parseFloat(allowanceAmounts[id] || '0') || 0), 0);
+  const dailySalaryNum = parseFloat(dailyAmount) || 0;
+  const totalDailyAmount = (dailyAttendance ? dailySalaryNum : 0) + totalAllowanceAmount;
+
+  const saveDailySalary = async () => {
+    if (!dailyEmployeeId) { toast.error('Select an employee'); return; }
+    if (!dailyAttendance && selectedAllowances.length === 0) { toast.error('Mark attendance or add allowance'); return; }
+
     setSaving(true);
     try {
-      const presentRows = attendanceRows.filter(r => r.present && !r.saved);
-      const removedRows = attendanceRows.filter(r => !r.present && r.saved && r.transactionId);
-
-      for (const row of presentRows) {
+      // Save attendance if present
+      if (dailyAttendance) {
         const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
           date: selectedDate,
           section: 'employee' as TransactionSection,
           type: 'salary',
-          amount: parseFloat(row.daySalary) || 0,
-          payments: [],
-          employeeId: row.employeeId,
+          amount: dailySalaryNum,
+          payments: dailyPayments.filter(p => p.amount > 0),
+          employeeId: dailyEmployeeId,
           billNumber: await generateDailyBillNumber('EM', selectedDate),
-          reference: row.rateWorkTypeId || undefined,
         };
         await onSave(txn);
       }
 
-      for (const row of removedRows) {
-        if (row.transactionId) {
-          await onDeleteTransaction(row.transactionId);
-        }
+      // Save each allowance as separate transaction
+      for (const alId of selectedAllowances) {
+        const alAmt = parseFloat(allowanceAmounts[alId] || '0') || 0;
+        if (alAmt <= 0) continue;
+        const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+          date: selectedDate,
+          section: 'employee' as TransactionSection,
+          type: 'allowance',
+          amount: alAmt,
+          payments: !dailyAttendance ? dailyPayments.filter(p => p.amount > 0) : [],
+          employeeId: dailyEmployeeId,
+          billNumber: await generateDailyBillNumber('EA', selectedDate),
+          allowanceCategoryId: alId,
+          reference: alId,
+        };
+        await onSave(txn);
       }
 
-      toast.success(`Attendance saved (${presentRows.length} present)`);
+      toast.success('Daily salary saved');
+      // Reset
+      setDailyEmployeeId('');
+      setDailyAttendance(true);
+      setDailyAmount('');
+      setSelectedAllowances([]);
+      setAllowanceAmounts({});
+      setDailyPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
     } catch (err) {
-      toast.error('Error saving attendance');
+      toast.error('Error saving');
       console.error(err);
     } finally {
       setSaving(false);
     }
   };
 
-  const saveAllowance = async () => {
-    if (!allowanceEmployeeId) { toast.error('Select an employee'); return; }
-    if (!allowanceCategoryId) { toast.error('Select a category'); return; }
-    if (!allowanceAmount || parseFloat(allowanceAmount) <= 0) { toast.error('Enter amount'); return; }
+  const saveDailyPayment = async () => {
+    if (!dailyEmployeeId) { toast.error('Select an employee'); return; }
+    const totalPay = dailyPayments.reduce((s, p) => s + p.amount, 0);
+    if (totalPay <= 0) { toast.error('Enter payment amount'); return; }
 
     setSaving(true);
     try {
-      const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
-        date: selectedDate,
-        section: 'employee' as TransactionSection,
-        type: 'allowance',
-        amount: parseFloat(allowanceAmount),
-        payments: [],
-        employeeId: allowanceEmployeeId,
-        billNumber: await generateDailyBillNumber('EA', selectedDate),
-        allowanceCategoryId: allowanceCategoryId,
-        reference: allowanceCategoryId,
-      };
-      await onSave(txn);
-      setAllowanceEmployeeId('');
-      setAllowanceCategoryId('');
-      setAllowanceAmount('');
-      toast.success('Allowance saved');
-    } catch (err) {
-      toast.error('Error saving allowance');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const saveRateWork = async () => {
-    if (!rateWorkEmployeeId) { toast.error('Select an employee'); return; }
-    if (!rateWorkTypeId) { toast.error('Select work type'); return; }
-    if (!rateWorkAmount || parseFloat(rateWorkAmount) <= 0) { toast.error('Enter rate'); return; }
-
-    setSaving(true);
-    try {
-      const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
-        date: selectedDate,
-        section: 'employee' as TransactionSection,
-        type: 'rate_work',
-        amount: parseFloat(rateWorkAmount),
-        payments: [],
-        employeeId: rateWorkEmployeeId,
-        billNumber: await generateDailyBillNumber('RW', selectedDate),
-        rateWorkTypeId: rateWorkTypeId,
-        reference: rateWorkTypeId,
-      };
-      await onSave(txn);
-      setRateWorkEmployeeId('');
-      setRateWorkTypeId('');
-      setRateWorkAmount('');
-      toast.success('Rate work saved');
-    } catch (err) {
-      toast.error('Error saving rate work');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const savePayment = async () => {
-    if (!paymentEmployeeId) { toast.error('Select an employee'); return; }
-    const totalPayment = paymentPayments.reduce((s, p) => s + p.amount, 0);
-    if (totalPayment <= 0) { toast.error('Enter payment amount'); return; }
-
-    setSaving(true);
-    try {
-      // Store paymentDueType in reference so report can distinguish
       const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
         date: selectedDate,
         section: 'employee' as TransactionSection,
         type: 'payment',
         amount: 0,
-        payments: paymentPayments.filter(p => p.amount > 0),
-        employeeId: paymentEmployeeId,
+        payments: dailyPayments.filter(p => p.amount > 0),
+        employeeId: dailyEmployeeId,
         billNumber: await generateDailyBillNumber('EP', selectedDate),
-        reference: paymentDueType,
+        reference: 'present',
       };
       await onSave(txn);
-      setPaymentEmployeeId('');
-      setPaymentDueType('present');
-      setPaymentPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
-      setEmployeeDues(null);
       toast.success('Payment saved');
+      setDailyPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
     } catch (err) {
       toast.error('Error saving payment');
     } finally {
@@ -394,10 +269,41 @@ export function EmployeeInlineEntry({
     }
   };
 
-  const saveAdvance = async () => {
-    if (!paymentEmployeeId) { toast.error('Select an employee'); return; }
-    const totalPayment = paymentPayments.reduce((s, p) => s + p.amount, 0);
-    if (totalPayment <= 0) { toast.error('Enter advance amount'); return; }
+  const saveRateWork = async () => {
+    if (!rwEmployeeId) { toast.error('Select an employee'); return; }
+    if (!rwTypeId) { toast.error('Select work type'); return; }
+    if (!rwAmount || parseFloat(rwAmount) <= 0) { toast.error('Enter rate'); return; }
+
+    setSaving(true);
+    try {
+      const txn: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+        date: selectedDate,
+        section: 'employee' as TransactionSection,
+        type: 'rate_work',
+        amount: parseFloat(rwAmount),
+        payments: rwPayments.filter(p => p.amount > 0),
+        employeeId: rwEmployeeId,
+        billNumber: await generateDailyBillNumber('RW', selectedDate),
+        rateWorkTypeId: rwTypeId,
+        reference: rwTypeId,
+      };
+      await onSave(txn);
+      toast.success('Rate work saved');
+      setRwEmployeeId('');
+      setRwTypeId('');
+      setRwAmount('');
+      setRwPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+    } catch (err) {
+      toast.error('Error saving rate work');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveRateWorkPayment = async () => {
+    if (!rwEmployeeId) { toast.error('Select an employee'); return; }
+    const totalPay = rwPayments.reduce((s, p) => s + p.amount, 0);
+    if (totalPay <= 0) { toast.error('Enter payment amount'); return; }
 
     setSaving(true);
     try {
@@ -406,37 +312,43 @@ export function EmployeeInlineEntry({
         section: 'employee' as TransactionSection,
         type: 'payment',
         amount: 0,
-        payments: paymentPayments.filter(p => p.amount > 0),
-        employeeId: paymentEmployeeId,
+        payments: rwPayments.filter(p => p.amount > 0),
+        employeeId: rwEmployeeId,
         billNumber: await generateDailyBillNumber('EP', selectedDate),
-        reference: 'advance',
+        reference: 'ratework',
       };
       await onSave(txn);
-      // Update employee advance_balance
-      const emp = allEmployees.find(e => e.id === paymentEmployeeId);
-      if (emp) {
-        await supabase.from('employees').update({
-          advance_balance: emp.advance_balance + totalPayment,
-        }).eq('id', paymentEmployeeId);
-      }
-      setPaymentEmployeeId('');
-      setPaymentPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
-      setShowAdvanceToggle(false);
-      toast.success('Advance recorded');
+      toast.success('Rate work payment saved');
+      setRwPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
     } catch (err) {
-      toast.error('Error saving advance');
+      toast.error('Error saving payment');
     } finally {
       setSaving(false);
     }
   };
 
-  const updatePayment = (i: number, field: 'mode' | 'amount', value: string) => {
-    setPaymentPayments(prev => {
-      const payments = [...prev];
-      if (field === 'amount') payments[i] = { ...payments[i], amount: parseFloat(value) || 0 };
-      else payments[i] = { ...payments[i], mode: value as PaymentMode };
-      return payments;
-    });
+  const updateDailyPayment = (i: number, field: 'mode' | 'amount', value: string) => {
+    setDailyPayments(prev => prev.map((p, idx) => idx === i
+      ? { ...p, [field]: field === 'amount' ? (parseFloat(value) || 0) : value as PaymentMode }
+      : p
+    ));
+  };
+
+  const updateRwPayment = (i: number, field: 'mode' | 'amount', value: string) => {
+    setRwPayments(prev => prev.map((p, idx) => idx === i
+      ? { ...p, [field]: field === 'amount' ? (parseFloat(value) || 0) : value as PaymentMode }
+      : p
+    ));
+  };
+
+  const getTypeBadge = (type: string) => {
+    switch (type) {
+      case 'salary': case 'attendance': return { label: 'Present', color: 'bg-success/10 text-success' };
+      case 'allowance': return { label: 'Allowance', color: 'bg-info/10 text-info' };
+      case 'rate_work': return { label: 'Rate Work', color: 'bg-accent/10 text-accent' };
+      case 'payment': return { label: 'Payment', color: 'bg-warning/10 text-warning' };
+      default: return { label: type, color: 'bg-secondary text-muted-foreground' };
+    }
   };
 
   const getCategoryName = (id: string) => {
@@ -447,32 +359,39 @@ export function EmployeeInlineEntry({
     return '';
   };
 
-  const getTypeBadge = (type: string) => {
-    switch (type) {
-      case 'salary': case 'attendance': return { label: 'Attendance', color: 'bg-success/10 text-success' };
-      case 'allowance': return { label: 'Allowance', color: 'bg-info/10 text-info' };
-      case 'rate_work': return { label: 'Rate Work', color: 'bg-accent/10 text-accent' };
-      case 'payment': return { label: 'Payment', color: 'bg-warning/10 text-warning' };
-      default: return { label: type, color: 'bg-secondary text-muted-foreground' };
-    }
-  };
+  const selectedDailyEmp = allEmployees.find(e => e.id === dailyEmployeeId);
+  const selectedRwEmp = allEmployees.find(e => e.id === rwEmployeeId);
 
-  const tabs: { id: EmployeeTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'attendance', label: 'Attendance', icon: <Users className="w-3 h-3" /> },
-    { id: 'allowance', label: 'Allowance', icon: <Gift className="w-3 h-3" /> },
+  const tabs: { id: SalaryTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'daily', label: 'Daily Salary', icon: <Users className="w-3 h-3" /> },
     { id: 'ratework', label: 'Rate Work', icon: <Hammer className="w-3 h-3" /> },
-    { id: 'payment', label: 'Pay & Due', icon: <CreditCard className="w-3 h-3" /> },
   ];
 
-  const dueTypeLabels: { id: PaymentDueType; label: string }[] = [
-    { id: 'present', label: `${currentMonthName} Due` },
-    { id: 'previous', label: 'Previous Due' },
-    { id: 'ratework', label: 'Rate Work Due' },
-  ];
+  const renderPaymentRow = (payments: PaymentEntry[], updateFn: (i: number, f: 'mode' | 'amount', v: string) => void, setFn: React.Dispatch<React.SetStateAction<PaymentEntry[]>>) => (
+    <div className="space-y-1">
+      {payments.map((p, i) => (
+        <div key={p.id} className="flex gap-1">
+          <Select value={p.mode} onValueChange={v => updateFn(i, 'mode', v)}>
+            <SelectTrigger className="h-7 text-[10px] w-20"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {selectableMethods.map(m => (
+                <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input type="number" inputMode="numeric" value={p.amount || ''} onChange={e => updateFn(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+          {payments.length > 1 && (
+            <button onClick={() => setFn(prev => prev.filter((_, idx) => idx !== i))} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+          )}
+        </div>
+      ))}
+      <button onClick={() => setFn(prev => [...prev, { id: uuidv4(), mode: 'upi', amount: 0 }])} className="text-[10px] text-accent hover:underline">+ Add mode</button>
+    </div>
+  );
 
   return (
     <div className="space-y-3">
-      {/* Existing Transactions Summary */}
+      {/* Existing Transactions */}
       {employeeTransactions.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden divide-y divide-border/50">
           {employeeTransactions.map(txn => {
@@ -492,397 +411,224 @@ export function EmployeeInlineEntry({
                     <button onClick={() => onDeleteTransaction(txn.id)} className="p-0.5 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-4 text-[10px]">
-                  {txn.payments.filter(p => p.amount > 0).map((p, pi) => (
-                    <span key={pi} className={cn(
-                      p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : 'text-muted-foreground'
-                    )}>
-                      {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : '💳'}{formatINR(p.amount)}
-                    </span>
-                  ))}
-                  {totalPaid > 0 && <span className="text-muted-foreground">Paid:{formatINR(totalPaid)}</span>}
-                </div>
+                {totalPaid > 0 && (
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-4 text-[10px]">
+                    {txn.payments.filter(p => p.amount > 0).map((p, pi) => (
+                      <span key={pi} className={cn(
+                        p.mode === 'cash' ? 'text-success' : p.mode === 'upi' ? 'text-info' : 'text-muted-foreground'
+                      )}>
+                        {p.mode === 'cash' ? '💵' : p.mode === 'upi' ? '📱' : '💳'}{formatINR(p.amount)}
+                      </span>
+                    ))}
+                    <span className="text-muted-foreground">Paid:{formatINR(totalPaid)}</span>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Tab Navigation */}
+      {/* Tab Navigation - 2 toggles */}
       <div className="flex rounded-lg overflow-hidden border border-border">
         {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={cn(
-              "flex-1 py-1.5 text-[10px] font-medium transition-colors flex items-center justify-center gap-1",
+              "flex-1 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5",
               activeTab === tab.id ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
-            )}
-          >
+            )}>
             {tab.icon}{tab.label}
           </button>
         ))}
       </div>
 
-      {/* Tab Content */}
-      <div className="border rounded-lg p-3 space-y-2 border-accent/30 bg-accent/5">
+      {/* DAILY SALARY TAB */}
+      {activeTab === 'daily' && (
+        <div className="border rounded-lg p-3 space-y-3 border-accent/30 bg-accent/5">
+          <span className="text-xs font-semibold text-accent">Daily Salary</span>
 
-        {/* ATTENDANCE TAB */}
-        {activeTab === 'attendance' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-accent">Mark Attendance</span>
-              <span className="text-[10px] text-muted-foreground">{attendanceRows.filter(r => r.present).length} / {attendanceRows.length} present</span>
-            </div>
+          {/* Employee Selection */}
+          <button onClick={() => openEmployeePopup('daily')}
+            className="w-full h-9 border border-input rounded-lg px-3 text-left text-xs bg-background flex items-center justify-between">
+            <span className={selectedDailyEmp ? 'text-foreground font-medium' : 'text-muted-foreground'}>
+              {selectedDailyEmp ? selectedDailyEmp.name : 'Select Employee...'}
+            </span>
+            <Search className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
 
-            <div className="space-y-1 max-h-[300px] overflow-y-auto">
-              <div className="grid grid-cols-12 gap-1 text-[10px] text-muted-foreground font-medium px-1">
-                <div className="col-span-1"></div>
-                <div className="col-span-4">Employee</div>
-                <div className="col-span-3">Day Salary</div>
-                <div className="col-span-4">Category</div>
-              </div>
-
-              {attendanceRows.map((row, index) => (
-                <div key={row.employeeId} className={cn(
-                  "grid grid-cols-12 gap-1 items-center px-1 py-1 rounded",
-                  row.present ? "bg-success/5" : "bg-secondary/20",
-                  row.saved ? "opacity-70" : ""
-                )}>
-                  <div className="col-span-1">
-                    <button
-                      onClick={() => toggleAttendance(index)}
-                      className={cn(
-                        "w-5 h-5 rounded border flex items-center justify-center transition-colors",
-                        row.present ? "bg-success border-success text-white" : "border-border hover:border-accent"
-                      )}
-                    >
-                      {row.present && <Check className="w-3 h-3" />}
-                    </button>
-                  </div>
-                  <div className="col-span-4 text-xs font-medium truncate">{row.employeeName}</div>
-                  <div className="col-span-3">
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      value={row.present ? row.daySalary : ''}
-                      onChange={e => updateAttendanceSalary(index, e.target.value)}
-                      disabled={!row.present}
-                      placeholder="₹0"
-                      className="h-6 text-[10px] px-1"
-                    />
-                  </div>
-                  <div className="col-span-4">
-                    <select
-                      value={row.rateWorkTypeId || 'day_salary'}
-                      onChange={e => updateAttendanceRateWork(index, e.target.value === 'day_salary' ? '' : e.target.value)}
-                      disabled={!row.present}
-                      className="h-6 text-[10px] px-1 w-full bg-background border border-input rounded"
-                    >
-                      <option value="day_salary">Day Salary</option>
-                      {rateWorkTypes.map(rw => (
-                        <option key={rw.id} value={rw.id}>{rw.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <Button onClick={saveAttendance} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-              <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Attendance'}
-            </Button>
-          </div>
-        )}
-
-        {/* ALLOWANCE TAB */}
-        {activeTab === 'allowance' && (
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-accent">Add Allowance</span>
-
-            {employeeTransactions.filter(t => t.type === 'allowance').length > 0 && (
-              <div className="text-[10px] text-muted-foreground">
-                Today: {employeeTransactions.filter(t => t.type === 'allowance').length} allowance entries
-              </div>
-            )}
-
-            <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Employee</label>
-              <Select value={allowanceEmployeeId} onValueChange={setAllowanceEmployeeId}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select employee..." /></SelectTrigger>
-                <SelectContent>
-                  {allEmployees.map(e => (
-                    <SelectItem key={e.id} value={e.id} className="text-xs">{e.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Allowance Type</label>
-              <Select value={allowanceCategoryId} onValueChange={setAllowanceCategoryId}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select type..." /></SelectTrigger>
-                <SelectContent>
-                  {allowanceCategories.map(c => (
-                    <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {allowanceCategories.length === 0 && (
-                <p className="text-[10px] text-warning mt-0.5">Add allowance types in Employee sidebar → Settings</p>
-              )}
-            </div>
-
-            <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Amount</label>
-              <Input
-                type="number"
-                inputMode="numeric"
-                value={allowanceAmount}
-                onChange={e => setAllowanceAmount(e.target.value)}
-                placeholder="₹0"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            <Button onClick={saveAllowance} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-              <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Allowance'}
-            </Button>
-          </div>
-        )}
-
-        {/* RATE WORK TAB */}
-        {activeTab === 'ratework' && (
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-accent">Add Rate Work</span>
-
-            <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Employee</label>
-              <Select value={rateWorkEmployeeId} onValueChange={setRateWorkEmployeeId}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select employee..." /></SelectTrigger>
-                <SelectContent>
-                  {allEmployees.map(e => (
-                    <SelectItem key={e.id} value={e.id} className="text-xs">{e.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Work Type</label>
-              <Select value={rateWorkTypeId} onValueChange={setRateWorkTypeId}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select work..." /></SelectTrigger>
-                <SelectContent>
-                  {rateWorkTypes.map(rw => (
-                    <SelectItem key={rw.id} value={rw.id} className="text-xs">{rw.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {rateWorkTypes.length === 0 && (
-                <p className="text-[10px] text-warning mt-0.5">Add work types in Employee sidebar → Settings</p>
-              )}
-            </div>
-
-            <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Total Rate</label>
-              <Input
-                type="number"
-                inputMode="numeric"
-                value={rateWorkAmount}
-                onChange={e => setRateWorkAmount(e.target.value)}
-                placeholder="₹0"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            <Button onClick={saveRateWork} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-              <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Rate Work'}
-            </Button>
-          </div>
-        )}
-
-        {/* PAYMENT & DUE TAB */}
-        {activeTab === 'payment' && (
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-accent">Payment & Due</span>
-
-            <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Employee</label>
-              <Select value={paymentEmployeeId} onValueChange={v => {
-                setPaymentEmployeeId(v);
-                setPaymentDueType('present');
-                setPaymentPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
-                setShowAdvanceToggle(false);
-              }}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select employee..." /></SelectTrigger>
-                <SelectContent>
-                  {allEmployees.map(e => (
-                    <SelectItem key={e.id} value={e.id} className="text-xs">{e.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Advance Toggle */}
-            {paymentEmployeeId && (
+          {dailyEmployeeId && (
+            <>
+              {/* Attendance + Amount row */}
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowAdvanceToggle(!showAdvanceToggle)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
-                    showAdvanceToggle ? "bg-info/20 border-info text-info" : "bg-secondary/30 border-border text-muted-foreground hover:bg-secondary/50"
-                  )}
-                >
-                  💰 Advance
-                  {(() => {
-                    const emp = allEmployees.find(e => e.id === paymentEmployeeId);
-                    return emp && emp.advance_balance > 0 ? ` (${formatINR(emp.advance_balance)})` : '';
-                  })()}
-                </button>
-              </div>
-            )}
-
-            {/* Advance Payment Section */}
-            {showAdvanceToggle && paymentEmployeeId && (
-              <div className="border border-info/30 rounded-lg p-2 bg-info/5 space-y-2">
-                <span className="text-[10px] font-medium text-info">Record Advance Payment</span>
-                <div className="space-y-1">
-                  {paymentPayments.map((p, i) => (
-                    <div key={p.id} className="flex gap-1">
-                      <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
-                        <SelectTrigger className="h-7 text-[10px] w-16"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {selectableMethods.map(m => (
-                            <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        value={p.amount || ''}
-                        onChange={e => updatePayment(i, 'amount', e.target.value)}
-                        placeholder="₹0"
-                        className="h-7 text-xs flex-1"
-                      />
-                      {paymentPayments.length > 1 && (
-                        <button onClick={() => setPaymentPayments(prev => prev.filter((_, idx) => idx !== i))} className="text-muted-foreground hover:text-destructive">
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button onClick={() => setPaymentPayments(prev => [...prev, { id: uuidv4(), mode: 'upi', amount: 0 }])} className="text-[10px] text-accent hover:underline">+ Add mode</button>
+                <div className="flex items-center gap-1.5">
+                  <Checkbox checked={dailyAttendance} onCheckedChange={(c) => setDailyAttendance(!!c)} id="attendance" />
+                  <label htmlFor="attendance" className="text-xs font-medium cursor-pointer">Present</label>
                 </div>
-                <Button onClick={saveAdvance} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-                  <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Advance'}
+                <Input type="number" inputMode="numeric" value={dailyAttendance ? dailyAmount : ''} onChange={e => setDailyAmount(e.target.value)}
+                  disabled={!dailyAttendance} placeholder="Day salary" className="h-8 text-xs flex-1" />
+              </div>
+
+              {/* Allowance Selection (multiple) */}
+              {allowanceCategories.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-muted-foreground font-medium">Allowances</span>
+                  <div className="space-y-1">
+                    {allowanceCategories.map(al => (
+                      <div key={al.id} className="flex items-center gap-2">
+                        <Checkbox checked={selectedAllowances.includes(al.id)} onCheckedChange={() => toggleAllowance(al.id)} id={`al-${al.id}`} />
+                        <label htmlFor={`al-${al.id}`} className="text-xs cursor-pointer flex-1">{al.name}</label>
+                        {selectedAllowances.includes(al.id) && (
+                          <Input type="number" inputMode="numeric" value={allowanceAmounts[al.id] || ''}
+                            onChange={e => setAllowanceAmounts(prev => ({ ...prev, [al.id]: e.target.value }))}
+                            placeholder="₹0" className="h-7 text-xs w-24" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Total */}
+              <div className="flex justify-between items-center bg-secondary/50 rounded-lg px-3 py-1.5">
+                <span className="text-xs text-muted-foreground">Total Amount</span>
+                <span className="text-sm font-bold text-foreground">{formatINR(totalDailyAmount)}</span>
+              </div>
+
+              {/* Running Due (up to selected date) */}
+              <div className={cn("rounded-lg px-3 py-2 flex justify-between items-center",
+                dailyRunningDue > 0 ? "bg-destructive/10 border border-destructive/30" : "bg-success/10 border border-success/30"
+              )}>
+                <span className="text-xs font-medium">{dailyRunningDue > 0 ? 'Running Due' : 'No Due'}</span>
+                <span className={cn("text-sm font-bold", dailyRunningDue > 0 ? "text-destructive" : "text-success")}>
+                  {formatINR(dailyRunningDue)}
+                </span>
+              </div>
+
+              {/* Payment Modes */}
+              <div className="space-y-1">
+                <span className="text-[10px] text-muted-foreground font-medium">Payment</span>
+                {renderPaymentRow(dailyPayments, updateDailyPayment, setDailyPayments)}
+              </div>
+
+              {/* Save Buttons */}
+              <div className="flex gap-2">
+                <Button onClick={saveDailySalary} disabled={saving} size="sm" className="flex-1 h-8 text-xs gap-1">
+                  <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Entry'}
                 </Button>
-              </div>
-            )}
-
-            {!showAdvanceToggle && employeeDues && (
-              <div className="space-y-1.5">
-                {/* Current Month Due */}
-                <div className={cn(
-                  "border rounded-lg p-2 flex justify-between items-center cursor-pointer transition-colors",
-                  paymentDueType === 'present' ? "bg-accent/20 border-accent" : "bg-accent/5 border-accent/30"
-                )} onClick={() => setPaymentDueType('present')}>
-                  <div className="flex items-center gap-2">
-                    <div className={cn("w-3 h-3 rounded-full border-2", paymentDueType === 'present' ? "border-accent bg-accent" : "border-muted-foreground")} />
-                    <span className="text-xs font-medium text-accent">{currentMonthName} Due</span>
-                  </div>
-                  <span className="text-xs font-bold text-accent">{formatINR(employeeDues.currentMonthDue)}</span>
-                </div>
-
-                {/* Previous Dues */}
-                <div className={cn(
-                  "border rounded-lg p-2 flex justify-between items-center cursor-pointer transition-colors",
-                  paymentDueType === 'previous' ? "bg-warning/20 border-warning" : "bg-warning/5 border-warning/30"
-                )} onClick={() => setPaymentDueType('previous')}>
-                  <div className="flex items-center gap-2">
-                    <div className={cn("w-3 h-3 rounded-full border-2", paymentDueType === 'previous' ? "border-warning bg-warning" : "border-muted-foreground")} />
-                    <span className="text-xs font-medium text-warning">Previous Dues (till {previousMonthName})</span>
-                  </div>
-                  <span className="text-xs font-bold text-warning">{formatINR(employeeDues.previousDues)}</span>
-                </div>
-
-                {/* Rate Work Due */}
-                {employeeDues.rateWorkDue > 0 && (
-                  <div className={cn(
-                    "border rounded-lg p-2 cursor-pointer transition-colors",
-                    paymentDueType === 'ratework' ? "bg-info/20 border-info" : "bg-info/5 border-info/30"
-                  )} onClick={() => setPaymentDueType('ratework')}>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className={cn("w-3 h-3 rounded-full border-2", paymentDueType === 'ratework' ? "border-info bg-info" : "border-muted-foreground")} />
-                        <span className="text-xs font-medium text-info">Rate Work Due</span>
-                      </div>
-                      <span className="text-xs font-bold text-info">{formatINR(employeeDues.rateWorkDue)}</span>
-                    </div>
-                    {employeeDues.rateWorkBreakdown.length > 0 && (
-                      <div className="mt-1 space-y-0.5">
-                        {employeeDues.rateWorkBreakdown.map((rb, i) => (
-                          <div key={i} className="flex justify-between text-[10px] text-info/80 pl-5">
-                            <span>{rb.typeName}</span>
-                            <span>{formatINR(rb.amount)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                {dailyRunningDue > 0 && (
+                  <Button onClick={saveDailyPayment} disabled={saving} size="sm" variant="outline" className="h-8 text-xs gap-1">
+                    Pay Due
+                  </Button>
                 )}
-
-                {/* Total Due */}
-                <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-2 flex justify-between items-center">
-                  <span className="text-xs font-bold text-destructive">Total Due</span>
-                  <span className="text-sm font-bold text-destructive">{formatINR(employeeDues.totalDue)}</span>
-                </div>
               </div>
-            )}
 
-            {/* Payment Mode */}
-            {!showAdvanceToggle && paymentEmployeeId && (
+              {/* After payment, show updated due */}
+              {dailyPayments.reduce((s, p) => s + p.amount, 0) > 0 && (
+                <div className="text-[10px] text-muted-foreground text-center">
+                  After payment: {formatINR(Math.max(0, dailyRunningDue + totalDailyAmount - dailyPayments.reduce((s, p) => s + p.amount, 0)))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* RATE WORK TAB */}
+      {activeTab === 'ratework' && (
+        <div className="border rounded-lg p-3 space-y-3 border-accent/30 bg-accent/5">
+          <span className="text-xs font-semibold text-accent">Rate Work</span>
+
+          {/* Employee Selection */}
+          <button onClick={() => openEmployeePopup('ratework')}
+            className="w-full h-9 border border-input rounded-lg px-3 text-left text-xs bg-background flex items-center justify-between">
+            <span className={selectedRwEmp ? 'text-foreground font-medium' : 'text-muted-foreground'}>
+              {selectedRwEmp ? selectedRwEmp.name : 'Select Employee...'}
+            </span>
+            <Search className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+
+          {rwEmployeeId && (
+            <>
+              {/* Work Type */}
               <div>
-                <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment for: <span className="font-semibold text-foreground">{dueTypeLabels.find(d => d.id === paymentDueType)?.label}</span></label>
-                <div className="space-y-1">
-                  {paymentPayments.map((p, i) => (
-                    <div key={p.id} className="flex gap-1">
-                      <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
-                        <SelectTrigger className="h-7 text-[10px] w-16"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {selectableMethods.map(m => (
-                            <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        value={p.amount || ''}
-                        onChange={e => updatePayment(i, 'amount', e.target.value)}
-                        placeholder="₹0"
-                        className="h-7 text-xs flex-1"
-                      />
-                      {paymentPayments.length > 1 && (
-                        <button onClick={() => setPaymentPayments(prev => prev.filter((_, idx) => idx !== i))} className="text-muted-foreground hover:text-destructive">
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button onClick={() => setPaymentPayments(prev => [...prev, { id: uuidv4(), mode: 'upi', amount: 0 }])} className="text-[10px] text-accent hover:underline">+ Add mode</button>
-                </div>
+                <label className="text-[10px] text-muted-foreground mb-0.5 block">Work Type</label>
+                <Select value={rwTypeId} onValueChange={setRwTypeId}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select type..." /></SelectTrigger>
+                  <SelectContent>
+                    {rateWorkTypes.map(rw => (
+                      <SelectItem key={rw.id} value={rw.id} className="text-xs">{rw.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            )}
 
-            {!showAdvanceToggle && paymentEmployeeId && (
-              <Button onClick={savePayment} disabled={saving} size="sm" className="w-full h-8 text-xs gap-1">
-                <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Payment'}
-              </Button>
-            )}
+              {/* Amount */}
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-0.5 block">Rate Amount</label>
+                <Input type="number" inputMode="numeric" value={rwAmount} onChange={e => setRwAmount(e.target.value)} placeholder="₹0" className="h-8 text-xs" />
+              </div>
+
+              {/* Running Due */}
+              <div className={cn("rounded-lg px-3 py-2 flex justify-between items-center",
+                rwRunningDue > 0 ? "bg-destructive/10 border border-destructive/30" : "bg-success/10 border border-success/30"
+              )}>
+                <span className="text-xs font-medium">{rwRunningDue > 0 ? 'Rate Work Due' : 'No Due'}</span>
+                <span className={cn("text-sm font-bold", rwRunningDue > 0 ? "text-destructive" : "text-success")}>
+                  {formatINR(rwRunningDue)}
+                </span>
+              </div>
+
+              {/* Payment */}
+              <div className="space-y-1">
+                <span className="text-[10px] text-muted-foreground font-medium">Payment</span>
+                {renderPaymentRow(rwPayments, updateRwPayment, setRwPayments)}
+              </div>
+
+              {/* Save Buttons */}
+              <div className="flex gap-2">
+                <Button onClick={saveRateWork} disabled={saving} size="sm" className="flex-1 h-8 text-xs gap-1">
+                  <Check className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save Rate Work'}
+                </Button>
+                {rwRunningDue > 0 && (
+                  <Button onClick={saveRateWorkPayment} disabled={saving} size="sm" variant="outline" className="h-8 text-xs gap-1">
+                    Pay Due
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Employee Search Popup */}
+      <Dialog open={showEmpPopup} onOpenChange={setShowEmpPopup}>
+        <DialogContent className="max-w-sm max-h-[60vh] p-0">
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle className="text-sm">Select Employee</DialogTitle>
+          </DialogHeader>
+          <div className="px-4 pb-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input value={empSearch} onChange={e => setEmpSearch(e.target.value)} placeholder="Search..." className="h-8 pl-8 text-xs" autoFocus />
+            </div>
           </div>
-        )}
-      </div>
+          <div className="overflow-y-auto max-h-[40vh] px-2 pb-3">
+            {filteredEmps.map(emp => (
+              <button key={emp.id} onClick={() => selectEmployee(emp)}
+                className="w-full px-3 py-2.5 text-left hover:bg-secondary/50 rounded-lg flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-medium">{emp.name}</span>
+                  <span className="text-[10px] text-muted-foreground ml-2">₹{emp.salary}/day</span>
+                </div>
+                {emp.advance_balance > 0 && (
+                  <span className="text-[10px] text-warning font-medium">Adv: {formatINR(emp.advance_balance)}</span>
+                )}
+              </button>
+            ))}
+            {filteredEmps.length === 0 && <p className="text-center text-xs text-muted-foreground py-4">No employees found</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

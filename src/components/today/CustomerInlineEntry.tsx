@@ -40,6 +40,8 @@ interface DueBill {
 interface EntryRow {
   type: CustomerSubType;
   billNumber: string;
+  computerBillNumber: string;
+  billClassification: string; // 'b2c' | 'b2b' | 'other_gst'
   customerQuery: string;
   customerId?: string;
   customerAdvance: number;
@@ -52,6 +54,7 @@ interface EntryRow {
   selectedBills: string[];
   dueBills: DueBill[];
   welderId?: string;
+  details: string;
 }
 
 interface WelderOption {
@@ -62,6 +65,8 @@ interface WelderOption {
 const createEmptyRow = (): EntryRow => ({
   type: 'sale',
   billNumber: '',
+  computerBillNumber: '',
+  billClassification: 'b2c',
   customerQuery: '',
   customerId: undefined,
   customerAdvance: 0,
@@ -74,6 +79,7 @@ const createEmptyRow = (): EntryRow => ({
   selectedBills: [],
   dueBills: [],
   welderId: undefined,
+  details: '',
 });
 
 const SUB_TYPES: { value: CustomerSubType; label: string }[] = [

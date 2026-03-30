@@ -103,6 +103,9 @@ export interface Transaction {
   homeCategoryId?: string;
   advancePurposeId?: string;
   advanceRate?: number;
+  computerBillNumber?: string;
+  billClassification?: string; // 'b2c' | 'b2b' | 'other_gst'
+  details?: string;
   createdAt: Date;
   updatedAt: Date;
 }

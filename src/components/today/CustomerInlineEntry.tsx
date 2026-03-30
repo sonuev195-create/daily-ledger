@@ -472,11 +472,14 @@ export function CustomerInlineEntry({
         payments: [...entry.payments.filter(p => p.amount > 0), ...advancePayments],
         giveBack: giveBack.length > 0 ? giveBack : undefined,
         billNumber: entry.billNumber || undefined,
+        computerBillNumber: entry.computerBillNumber || undefined,
+        billClassification: entry.billClassification || 'b2c',
         customerId: finalCustomerId,
         customerName: entry.customerQuery || undefined,
         due: due > 0 ? due : undefined,
         overpayment: overpayment > 0 ? overpayment : undefined,
         welderId: entry.welderId || undefined,
+        details: entry.details || undefined,
       };
 
       await onSave(transaction);

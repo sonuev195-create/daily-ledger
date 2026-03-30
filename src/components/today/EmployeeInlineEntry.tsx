@@ -97,6 +97,41 @@ export function EmployeeInlineEntry({
     });
   }, [transactions]);
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (!editingTransaction || editingTransaction.section !== 'employee') return;
+    const txn = editingTransaction;
+    if (txn.type === 'rate_work') {
+      setActiveTab('ratework');
+      setRwEmployeeId(txn.employeeId || '');
+      setRwTypeId(txn.rateWorkTypeId || txn.reference || '');
+      setRwAmount(txn.amount.toString());
+      setRwPayments(txn.payments.length > 0 ? txn.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+    } else if (txn.type === 'payment') {
+      if (txn.reference === 'ratework') {
+        setActiveTab('ratework');
+        setRwEmployeeId(txn.employeeId || '');
+        setRwPayments(txn.payments.length > 0 ? txn.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+      } else {
+        setActiveTab('daily');
+        setDailyEmployeeId(txn.employeeId || '');
+        setDailyPayments(txn.payments.length > 0 ? txn.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+        setDailyAttendance(false);
+      }
+    } else {
+      // salary, attendance, allowance
+      setActiveTab('daily');
+      setDailyEmployeeId(txn.employeeId || '');
+      setDailyAmount(txn.amount.toString());
+      setDailyAttendance(txn.type === 'salary' || txn.type === 'attendance');
+      if (txn.type === 'allowance' && txn.allowanceCategoryId) {
+        setSelectedAllowances([txn.allowanceCategoryId]);
+        setAllowanceAmounts({ [txn.allowanceCategoryId]: txn.amount.toString() });
+      }
+      setDailyPayments(txn.payments.length > 0 ? txn.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+    }
+  }, [editingTransaction]);
+
   // Calculate running due for daily salary up to selectedDate
   useEffect(() => {
     if (!dailyEmployeeId) { setDailyRunningDue(0); return; }

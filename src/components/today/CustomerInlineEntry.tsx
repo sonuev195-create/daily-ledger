@@ -229,6 +229,8 @@ export function CustomerInlineEntry({
       setEntry({
         type: typeMap[editingTransaction.type] || 'sale',
         billNumber: editingTransaction.billNumber || '',
+        computerBillNumber: editingTransaction.computerBillNumber || '',
+        billClassification: editingTransaction.billClassification || 'b2c',
         customerQuery: editingTransaction.customerName || '',
         customerId: editingTransaction.customerId,
         customerAdvance: 0,
@@ -241,6 +243,7 @@ export function CustomerInlineEntry({
         selectedBills: [],
         dueBills: [],
         welderId: editingTransaction.welderId,
+        details: editingTransaction.details || '',
       });
       // Load existing bill items for editing
       if (editingTransaction.type === 'sale' || editingTransaction.type === 'sales_return') {

@@ -1010,6 +1010,12 @@ export function CustomerInlineEntry({
           </div>
         )}
 
+        {/* Details field */}
+        <div>
+          <label className="text-[10px] text-muted-foreground mb-0.5 block">Details / Notes</label>
+          <Input value={entry.details} onChange={e => setEntry(prev => ({ ...prev, details: e.target.value }))} placeholder="Details..." className="h-8 text-xs" />
+        </div>
+
         <div className="flex gap-2">
           {editingTransaction && (
             <Button variant="outline" onClick={() => { onCancelEdit?.(); setEntry(createEmptyRow()); setExtractedBillItems([]); }} size="sm" className="h-8 text-xs">

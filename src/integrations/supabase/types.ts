@@ -696,12 +696,15 @@ export type Database = {
           advance_rate: number | null
           allowance_category_id: string | null
           amount: number
+          bill_classification: string | null
           bill_number: string | null
           bill_type: string | null
+          computer_bill_number: string | null
           created_at: string
           customer_id: string | null
           customer_name: string | null
           date: string
+          details: string | null
           due: number | null
           employee_id: string | null
           expense_category_id: string | null
@@ -726,12 +729,15 @@ export type Database = {
           advance_rate?: number | null
           allowance_category_id?: string | null
           amount?: number
+          bill_classification?: string | null
           bill_number?: string | null
           bill_type?: string | null
+          computer_bill_number?: string | null
           created_at?: string
           customer_id?: string | null
           customer_name?: string | null
           date?: string
+          details?: string | null
           due?: number | null
           employee_id?: string | null
           expense_category_id?: string | null
@@ -756,12 +762,15 @@ export type Database = {
           advance_rate?: number | null
           allowance_category_id?: string | null
           amount?: number
+          bill_classification?: string | null
           bill_number?: string | null
           bill_type?: string | null
+          computer_bill_number?: string | null
           created_at?: string
           customer_id?: string | null
           customer_name?: string | null
           date?: string
+          details?: string | null
           due?: number | null
           employee_id?: string | null
           expense_category_id?: string | null

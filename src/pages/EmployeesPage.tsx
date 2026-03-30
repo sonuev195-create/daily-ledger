@@ -57,6 +57,10 @@ export default function EmployeesPage() {
   const [formPhone, setFormPhone] = useState('');
   const [formRole, setFormRole] = useState('');
   const [formSalary, setFormSalary] = useState('');
+  const [formDailySalaryDue, setFormDailySalaryDue] = useState('');
+  const [formDailySalaryDueDate, setFormDailySalaryDueDate] = useState('');
+  const [formRateWorkDue, setFormRateWorkDue] = useState('');
+  const [formRateWorkDueDate, setFormRateWorkDueDate] = useState('');
 
   const [newItemName, setNewItemName] = useState('');
   const [newItemDesc, setNewItemDesc] = useState('');
@@ -112,9 +116,44 @@ export default function EmployeesPage() {
         if (error) throw error;
         toast.success('Employee updated');
       } else {
-        const { error } = await supabase.from('employees')
-          .insert({ name: formName, phone: formPhone || null, role: formRole || null, salary: parseFloat(formSalary) || 0 });
+        const { data: newEmp, error } = await supabase.from('employees')
+          .insert({ name: formName, phone: formPhone || null, role: formRole || null, salary: parseFloat(formSalary) || 0 })
+          .select().single();
         if (error) throw error;
+        
+        // Save opening dues as transactions
+        if (newEmp) {
+          const dailyDue = parseFloat(formDailySalaryDue) || 0;
+          const rateDue = parseFloat(formRateWorkDue) || 0;
+          
+          if (dailyDue > 0) {
+            const dueDate = formDailySalaryDueDate || format(new Date(), 'yyyy-MM-dd');
+            await supabase.from('transactions').insert({
+              date: dueDate,
+              section: 'employee',
+              type: 'salary',
+              amount: dailyDue,
+              payments: [],
+              employee_id: newEmp.id,
+              bill_number: `OD/${dueDate.replace(/-/g, '.')}/001`,
+              reference: 'opening_due',
+            });
+          }
+          
+          if (rateDue > 0) {
+            const dueDate = formRateWorkDueDate || format(new Date(), 'yyyy-MM-dd');
+            await supabase.from('transactions').insert({
+              date: dueDate,
+              section: 'employee',
+              type: 'rate_work',
+              amount: rateDue,
+              payments: [],
+              employee_id: newEmp.id,
+              bill_number: `OD/${dueDate.replace(/-/g, '.')}/001`,
+              reference: 'opening_due',
+            });
+          }
+        }
         toast.success('Employee added');
       }
       closeForm();
@@ -150,6 +189,10 @@ export default function EmployeesPage() {
     setFormPhone('');
     setFormRole('');
     setFormSalary('');
+    setFormDailySalaryDue('');
+    setFormDailySalaryDueDate('');
+    setFormRateWorkDue('');
+    setFormRateWorkDueDate('');
   };
 
   const getTableName = (tab: SettingsTab) => {
@@ -396,6 +439,33 @@ export default function EmployeesPage() {
               <label className="text-sm font-medium">Day Salary</label>
               <Input value={formSalary} onChange={(e) => setFormSalary(e.target.value)} placeholder="0" type="number" className="mt-1" />
             </div>
+            {!editEmployee && (
+              <>
+                <div className="border-t border-border pt-3">
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Opening Dues (optional)</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground">Daily Salary Due</label>
+                      <Input value={formDailySalaryDue} onChange={(e) => setFormDailySalaryDue(e.target.value)} placeholder="₹0" type="number" className="mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Due Date</label>
+                      <Input value={formDailySalaryDueDate} onChange={(e) => setFormDailySalaryDueDate(e.target.value)} type="date" className="mt-1" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground">Rate Work Due</label>
+                      <Input value={formRateWorkDue} onChange={(e) => setFormRateWorkDue(e.target.value)} placeholder="₹0" type="number" className="mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Due Date</label>
+                      <Input value={formRateWorkDueDate} onChange={(e) => setFormRateWorkDueDate(e.target.value)} type="date" className="mt-1" />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
             <Button onClick={handleSaveEmployee} className="w-full">{editEmployee ? 'Update Employee' : 'Add Employee'}</Button>
           </div>
         </SheetContent>

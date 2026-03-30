@@ -97,6 +97,41 @@ export function EmployeeInlineEntry({
     });
   }, [transactions]);
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (!editingTransaction || editingTransaction.section !== 'employee') return;
+    const txn = editingTransaction;
+    if (txn.type === 'rate_work') {
+      setActiveTab('ratework');
+      setRwEmployeeId(txn.employeeId || '');
+      setRwTypeId(txn.rateWorkTypeId || txn.reference || '');
+      setRwAmount(txn.amount.toString());
+      setRwPayments(txn.payments.length > 0 ? txn.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+    } else if (txn.type === 'payment') {
+      if (txn.reference === 'ratework') {
+        setActiveTab('ratework');
+        setRwEmployeeId(txn.employeeId || '');
+        setRwPayments(txn.payments.length > 0 ? txn.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+      } else {
+        setActiveTab('daily');
+        setDailyEmployeeId(txn.employeeId || '');
+        setDailyPayments(txn.payments.length > 0 ? txn.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+        setDailyAttendance(false);
+      }
+    } else {
+      // salary, attendance, allowance
+      setActiveTab('daily');
+      setDailyEmployeeId(txn.employeeId || '');
+      setDailyAmount(txn.amount.toString());
+      setDailyAttendance(txn.type === 'salary' || txn.type === 'attendance');
+      if (txn.type === 'allowance' && txn.allowanceCategoryId) {
+        setSelectedAllowances([txn.allowanceCategoryId]);
+        setAllowanceAmounts({ [txn.allowanceCategoryId]: txn.amount.toString() });
+      }
+      setDailyPayments(txn.payments.length > 0 ? txn.payments : [{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+    }
+  }, [editingTransaction]);
+
   // Calculate running due for daily salary up to selectedDate
   useEffect(() => {
     if (!dailyEmployeeId) { setDailyRunningDue(0); return; }
@@ -445,7 +480,20 @@ export function EmployeeInlineEntry({
       {/* DAILY SALARY TAB */}
       {activeTab === 'daily' && (
         <div className="border rounded-lg p-3 space-y-3 border-accent/30 bg-accent/5">
-          <span className="text-xs font-semibold text-accent">Daily Salary</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-accent">Daily Salary</span>
+            {editingTransaction && editingTransaction.section === 'employee' && activeTab === 'daily' && (
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => {
+                onCancelEdit?.();
+                setDailyEmployeeId('');
+                setDailyAttendance(true);
+                setDailyAmount('');
+                setSelectedAllowances([]);
+                setAllowanceAmounts({});
+                setDailyPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+              }}><X className="w-3 h-3 mr-1" /> Cancel</Button>
+            )}
+          </div>
 
           {/* Employee Selection */}
           <button onClick={() => openEmployeePopup('daily')}
@@ -546,7 +594,18 @@ export function EmployeeInlineEntry({
       {/* RATE WORK TAB */}
       {activeTab === 'ratework' && (
         <div className="border rounded-lg p-3 space-y-3 border-accent/30 bg-accent/5">
-          <span className="text-xs font-semibold text-accent">Rate Work</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-accent">Rate Work</span>
+            {editingTransaction && editingTransaction.section === 'employee' && activeTab === 'ratework' && (
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => {
+                onCancelEdit?.();
+                setRwEmployeeId('');
+                setRwTypeId('');
+                setRwAmount('');
+                setRwPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+              }}><X className="w-3 h-3 mr-1" /> Cancel</Button>
+            )}
+          </div>
 
           {/* Employee Selection */}
           <button onClick={() => openEmployeePopup('ratework')}

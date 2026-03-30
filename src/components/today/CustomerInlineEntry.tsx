@@ -40,6 +40,8 @@ interface DueBill {
 interface EntryRow {
   type: CustomerSubType;
   billNumber: string;
+  computerBillNumber: string;
+  billClassification: string; // 'b2c' | 'b2b' | 'other_gst'
   customerQuery: string;
   customerId?: string;
   customerAdvance: number;
@@ -52,6 +54,7 @@ interface EntryRow {
   selectedBills: string[];
   dueBills: DueBill[];
   welderId?: string;
+  details: string;
 }
 
 interface WelderOption {
@@ -62,6 +65,8 @@ interface WelderOption {
 const createEmptyRow = (): EntryRow => ({
   type: 'sale',
   billNumber: '',
+  computerBillNumber: '',
+  billClassification: 'b2c',
   customerQuery: '',
   customerId: undefined,
   customerAdvance: 0,
@@ -74,6 +79,7 @@ const createEmptyRow = (): EntryRow => ({
   selectedBills: [],
   dueBills: [],
   welderId: undefined,
+  details: '',
 });
 
 const SUB_TYPES: { value: CustomerSubType; label: string }[] = [
@@ -223,6 +229,8 @@ export function CustomerInlineEntry({
       setEntry({
         type: typeMap[editingTransaction.type] || 'sale',
         billNumber: editingTransaction.billNumber || '',
+        computerBillNumber: editingTransaction.computerBillNumber || '',
+        billClassification: editingTransaction.billClassification || 'b2c',
         customerQuery: editingTransaction.customerName || '',
         customerId: editingTransaction.customerId,
         customerAdvance: 0,
@@ -235,6 +243,7 @@ export function CustomerInlineEntry({
         selectedBills: [],
         dueBills: [],
         welderId: editingTransaction.welderId,
+        details: editingTransaction.details || '',
       });
       // Load existing bill items for editing
       if (editingTransaction.type === 'sale' || editingTransaction.type === 'sales_return') {
@@ -463,11 +472,14 @@ export function CustomerInlineEntry({
         payments: [...entry.payments.filter(p => p.amount > 0), ...advancePayments],
         giveBack: giveBack.length > 0 ? giveBack : undefined,
         billNumber: entry.billNumber || undefined,
+        computerBillNumber: entry.computerBillNumber || undefined,
+        billClassification: entry.billClassification || 'b2c',
         customerId: finalCustomerId,
         customerName: entry.customerQuery || undefined,
         due: due > 0 ? due : undefined,
         overpayment: overpayment > 0 ? overpayment : undefined,
         welderId: entry.welderId || undefined,
+        details: entry.details || undefined,
       };
 
       await onSave(transaction);
@@ -655,6 +667,27 @@ export function CustomerInlineEntry({
             </button>
           ))}
         </div>
+
+        {/* Row 0: Classification + Computer Bill# (for sale) */}
+        {entry.type === 'sale' && (
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Type</label>
+              <Select value={entry.billClassification} onValueChange={v => setEntry(prev => ({ ...prev, billClassification: v }))}>
+                <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="b2c" className="text-xs">B2C</SelectItem>
+                  <SelectItem value="b2b" className="text-xs">B2B</SelectItem>
+                  <SelectItem value="other_gst" className="text-xs">Other GST</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2">
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Computer Bill #</label>
+              <Input value={entry.computerBillNumber} onChange={e => setEntry(prev => ({ ...prev, computerBillNumber: e.target.value }))} placeholder="Computer bill no..." className="h-8 text-[10px] font-mono" />
+            </div>
+          </div>
+        )}
 
         {/* Row 1: Bill# + Customer + Welder */}
         <div className="grid grid-cols-3 gap-2 md:grid-cols-[minmax(140px,1.2fr)_2fr_1fr]">
@@ -979,6 +1012,12 @@ export function CustomerInlineEntry({
             )}
           </div>
         )}
+
+        {/* Details field */}
+        <div>
+          <label className="text-[10px] text-muted-foreground mb-0.5 block">Details / Notes</label>
+          <Input value={entry.details} onChange={e => setEntry(prev => ({ ...prev, details: e.target.value }))} placeholder="Details..." className="h-8 text-xs" />
+        </div>
 
         <div className="flex gap-2">
           {editingTransaction && (

@@ -210,6 +210,9 @@ const buildTransactionPayload = (transaction: Transaction) => ({
   home_category_id: transaction.homeCategoryId || null,
   advance_purpose_id: transaction.advancePurposeId || null,
   advance_rate: transaction.advanceRate || null,
+  computer_bill_number: transaction.computerBillNumber || null,
+  bill_classification: transaction.billClassification || null,
+  details: transaction.details || null,
   updated_at: transaction.updatedAt.toISOString(),
   created_at: transaction.createdAt.toISOString(),
 });
@@ -241,6 +244,9 @@ const mapTransactionFromRow = (row: any): Transaction => ({
   homeCategoryId: row.home_category_id || undefined,
   advancePurposeId: row.advance_purpose_id || undefined,
   advanceRate: row.advance_rate != null ? toSafeNumber(row.advance_rate) : undefined,
+  computerBillNumber: row.computer_bill_number || undefined,
+  billClassification: row.bill_classification || undefined,
+  details: row.details || undefined,
   createdAt: row.created_at ? new Date(row.created_at) : new Date(),
   updatedAt: row.updated_at ? new Date(row.updated_at) : new Date(),
 });

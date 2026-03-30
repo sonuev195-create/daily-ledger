@@ -57,6 +57,10 @@ export default function EmployeesPage() {
   const [formPhone, setFormPhone] = useState('');
   const [formRole, setFormRole] = useState('');
   const [formSalary, setFormSalary] = useState('');
+  const [formDailySalaryDue, setFormDailySalaryDue] = useState('');
+  const [formDailySalaryDueDate, setFormDailySalaryDueDate] = useState('');
+  const [formRateWorkDue, setFormRateWorkDue] = useState('');
+  const [formRateWorkDueDate, setFormRateWorkDueDate] = useState('');
 
   const [newItemName, setNewItemName] = useState('');
   const [newItemDesc, setNewItemDesc] = useState('');
@@ -112,9 +116,44 @@ export default function EmployeesPage() {
         if (error) throw error;
         toast.success('Employee updated');
       } else {
-        const { error } = await supabase.from('employees')
-          .insert({ name: formName, phone: formPhone || null, role: formRole || null, salary: parseFloat(formSalary) || 0 });
+        const { data: newEmp, error } = await supabase.from('employees')
+          .insert({ name: formName, phone: formPhone || null, role: formRole || null, salary: parseFloat(formSalary) || 0 })
+          .select().single();
         if (error) throw error;
+        
+        // Save opening dues as transactions
+        if (newEmp) {
+          const dailyDue = parseFloat(formDailySalaryDue) || 0;
+          const rateDue = parseFloat(formRateWorkDue) || 0;
+          
+          if (dailyDue > 0) {
+            const dueDate = formDailySalaryDueDate || format(new Date(), 'yyyy-MM-dd');
+            await supabase.from('transactions').insert({
+              date: dueDate,
+              section: 'employee',
+              type: 'salary',
+              amount: dailyDue,
+              payments: [],
+              employee_id: newEmp.id,
+              bill_number: `OD/${dueDate.replace(/-/g, '.')}/001`,
+              reference: 'opening_due',
+            });
+          }
+          
+          if (rateDue > 0) {
+            const dueDate = formRateWorkDueDate || format(new Date(), 'yyyy-MM-dd');
+            await supabase.from('transactions').insert({
+              date: dueDate,
+              section: 'employee',
+              type: 'rate_work',
+              amount: rateDue,
+              payments: [],
+              employee_id: newEmp.id,
+              bill_number: `OD/${dueDate.replace(/-/g, '.')}/001`,
+              reference: 'opening_due',
+            });
+          }
+        }
         toast.success('Employee added');
       }
       closeForm();
@@ -150,6 +189,10 @@ export default function EmployeesPage() {
     setFormPhone('');
     setFormRole('');
     setFormSalary('');
+    setFormDailySalaryDue('');
+    setFormDailySalaryDueDate('');
+    setFormRateWorkDue('');
+    setFormRateWorkDueDate('');
   };
 
   const getTableName = (tab: SettingsTab) => {

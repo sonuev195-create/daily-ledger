@@ -480,7 +480,20 @@ export function EmployeeInlineEntry({
       {/* DAILY SALARY TAB */}
       {activeTab === 'daily' && (
         <div className="border rounded-lg p-3 space-y-3 border-accent/30 bg-accent/5">
-          <span className="text-xs font-semibold text-accent">Daily Salary</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-accent">Daily Salary</span>
+            {editingTransaction && editingTransaction.section === 'employee' && activeTab === 'daily' && (
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => {
+                onCancelEdit?.();
+                setDailyEmployeeId('');
+                setDailyAttendance(true);
+                setDailyAmount('');
+                setSelectedAllowances([]);
+                setAllowanceAmounts({});
+                setDailyPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+              }}><X className="w-3 h-3 mr-1" /> Cancel</Button>
+            )}
+          </div>
 
           {/* Employee Selection */}
           <button onClick={() => openEmployeePopup('daily')}
@@ -581,7 +594,18 @@ export function EmployeeInlineEntry({
       {/* RATE WORK TAB */}
       {activeTab === 'ratework' && (
         <div className="border rounded-lg p-3 space-y-3 border-accent/30 bg-accent/5">
-          <span className="text-xs font-semibold text-accent">Rate Work</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-accent">Rate Work</span>
+            {editingTransaction && editingTransaction.section === 'employee' && activeTab === 'ratework' && (
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => {
+                onCancelEdit?.();
+                setRwEmployeeId('');
+                setRwTypeId('');
+                setRwAmount('');
+                setRwPayments([{ id: uuidv4(), mode: 'cash', amount: 0 }]);
+              }}><X className="w-3 h-3 mr-1" /> Cancel</Button>
+            )}
+          </div>
 
           {/* Employee Selection */}
           <button onClick={() => openEmployeePopup('ratework')}

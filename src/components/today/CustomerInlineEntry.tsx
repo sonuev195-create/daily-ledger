@@ -703,18 +703,10 @@ export function CustomerInlineEntry({
           </div>
         )}
 
-        {/* Row 1: Bill# + Customer + Welder */}
-        <div className="grid grid-cols-3 gap-2 md:grid-cols-[minmax(140px,1.2fr)_2fr_1fr]">
-          {(entry.type === 'sale' || entry.type === 'sales_return') && (
-            <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Bill #</label>
-              <Input value={entry.billNumber} onChange={e => setEntry(prev => ({ ...prev, billNumber: e.target.value }))} className="h-8 text-[10px] font-mono" />
-            </div>
-          )}
-
+        {/* Row 1: Customer + Welder */}
+        <div className="grid grid-cols-2 gap-2">
           <div className={cn(
-            entry.type === 'balance_paid' || entry.type === 'customer_advance' ? 'col-span-2' : '',
-            !(entry.type === 'sale' || entry.type === 'sales_return') ? 'col-span-2' : ''
+            entry.type === 'balance_paid' || entry.type === 'customer_advance' ? 'col-span-2' : ''
           )}>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Customer</label>
             {renderCustomerSearch()}

@@ -54,7 +54,7 @@ const createEmptyRow = (): EntryRow => ({
   billNumber: '',
   amount: '',
   reference: '',
-  payments: [{ id: uuidv4(), mode: 'cash', amount: 0 }],
+  payments: [{ id: uuidv4(), mode: 'cash', amount: 0 }, { id: uuidv4(), mode: 'upi', amount: 0 }],
   dueBills: [],
   selectedBills: [],
 });

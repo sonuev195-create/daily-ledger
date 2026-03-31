@@ -18,7 +18,7 @@ import { usePaymentMethods } from '@/hooks/usePaymentMethods';
 import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
 import { SupplierSearchPopup } from '@/components/transactions/SupplierSearchPopup';
 
-type PurchaseSubType = 'purchase_payment' | 'purchase_bill_a' | 'purchase_bill_b' | 'purchase_bill_c' | 'purchase_delivered' | 'purchase_return_a' | 'purchase_return_b' | 'purchase_expenses';
+type PurchaseSubType = 'purchase_payment' | 'purchase_bill_a' | 'purchase_bill_b' | 'purchase_bill_c' | 'purchase_delivered' | 'purchase_return_a' | 'purchase_return_b' | 'purchase_expenses' | 'purchase_advance';
 
 interface SupplierResult {
   id: string;
@@ -54,7 +54,7 @@ const createEmptyRow = (): EntryRow => ({
   billNumber: '',
   amount: '',
   reference: '',
-  payments: [{ id: uuidv4(), mode: 'cash', amount: 0 }],
+  payments: [{ id: uuidv4(), mode: 'cash', amount: 0 }, { id: uuidv4(), mode: 'upi', amount: 0 }],
   dueBills: [],
   selectedBills: [],
 });
@@ -68,6 +68,7 @@ const SUB_TYPES: { value: PurchaseSubType; label: string }[] = [
   { value: 'purchase_return_a', label: 'Return A' },
   { value: 'purchase_return_b', label: 'Return B' },
   { value: 'purchase_expenses', label: 'Expenses' },
+  { value: 'purchase_advance' as PurchaseSubType, label: 'Advance' },
 ];
 
 const shortPurchaseTypeLabel: Record<string, string> = {
@@ -326,17 +327,20 @@ export function PurchaseInlineEntry({
       else if (entry.type === 'purchase_payment') { dbType = 'purchase_payment'; }
       else if (entry.type === 'purchase_delivered') { dbType = 'purchase_delivered'; }
       else if (entry.type === 'purchase_expenses') { dbType = 'purchase_expenses'; }
+      else if (entry.type === 'purchase_advance') { dbType = 'purchase_advance'; }
+
+      const isAdvance = entry.type === 'purchase_advance';
 
       const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
         date: selectedDate,
         section: 'purchase' as TransactionSection,
         type: dbType,
-        amount: entry.type === 'purchase_payment' ? totalPayments : amountNum,
-        payments: (isPayment || isExpenses) ? entry.payments.filter(p => p.amount > 0) : [],
+        amount: (entry.type === 'purchase_payment' || isAdvance) ? totalPayments : amountNum,
+        payments: (isPayment || isExpenses || isAdvance) ? entry.payments.filter(p => p.amount > 0) : [],
         billNumber: entry.billNumber || undefined,
         supplierId: entry.supplierId,
         supplierName: entry.supplierQuery || undefined,
-        reference: entry.reference || undefined,
+        reference: isAdvance ? 'advance' : (entry.reference || undefined),
         billType: billType as any,
         due: ['purchase_bill_a', 'purchase_bill_b'].includes(entry.type) ? amountNum : undefined,
       };
@@ -427,6 +431,7 @@ export function PurchaseInlineEntry({
   const isBillType = ['purchase_bill_a', 'purchase_bill_b', 'purchase_bill_c', 'purchase_delivered', 'purchase_return_a', 'purchase_return_b'].includes(entry.type);
   const isPayment = entry.type === 'purchase_payment';
   const isExpenses = entry.type === 'purchase_expenses';
+  const isAdvance = entry.type === 'purchase_advance';
 
   return (
     <div className="space-y-3">
@@ -473,13 +478,13 @@ export function PurchaseInlineEntry({
 
       {/* New Entry */}
       <div className="border border-accent/30 rounded-lg p-3 bg-accent/5 space-y-2">
-        {/* Bill / Payment Toggle */}
+        {/* Bill / Payment / Advance Toggle */}
         <div className="flex rounded-lg overflow-hidden border border-border mb-1">
           <button
             onClick={() => setEntry(prev => ({ ...prev, type: 'purchase_bill_a', selectedBills: [], dueBills: [] }))}
             className={cn(
               "flex-1 py-1.5 text-xs font-medium transition-colors",
-              !isPayment ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+              isBillType ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
             )}
           >
             Bill
@@ -492,6 +497,15 @@ export function PurchaseInlineEntry({
             )}
           >
             Payment
+          </button>
+          <button
+            onClick={() => setEntry(prev => ({ ...prev, type: 'purchase_advance' as PurchaseSubType, selectedBills: [], dueBills: [] }))}
+            className={cn(
+              "flex-1 py-1.5 text-xs font-medium transition-colors",
+              isAdvance ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+            )}
+          >
+            Advance
           </button>
         </div>
 
@@ -588,13 +602,27 @@ export function PurchaseInlineEntry({
         )}
 
         {/* Payment modes - only for payment and expenses */}
-        {(isPayment || isExpenses) && (
+        {(isPayment || isExpenses || entry.type === 'purchase_advance') && (
         <div>
           <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
           <div className="space-y-1">
-            {entry.payments.map((p, i) => (
+            {/* Cash + UPI in single row */}
+            <div className="flex gap-1 items-center">
+              {entry.payments.slice(0, 2).map((p, i) => (
+                <div key={p.id} className="flex gap-0.5 flex-1">
+                  <span className="text-[9px] text-muted-foreground self-center w-8 shrink-0">{p.mode === 'cash' ? '💵' : '📱'}</span>
+                  <Input type="number" inputMode="numeric" value={p.amount || ''}
+                    onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+                </div>
+              ))}
+              <button onClick={addPaymentMode} className="text-accent hover:text-accent/80 shrink-0" title="Add payment mode">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Additional payment modes */}
+            {entry.payments.slice(2).map((p, i) => (
               <div key={p.id} className="flex gap-1">
-                <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
+                <Select value={p.mode} onValueChange={v => updatePayment(i + 2, 'mode', v)}>
                   <SelectTrigger className="h-7 text-[10px] w-20"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {selectableMethods.map(m => (
@@ -603,13 +631,10 @@ export function PurchaseInlineEntry({
                   </SelectContent>
                 </Select>
                 <Input type="number" inputMode="numeric" value={p.amount || ''}
-                  onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
-                {entry.payments.length > 1 && (
-                  <button onClick={() => removePayment(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
-                )}
+                  onChange={e => updatePayment(i + 2, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+                <button onClick={() => removePayment(i + 2)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
               </div>
             ))}
-            <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add payment mode</button>
           </div>
         </div>
         )}

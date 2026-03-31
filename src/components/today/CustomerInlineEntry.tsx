@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { searchCustomers, getDueBillsForCustomerId, getOrCreateCustomer, saveBillToSupabase, deductFromBatch, getBatchesForItem, getBillItemsForTransaction, restoreInventoryForBillItems, planBatchAllocations } from '@/hooks/useSupabaseData';
-import { generateDailyBillNumber, customerTypePrefixMap } from '@/lib/billNumbers';
+import { generateDailyBillNumber, customerTypePrefixMap, generateComputerBillNumber, SaleClassification } from '@/lib/billNumbers';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -41,7 +41,7 @@ interface EntryRow {
   type: CustomerSubType;
   billNumber: string;
   computerBillNumber: string;
-  billClassification: string; // 'b2c' | 'b2b' | 'other_gst'
+  billClassification: SaleClassification;
   customerQuery: string;
   customerId?: string;
   customerAdvance: number;
@@ -66,7 +66,7 @@ const createEmptyRow = (): EntryRow => ({
   type: 'sale',
   billNumber: '',
   computerBillNumber: '',
-  billClassification: 'b2c',
+  billClassification: 'b2c' as SaleClassification,
   customerQuery: '',
   customerId: undefined,
   customerAdvance: 0,
@@ -74,7 +74,7 @@ const createEmptyRow = (): EntryRow => ({
   saleAmount: '',
   workshopAmount: '',
   vehicleAmount: '',
-  payments: [{ id: uuidv4(), mode: 'cash', amount: 0 }],
+  payments: [{ id: uuidv4(), mode: 'cash', amount: 0 }, { id: uuidv4(), mode: 'upi', amount: 0 }],
   useAdvance: '',
   selectedBills: [],
   dueBills: [],
@@ -214,8 +214,16 @@ export function CustomerInlineEntry({
   const customerTransactions = transactions.filter(t => t.section === 'sale');
 
   useEffect(() => {
-    if (!editingTransaction) generateBillNumber(entry.type);
-  }, [entry.type, editingTransaction]);
+    if (!editingTransaction) {
+      generateBillNumber(entry.type);
+      // Auto-generate computer bill number for sales
+      if (entry.type === 'sale') {
+        generateComputerBillNumber(entry.billClassification, selectedDate).then(bn => {
+          setEntry(prev => ({ ...prev, computerBillNumber: bn }));
+        });
+      }
+    }
+  }, [entry.type, entry.billClassification, editingTransaction]);
   useEffect(() => {
     supabase.from('welders').select('id, name').order('name').then(({ data }) => setWelders(data || []));
   }, []);
@@ -230,7 +238,7 @@ export function CustomerInlineEntry({
         type: typeMap[editingTransaction.type] || 'sale',
         billNumber: editingTransaction.billNumber || '',
         computerBillNumber: editingTransaction.computerBillNumber || '',
-        billClassification: editingTransaction.billClassification || 'b2c',
+        billClassification: (editingTransaction.billClassification || 'b2c') as SaleClassification,
         customerQuery: editingTransaction.customerName || '',
         customerId: editingTransaction.customerId,
         customerAdvance: 0,
@@ -656,7 +664,7 @@ export function CustomerInlineEntry({
               key={st.value}
               onClick={() => {
                 const newType = st.value;
-                setEntry(prev => ({ ...prev, type: newType, selectedBills: [], dueBills: [], customerQuery: '', customerId: undefined, customerAdvance: 0, amount: '', welderId: undefined }));
+                setEntry(prev => ({ ...prev, type: newType, selectedBills: [], dueBills: [], customerQuery: '', customerId: undefined, customerAdvance: 0, amount: '', welderId: undefined, billClassification: prev.billClassification }));
               }}
               className={cn(
                 "flex-1 py-1.5 text-[10px] font-medium transition-colors",
@@ -670,37 +678,35 @@ export function CustomerInlineEntry({
 
         {/* Row 0: Classification + Computer Bill# (for sale) */}
         {entry.type === 'sale' && (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Type</label>
-              <Select value={entry.billClassification} onValueChange={v => setEntry(prev => ({ ...prev, billClassification: v }))}>
+              <Select value={entry.billClassification} onValueChange={v => {
+                setEntry(prev => ({ ...prev, billClassification: v as SaleClassification }));
+                // Auto-generate computer bill number on classification change
+                generateComputerBillNumber(v as SaleClassification, selectedDate).then(bn => {
+                  setEntry(prev => ({ ...prev, computerBillNumber: bn }));
+                });
+              }}>
                 <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="b2c" className="text-xs">B2C</SelectItem>
                   <SelectItem value="b2b" className="text-xs">B2B</SelectItem>
-                  <SelectItem value="other_gst" className="text-xs">Other GST</SelectItem>
+                  <SelectItem value="estimate" className="text-xs">Estimate</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="col-span-2">
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Computer Bill #</label>
-              <Input value={entry.computerBillNumber} onChange={e => setEntry(prev => ({ ...prev, computerBillNumber: e.target.value }))} placeholder="Computer bill no..." className="h-8 text-[10px] font-mono" />
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Bill #</label>
+              <Input value={entry.computerBillNumber} onChange={e => setEntry(prev => ({ ...prev, computerBillNumber: e.target.value }))} placeholder="Auto..." className="h-8 text-[10px] font-mono" />
             </div>
           </div>
         )}
 
-        {/* Row 1: Bill# + Customer + Welder */}
-        <div className="grid grid-cols-3 gap-2 md:grid-cols-[minmax(140px,1.2fr)_2fr_1fr]">
-          {(entry.type === 'sale' || entry.type === 'sales_return') && (
-            <div>
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Bill #</label>
-              <Input value={entry.billNumber} onChange={e => setEntry(prev => ({ ...prev, billNumber: e.target.value }))} className="h-8 text-[10px] font-mono" />
-            </div>
-          )}
-
+        {/* Row 1: Customer + Welder */}
+        <div className="grid grid-cols-2 gap-2">
           <div className={cn(
-            entry.type === 'balance_paid' || entry.type === 'customer_advance' ? 'col-span-2' : '',
-            !(entry.type === 'sale' || entry.type === 'sales_return') ? 'col-span-2' : ''
+            entry.type === 'balance_paid' || entry.type === 'customer_advance' ? 'col-span-2' : ''
           )}>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Customer</label>
             {renderCustomerSearch()}
@@ -799,9 +805,23 @@ export function CustomerInlineEntry({
           <div className={entry.type === 'customer_advance' || entry.type === 'balance_paid' ? '' : ''}>
             <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
             <div className="space-y-1">
-              {entry.payments.map((p, i) => (
+              {/* First two payments (Cash + UPI) in single row */}
+              <div className="flex gap-1 items-center">
+                {entry.payments.slice(0, 2).map((p, i) => (
+                  <div key={p.id} className="flex gap-0.5 flex-1">
+                    <span className="text-[9px] text-muted-foreground self-center w-8 shrink-0">{p.mode === 'cash' ? '💵' : '📱'}</span>
+                    <Input type="number" inputMode="numeric" value={p.amount || ''}
+                      onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+                  </div>
+                ))}
+                <button onClick={addPaymentMode} className="text-accent hover:text-accent/80 shrink-0" title="Add payment mode">
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              {/* Additional payment modes */}
+              {entry.payments.slice(2).map((p, i) => (
                 <div key={p.id} className="flex gap-1">
-                  <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
+                  <Select value={p.mode} onValueChange={v => updatePayment(i + 2, 'mode', v)}>
                     <SelectTrigger className="h-7 text-[10px] w-20"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {selectableMethods.map(m => (
@@ -810,13 +830,10 @@ export function CustomerInlineEntry({
                     </SelectContent>
                   </Select>
                   <Input type="number" inputMode="numeric" value={p.amount || ''}
-                    onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
-                  {entry.payments.length > 1 && (
-                    <button onClick={() => removePayment(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
-                  )}
+                    onChange={e => updatePayment(i + 2, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+                  <button onClick={() => removePayment(i + 2)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
                 </div>
               ))}
-              <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add</button>
             </div>
           </div>
         </div>

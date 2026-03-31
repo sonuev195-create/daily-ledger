@@ -1,0 +1,1 @@
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS payment_type text NOT NULL DEFAULT 'date_wise';

@@ -31,26 +31,7 @@ export function DrawerAccordionContent({ opening, closing, previousClosing, summ
   const [manualNote, setManualNote] = useState(closing?.manualCash?.toString() || '0');
 
   // Live balances
-  const [customerAdvanceTotal, setCustomerAdvanceTotal] = useState(0);
-  const [customerDueTotal, setCustomerDueTotal] = useState(0);
-  const [supplierDueTotal, setSupplierDueTotal] = useState(0);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const [custRes, suppRes] = await Promise.all([
-        supabase.from('customers').select('advance_balance, due_balance'),
-        supabase.from('suppliers').select('balance'),
-      ]);
-      if (custRes.data) {
-        setCustomerAdvanceTotal(custRes.data.reduce((s, c) => s + Number(c.advance_balance), 0));
-        setCustomerDueTotal(custRes.data.reduce((s, c) => s + Number(c.due_balance), 0));
-      }
-      if (suppRes.data) {
-        setSupplierDueTotal(suppRes.data.reduce((s, c) => s + Number(c.balance), 0));
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     const c = opening?.coin ?? previousClosing?.manualCoin ?? 0;
@@ -111,9 +92,6 @@ export function DrawerAccordionContent({ opening, closing, previousClosing, summ
     { label: 'Cash', icon: Wallet, colorClass: 'text-success', bgClass: 'bg-success/10', value: systemCash },
     { label: 'UPI', icon: CreditCard, colorClass: 'text-info', bgClass: 'bg-info/10', value: systemUpi },
     ...(chequeBalance !== 0 ? [{ label: 'Cheque', icon: Wallet, colorClass: 'text-warning', bgClass: 'bg-warning/10', value: chequeBalance }] : []),
-    { label: 'Customer Advance', icon: Users, colorClass: 'text-success', bgClass: 'bg-success/10', value: customerAdvanceTotal },
-    { label: 'Customer Due', icon: Users, colorClass: 'text-warning', bgClass: 'bg-warning/10', value: customerDueTotal },
-    { label: 'Supplier Due', icon: Truck, colorClass: 'text-destructive', bgClass: 'bg-destructive/10', value: supplierDueTotal },
   ];
 
   return (

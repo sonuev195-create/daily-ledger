@@ -5,24 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
  * Bill number format: PREFIX/YYYY.MM.DD/001
  * Resets daily from 001.
  * 
- * Prefixes:
- * - SB: Sale Bill
- * - SR: Sales Return
- * - BP: Balance Payment
- * - CA: Customer Advance
- * - PA: Purchase Bill A
- * - PB: Purchase Bill B
- * - PC: Purchase Bill C
- * - RA: Purchase Return A
- * - RB: Purchase Return B
- * - PP: Purchase Payment
- * - PE: Purchase Expenses
- * - PD: Purchase Delivered
- * - EM: Employee (salary/attendance)
- * - EA: Employee Allowance
- * - RW: Rate Work
- * - EP: Employee Payment
- * - OD: Opening Due
+ * Computer bill number format: YY-YY/TYPE/NUM
+ * e.g., 26-27/C/1 for B2C, 26-27/B/1 for B2B, 26-27/E/1 for Estimate
  */
 
 export type BillPrefix = 
@@ -30,6 +14,8 @@ export type BillPrefix =
   | 'PA' | 'PB' | 'PC' | 'RA' | 'RB' | 'PP' | 'PE' | 'PD'
   | 'EM' | 'EA' | 'RW' | 'EP'
   | 'OD';
+
+export type SaleClassification = 'b2c' | 'b2b' | 'estimate';
 
 export async function generateDailyBillNumber(prefix: BillPrefix, date: Date): Promise<string> {
   const dateStr = format(date, 'yyyy.MM.dd');
@@ -44,7 +30,6 @@ export async function generateDailyBillNumber(prefix: BillPrefix, date: Date): P
 
   let nextNum = 1;
   if (data?.[0]?.bill_number) {
-    // Extract the suffix number after the last /
     const parts = data[0].bill_number.split('/');
     const lastPart = parts[parts.length - 1];
     const num = parseInt(lastPart, 10);
@@ -52,6 +37,40 @@ export async function generateDailyBillNumber(prefix: BillPrefix, date: Date): P
   }
 
   return `${prefix}/${dateStr}/${nextNum.toString().padStart(3, '0')}`;
+}
+
+/**
+ * Generate computer bill number in format YY-YY/TYPE/NUM
+ * Financial year: April to March
+ * e.g., 26-27/C/1 for B2C, 26-27/B/1 for B2B, 26-27/E/1 for Estimate
+ */
+export async function generateComputerBillNumber(classification: SaleClassification, date: Date): Promise<string> {
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0-indexed
+  // Financial year: April (month 3) to March (month 2)
+  const fyStart = month >= 3 ? year : year - 1;
+  const fyEnd = fyStart + 1;
+  const fyPrefix = `${(fyStart % 100).toString().padStart(2, '0')}-${(fyEnd % 100).toString().padStart(2, '0')}`;
+  
+  const typeCode = classification === 'b2c' ? 'C' : classification === 'b2b' ? 'B' : 'E';
+  const pattern = `${fyPrefix}/${typeCode}/%`;
+  
+  const { data } = await supabase
+    .from('transactions')
+    .select('computer_bill_number')
+    .like('computer_bill_number', pattern)
+    .order('computer_bill_number', { ascending: false })
+    .limit(1);
+
+  let nextNum = 1;
+  if (data?.[0]?.computer_bill_number) {
+    const parts = data[0].computer_bill_number.split('/');
+    const lastPart = parts[parts.length - 1];
+    const num = parseInt(lastPart, 10);
+    if (!isNaN(num)) nextNum = num + 1;
+  }
+
+  return `${fyPrefix}/${typeCode}/${nextNum}`;
 }
 
 // Map from customer sub-type to prefix

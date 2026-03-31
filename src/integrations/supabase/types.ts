@@ -666,6 +666,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          payment_type: string
           phone: string | null
           updated_at: string
         }
@@ -675,6 +676,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          payment_type?: string
           phone?: string | null
           updated_at?: string
         }
@@ -684,6 +686,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          payment_type?: string
           phone?: string | null
           updated_at?: string
         }

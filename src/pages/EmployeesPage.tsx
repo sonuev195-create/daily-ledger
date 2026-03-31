@@ -114,6 +114,45 @@ export default function EmployeesPage() {
           .update({ name: formName, phone: formPhone || null, role: formRole || null, salary: parseFloat(formSalary) || 0 })
           .eq('id', editEmployee.id);
         if (error) throw error;
+
+        // Handle opening dues for editing too
+        const dailyDue = parseFloat(formDailySalaryDue) || 0;
+        const rateDue = parseFloat(formRateWorkDue) || 0;
+
+        // Daily salary opening due
+        const { data: existingDaily } = await supabase.from('transactions')
+          .select('id').eq('employee_id', editEmployee.id).eq('type', 'salary').eq('reference', 'opening_due').maybeSingle();
+        if (dailyDue > 0) {
+          const dueDate = formDailySalaryDueDate || format(new Date(), 'yyyy-MM-dd');
+          if (existingDaily) {
+            await supabase.from('transactions').update({ amount: dailyDue, date: dueDate }).eq('id', existingDaily.id);
+          } else {
+            await supabase.from('transactions').insert({
+              date: dueDate, section: 'employee', type: 'salary', amount: dailyDue, payments: [],
+              employee_id: editEmployee.id, bill_number: `OD/${dueDate.replace(/-/g, '.')}/001`, reference: 'opening_due',
+            });
+          }
+        } else if (existingDaily) {
+          await supabase.from('transactions').delete().eq('id', existingDaily.id);
+        }
+
+        // Rate work opening due
+        const { data: existingRate } = await supabase.from('transactions')
+          .select('id').eq('employee_id', editEmployee.id).eq('type', 'rate_work').eq('reference', 'opening_due').maybeSingle();
+        if (rateDue > 0) {
+          const dueDate = formRateWorkDueDate || format(new Date(), 'yyyy-MM-dd');
+          if (existingRate) {
+            await supabase.from('transactions').update({ amount: rateDue, date: dueDate }).eq('id', existingRate.id);
+          } else {
+            await supabase.from('transactions').insert({
+              date: dueDate, section: 'employee', type: 'rate_work', amount: rateDue, payments: [],
+              employee_id: editEmployee.id, bill_number: `OD/${dueDate.replace(/-/g, '.')}/001`, reference: 'opening_due',
+            });
+          }
+        } else if (existingRate) {
+          await supabase.from('transactions').delete().eq('id', existingRate.id);
+        }
+
         toast.success('Employee updated');
       } else {
         const { data: newEmp, error } = await supabase.from('employees')
@@ -121,7 +160,6 @@ export default function EmployeesPage() {
           .select().single();
         if (error) throw error;
         
-        // Save opening dues as transactions
         if (newEmp) {
           const dailyDue = parseFloat(formDailySalaryDue) || 0;
           const rateDue = parseFloat(formRateWorkDue) || 0;
@@ -129,28 +167,16 @@ export default function EmployeesPage() {
           if (dailyDue > 0) {
             const dueDate = formDailySalaryDueDate || format(new Date(), 'yyyy-MM-dd');
             await supabase.from('transactions').insert({
-              date: dueDate,
-              section: 'employee',
-              type: 'salary',
-              amount: dailyDue,
-              payments: [],
-              employee_id: newEmp.id,
-              bill_number: `OD/${dueDate.replace(/-/g, '.')}/001`,
-              reference: 'opening_due',
+              date: dueDate, section: 'employee', type: 'salary', amount: dailyDue, payments: [],
+              employee_id: newEmp.id, bill_number: `OD/${dueDate.replace(/-/g, '.')}/001`, reference: 'opening_due',
             });
           }
           
           if (rateDue > 0) {
             const dueDate = formRateWorkDueDate || format(new Date(), 'yyyy-MM-dd');
             await supabase.from('transactions').insert({
-              date: dueDate,
-              section: 'employee',
-              type: 'rate_work',
-              amount: rateDue,
-              payments: [],
-              employee_id: newEmp.id,
-              bill_number: `OD/${dueDate.replace(/-/g, '.')}/001`,
-              reference: 'opening_due',
+              date: dueDate, section: 'employee', type: 'rate_work', amount: rateDue, payments: [],
+              employee_id: newEmp.id, bill_number: `OD/${dueDate.replace(/-/g, '.')}/001`, reference: 'opening_due',
             });
           }
         }
@@ -165,13 +191,30 @@ export default function EmployeesPage() {
   };
 
   const handleEditEmployee = (employee: Employee) => {
-    // Batch all state updates together to prevent jerking
     setFormName(employee.name);
     setFormPhone(employee.phone || '');
     setFormRole(employee.role || '');
     setFormSalary(employee.salary.toString());
+    setFormDailySalaryDue('');
+    setFormDailySalaryDueDate('');
+    setFormRateWorkDue('');
+    setFormRateWorkDueDate('');
     setEditEmployee(employee);
-    // Open the sheet after a microtask to ensure state is settled
+    
+    // Load existing opening dues
+    supabase.from('transactions')
+      .select('type, amount, date')
+      .eq('employee_id', employee.id)
+      .eq('reference', 'opening_due')
+      .then(({ data }) => {
+        if (data) {
+          const daily = data.find(t => t.type === 'salary');
+          const rate = data.find(t => t.type === 'rate_work');
+          if (daily) { setFormDailySalaryDue(String(Number(daily.amount))); setFormDailySalaryDueDate(daily.date); }
+          if (rate) { setFormRateWorkDue(String(Number(rate.amount))); setFormRateWorkDueDate(rate.date); }
+        }
+      });
+    
     requestAnimationFrame(() => setIsAddOpen(true));
   };
 
@@ -439,33 +482,29 @@ export default function EmployeesPage() {
               <label className="text-sm font-medium">Day Salary</label>
               <Input value={formSalary} onChange={(e) => setFormSalary(e.target.value)} placeholder="0" type="number" className="mt-1" />
             </div>
-            {!editEmployee && (
-              <>
-                <div className="border-t border-border pt-3">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Opening Dues (optional)</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground">Daily Salary Due</label>
-                      <Input value={formDailySalaryDue} onChange={(e) => setFormDailySalaryDue(e.target.value)} placeholder="₹0" type="number" className="mt-1" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Due Date</label>
-                      <Input value={formDailySalaryDueDate} onChange={(e) => setFormDailySalaryDueDate(e.target.value)} type="date" className="mt-1" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 mt-2">
-                    <div>
-                      <label className="text-xs text-muted-foreground">Rate Work Due</label>
-                      <Input value={formRateWorkDue} onChange={(e) => setFormRateWorkDue(e.target.value)} placeholder="₹0" type="number" className="mt-1" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Due Date</label>
-                      <Input value={formRateWorkDueDate} onChange={(e) => setFormRateWorkDueDate(e.target.value)} type="date" className="mt-1" />
-                    </div>
-                  </div>
+            <div className="border-t border-border pt-3">
+              <p className="text-sm font-medium text-muted-foreground mb-2">Opening Dues (optional)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">Daily Salary Due</label>
+                  <Input value={formDailySalaryDue} onChange={(e) => setFormDailySalaryDue(e.target.value)} placeholder="₹0" type="number" className="mt-1" />
                 </div>
-              </>
-            )}
+                <div>
+                  <label className="text-xs text-muted-foreground">Due Date</label>
+                  <Input value={formDailySalaryDueDate} onChange={(e) => setFormDailySalaryDueDate(e.target.value)} type="date" className="mt-1" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <div>
+                  <label className="text-xs text-muted-foreground">Rate Work Due</label>
+                  <Input value={formRateWorkDue} onChange={(e) => setFormRateWorkDue(e.target.value)} placeholder="₹0" type="number" className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Due Date</label>
+                  <Input value={formRateWorkDueDate} onChange={(e) => setFormRateWorkDueDate(e.target.value)} type="date" className="mt-1" />
+                </div>
+              </div>
+            </div>
             <Button onClick={handleSaveEmployee} className="w-full">{editEmployee ? 'Update Employee' : 'Add Employee'}</Button>
           </div>
         </SheetContent>

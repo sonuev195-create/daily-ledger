@@ -214,8 +214,16 @@ export function CustomerInlineEntry({
   const customerTransactions = transactions.filter(t => t.section === 'sale');
 
   useEffect(() => {
-    if (!editingTransaction) generateBillNumber(entry.type);
-  }, [entry.type, editingTransaction]);
+    if (!editingTransaction) {
+      generateBillNumber(entry.type);
+      // Auto-generate computer bill number for sales
+      if (entry.type === 'sale') {
+        generateComputerBillNumber(entry.billClassification, selectedDate).then(bn => {
+          setEntry(prev => ({ ...prev, computerBillNumber: bn }));
+        });
+      }
+    }
+  }, [entry.type, entry.billClassification, editingTransaction]);
   useEffect(() => {
     supabase.from('welders').select('id, name').order('name').then(({ data }) => setWelders(data || []));
   }, []);

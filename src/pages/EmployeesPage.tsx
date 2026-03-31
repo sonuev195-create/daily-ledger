@@ -191,13 +191,30 @@ export default function EmployeesPage() {
   };
 
   const handleEditEmployee = (employee: Employee) => {
-    // Batch all state updates together to prevent jerking
     setFormName(employee.name);
     setFormPhone(employee.phone || '');
     setFormRole(employee.role || '');
     setFormSalary(employee.salary.toString());
+    setFormDailySalaryDue('');
+    setFormDailySalaryDueDate('');
+    setFormRateWorkDue('');
+    setFormRateWorkDueDate('');
     setEditEmployee(employee);
-    // Open the sheet after a microtask to ensure state is settled
+    
+    // Load existing opening dues
+    supabase.from('transactions')
+      .select('type, amount, date')
+      .eq('employee_id', employee.id)
+      .eq('reference', 'opening_due')
+      .then(({ data }) => {
+        if (data) {
+          const daily = data.find(t => t.type === 'salary');
+          const rate = data.find(t => t.type === 'rate_work');
+          if (daily) { setFormDailySalaryDue(String(Number(daily.amount))); setFormDailySalaryDueDate(daily.date); }
+          if (rate) { setFormRateWorkDue(String(Number(rate.amount))); setFormRateWorkDueDate(rate.date); }
+        }
+      });
+    
     requestAnimationFrame(() => setIsAddOpen(true));
   };
 

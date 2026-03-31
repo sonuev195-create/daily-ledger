@@ -327,17 +327,20 @@ export function PurchaseInlineEntry({
       else if (entry.type === 'purchase_payment') { dbType = 'purchase_payment'; }
       else if (entry.type === 'purchase_delivered') { dbType = 'purchase_delivered'; }
       else if (entry.type === 'purchase_expenses') { dbType = 'purchase_expenses'; }
+      else if (entry.type === 'purchase_advance') { dbType = 'purchase_advance'; }
+
+      const isAdvance = entry.type === 'purchase_advance';
 
       const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
         date: selectedDate,
         section: 'purchase' as TransactionSection,
         type: dbType,
-        amount: entry.type === 'purchase_payment' ? totalPayments : amountNum,
-        payments: (isPayment || isExpenses) ? entry.payments.filter(p => p.amount > 0) : [],
+        amount: (entry.type === 'purchase_payment' || isAdvance) ? totalPayments : amountNum,
+        payments: (isPayment || isExpenses || isAdvance) ? entry.payments.filter(p => p.amount > 0) : [],
         billNumber: entry.billNumber || undefined,
         supplierId: entry.supplierId,
         supplierName: entry.supplierQuery || undefined,
-        reference: entry.reference || undefined,
+        reference: isAdvance ? 'advance' : (entry.reference || undefined),
         billType: billType as any,
         due: ['purchase_bill_a', 'purchase_bill_b'].includes(entry.type) ? amountNum : undefined,
       };

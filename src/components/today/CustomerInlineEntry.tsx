@@ -670,21 +670,27 @@ export function CustomerInlineEntry({
 
         {/* Row 0: Classification + Computer Bill# (for sale) */}
         {entry.type === 'sale' && (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Type</label>
-              <Select value={entry.billClassification} onValueChange={v => setEntry(prev => ({ ...prev, billClassification: v }))}>
+              <Select value={entry.billClassification} onValueChange={v => {
+                setEntry(prev => ({ ...prev, billClassification: v as SaleClassification }));
+                // Auto-generate computer bill number on classification change
+                generateComputerBillNumber(v as SaleClassification, selectedDate).then(bn => {
+                  setEntry(prev => ({ ...prev, computerBillNumber: bn }));
+                });
+              }}>
                 <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="b2c" className="text-xs">B2C</SelectItem>
                   <SelectItem value="b2b" className="text-xs">B2B</SelectItem>
-                  <SelectItem value="other_gst" className="text-xs">Other GST</SelectItem>
+                  <SelectItem value="estimate" className="text-xs">Estimate</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="col-span-2">
-              <label className="text-[10px] text-muted-foreground mb-0.5 block">Computer Bill #</label>
-              <Input value={entry.computerBillNumber} onChange={e => setEntry(prev => ({ ...prev, computerBillNumber: e.target.value }))} placeholder="Computer bill no..." className="h-8 text-[10px] font-mono" />
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-0.5 block">Bill #</label>
+              <Input value={entry.computerBillNumber} onChange={e => setEntry(prev => ({ ...prev, computerBillNumber: e.target.value }))} placeholder="Auto..." className="h-8 text-[10px] font-mono" />
             </div>
           </div>
         )}

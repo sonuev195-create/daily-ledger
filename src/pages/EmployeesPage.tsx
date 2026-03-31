@@ -482,33 +482,29 @@ export default function EmployeesPage() {
               <label className="text-sm font-medium">Day Salary</label>
               <Input value={formSalary} onChange={(e) => setFormSalary(e.target.value)} placeholder="0" type="number" className="mt-1" />
             </div>
-            {!editEmployee && (
-              <>
-                <div className="border-t border-border pt-3">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Opening Dues (optional)</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground">Daily Salary Due</label>
-                      <Input value={formDailySalaryDue} onChange={(e) => setFormDailySalaryDue(e.target.value)} placeholder="₹0" type="number" className="mt-1" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Due Date</label>
-                      <Input value={formDailySalaryDueDate} onChange={(e) => setFormDailySalaryDueDate(e.target.value)} type="date" className="mt-1" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 mt-2">
-                    <div>
-                      <label className="text-xs text-muted-foreground">Rate Work Due</label>
-                      <Input value={formRateWorkDue} onChange={(e) => setFormRateWorkDue(e.target.value)} placeholder="₹0" type="number" className="mt-1" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Due Date</label>
-                      <Input value={formRateWorkDueDate} onChange={(e) => setFormRateWorkDueDate(e.target.value)} type="date" className="mt-1" />
-                    </div>
-                  </div>
+            <div className="border-t border-border pt-3">
+              <p className="text-sm font-medium text-muted-foreground mb-2">Opening Dues (optional)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">Daily Salary Due</label>
+                  <Input value={formDailySalaryDue} onChange={(e) => setFormDailySalaryDue(e.target.value)} placeholder="₹0" type="number" className="mt-1" />
                 </div>
-              </>
-            )}
+                <div>
+                  <label className="text-xs text-muted-foreground">Due Date</label>
+                  <Input value={formDailySalaryDueDate} onChange={(e) => setFormDailySalaryDueDate(e.target.value)} type="date" className="mt-1" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <div>
+                  <label className="text-xs text-muted-foreground">Rate Work Due</label>
+                  <Input value={formRateWorkDue} onChange={(e) => setFormRateWorkDue(e.target.value)} placeholder="₹0" type="number" className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Due Date</label>
+                  <Input value={formRateWorkDueDate} onChange={(e) => setFormRateWorkDueDate(e.target.value)} type="date" className="mt-1" />
+                </div>
+              </div>
+            </div>
             <Button onClick={handleSaveEmployee} className="w-full">{editEmployee ? 'Update Employee' : 'Add Employee'}</Button>
           </div>
         </SheetContent>

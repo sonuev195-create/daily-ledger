@@ -589,13 +589,27 @@ export function PurchaseInlineEntry({
         )}
 
         {/* Payment modes - only for payment and expenses */}
-        {(isPayment || isExpenses) && (
+        {(isPayment || isExpenses || entry.type === 'purchase_advance') && (
         <div>
           <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
           <div className="space-y-1">
-            {entry.payments.map((p, i) => (
+            {/* Cash + UPI in single row */}
+            <div className="flex gap-1 items-center">
+              {entry.payments.slice(0, 2).map((p, i) => (
+                <div key={p.id} className="flex gap-0.5 flex-1">
+                  <span className="text-[9px] text-muted-foreground self-center w-8 shrink-0">{p.mode === 'cash' ? '💵' : '📱'}</span>
+                  <Input type="number" inputMode="numeric" value={p.amount || ''}
+                    onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+                </div>
+              ))}
+              <button onClick={addPaymentMode} className="text-accent hover:text-accent/80 shrink-0" title="Add payment mode">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Additional payment modes */}
+            {entry.payments.slice(2).map((p, i) => (
               <div key={p.id} className="flex gap-1">
-                <Select value={p.mode} onValueChange={v => updatePayment(i, 'mode', v)}>
+                <Select value={p.mode} onValueChange={v => updatePayment(i + 2, 'mode', v)}>
                   <SelectTrigger className="h-7 text-[10px] w-20"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {selectableMethods.map(m => (
@@ -604,13 +618,10 @@ export function PurchaseInlineEntry({
                   </SelectContent>
                 </Select>
                 <Input type="number" inputMode="numeric" value={p.amount || ''}
-                  onChange={e => updatePayment(i, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
-                {entry.payments.length > 1 && (
-                  <button onClick={() => removePayment(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
-                )}
+                  onChange={e => updatePayment(i + 2, 'amount', e.target.value)} placeholder="₹0" className="h-7 text-xs flex-1" />
+                <button onClick={() => removePayment(i + 2)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
               </div>
             ))}
-            <button onClick={addPaymentMode} className="text-[10px] text-accent hover:underline">+ Add payment mode</button>
           </div>
         </div>
         )}

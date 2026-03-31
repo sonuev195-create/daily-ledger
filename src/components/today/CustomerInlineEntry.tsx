@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { searchCustomers, getDueBillsForCustomerId, getOrCreateCustomer, saveBillToSupabase, deductFromBatch, getBatchesForItem, getBillItemsForTransaction, restoreInventoryForBillItems, planBatchAllocations } from '@/hooks/useSupabaseData';
-import { generateDailyBillNumber, customerTypePrefixMap } from '@/lib/billNumbers';
+import { generateDailyBillNumber, customerTypePrefixMap, generateComputerBillNumber, SaleClassification } from '@/lib/billNumbers';
 import { formatINR } from '@/lib/format';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

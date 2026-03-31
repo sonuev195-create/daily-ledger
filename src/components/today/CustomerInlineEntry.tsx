@@ -656,7 +656,7 @@ export function CustomerInlineEntry({
               key={st.value}
               onClick={() => {
                 const newType = st.value;
-                setEntry(prev => ({ ...prev, type: newType, selectedBills: [], dueBills: [], customerQuery: '', customerId: undefined, customerAdvance: 0, amount: '', welderId: undefined }));
+                setEntry(prev => ({ ...prev, type: newType, selectedBills: [], dueBills: [], customerQuery: '', customerId: undefined, customerAdvance: 0, amount: '', welderId: undefined, billClassification: prev.billClassification }));
               }}
               className={cn(
                 "flex-1 py-1.5 text-[10px] font-medium transition-colors",

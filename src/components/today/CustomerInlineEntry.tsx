@@ -230,7 +230,7 @@ export function CustomerInlineEntry({
         type: typeMap[editingTransaction.type] || 'sale',
         billNumber: editingTransaction.billNumber || '',
         computerBillNumber: editingTransaction.computerBillNumber || '',
-        billClassification: editingTransaction.billClassification || 'b2c',
+        billClassification: (editingTransaction.billClassification || 'b2c') as SaleClassification,
         customerQuery: editingTransaction.customerName || '',
         customerId: editingTransaction.customerId,
         customerAdvance: 0,

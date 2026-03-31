@@ -31,26 +31,7 @@ export function DrawerAccordionContent({ opening, closing, previousClosing, summ
   const [manualNote, setManualNote] = useState(closing?.manualCash?.toString() || '0');
 
   // Live balances
-  const [customerAdvanceTotal, setCustomerAdvanceTotal] = useState(0);
-  const [customerDueTotal, setCustomerDueTotal] = useState(0);
-  const [supplierDueTotal, setSupplierDueTotal] = useState(0);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const [custRes, suppRes] = await Promise.all([
-        supabase.from('customers').select('advance_balance, due_balance'),
-        supabase.from('suppliers').select('balance'),
-      ]);
-      if (custRes.data) {
-        setCustomerAdvanceTotal(custRes.data.reduce((s, c) => s + Number(c.advance_balance), 0));
-        setCustomerDueTotal(custRes.data.reduce((s, c) => s + Number(c.due_balance), 0));
-      }
-      if (suppRes.data) {
-        setSupplierDueTotal(suppRes.data.reduce((s, c) => s + Number(c.balance), 0));
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     const c = opening?.coin ?? previousClosing?.manualCoin ?? 0;

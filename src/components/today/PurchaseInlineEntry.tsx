@@ -431,6 +431,7 @@ export function PurchaseInlineEntry({
   const isBillType = ['purchase_bill_a', 'purchase_bill_b', 'purchase_bill_c', 'purchase_delivered', 'purchase_return_a', 'purchase_return_b'].includes(entry.type);
   const isPayment = entry.type === 'purchase_payment';
   const isExpenses = entry.type === 'purchase_expenses';
+  const isAdvance = entry.type === 'purchase_advance';
 
   return (
     <div className="space-y-3">

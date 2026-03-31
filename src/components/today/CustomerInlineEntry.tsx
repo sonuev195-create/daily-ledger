@@ -41,7 +41,7 @@ interface EntryRow {
   type: CustomerSubType;
   billNumber: string;
   computerBillNumber: string;
-  billClassification: string; // 'b2c' | 'b2b' | 'other_gst'
+  billClassification: SaleClassification;
   customerQuery: string;
   customerId?: string;
   customerAdvance: number;

@@ -478,13 +478,13 @@ export function PurchaseInlineEntry({
 
       {/* New Entry */}
       <div className="border border-accent/30 rounded-lg p-3 bg-accent/5 space-y-2">
-        {/* Bill / Payment Toggle */}
+        {/* Bill / Payment / Advance Toggle */}
         <div className="flex rounded-lg overflow-hidden border border-border mb-1">
           <button
             onClick={() => setEntry(prev => ({ ...prev, type: 'purchase_bill_a', selectedBills: [], dueBills: [] }))}
             className={cn(
               "flex-1 py-1.5 text-xs font-medium transition-colors",
-              !isPayment ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+              isBillType ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
             )}
           >
             Bill
@@ -497,6 +497,15 @@ export function PurchaseInlineEntry({
             )}
           >
             Payment
+          </button>
+          <button
+            onClick={() => setEntry(prev => ({ ...prev, type: 'purchase_advance' as PurchaseSubType, selectedBills: [], dueBills: [] }))}
+            className={cn(
+              "flex-1 py-1.5 text-xs font-medium transition-colors",
+              isAdvance ? "bg-accent text-accent-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+            )}
+          >
+            Advance
           </button>
         </div>
 

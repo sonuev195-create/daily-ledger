@@ -103,13 +103,53 @@ export default function SuppliersPage() {
     setFormName(s.name);
     setFormPhone(s.phone || '');
     setFormAddress(s.address || '');
+    setFormPaymentType(s.payment_type || 'date_wise');
     setIsAddOpen(true);
   };
 
   const closeForm = () => {
     setIsAddOpen(false);
     setEditSupplier(null);
-    setFormName(''); setFormPhone(''); setFormAddress('');
+    setFormName(''); setFormPhone(''); setFormAddress(''); setFormPaymentType('date_wise');
+  };
+
+  const togglePaymentType = async (supplier: Supplier) => {
+    const newType = supplier.payment_type === 'bill_wise' ? 'date_wise' : 'bill_wise';
+    await supabase.from('suppliers').update({ payment_type: newType }).eq('id', supplier.id);
+    toast.success(`Changed to ${newType === 'bill_wise' ? 'Bill-wise' : 'Date-wise'} payment`);
+    fetchSuppliers();
+  };
+
+  // Bulk import state
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+
+  const handleBulkImport = async () => {
+    const lines = bulkText.trim().split('\n').filter(l => l.trim());
+    if (lines.length === 0) { toast.error('No data to import'); return; }
+    let count = 0;
+    for (const line of lines) {
+      const cols = line.split('\t');
+      const name = cols[0]?.trim();
+      if (!name) continue;
+      const phone = cols[1]?.trim() || null;
+      const address = cols[2]?.trim() || null;
+      const balance = parseFloat(cols[3]?.trim() || '0') || 0;
+      const balanceDate = cols[4]?.trim() || format(new Date(), 'yyyy-MM-dd');
+      const { data: newSup } = await supabase.from('suppliers').insert({ name, phone, address }).select().single();
+      if (newSup && balance > 0) {
+        await addTransaction({
+          id: uuidv4(), date: new Date(balanceDate), section: 'purchase', type: 'opening_due',
+          amount: balance, payments: [], supplierId: newSup.id, supplierName: name,
+          billNumber: `PUR DUE 1`, due: balance, createdAt: new Date(), updatedAt: new Date(),
+        });
+      }
+      count++;
+    }
+    toast.success(`Imported ${count} suppliers`);
+    setIsBulkOpen(false);
+    setBulkText('');
+    fetchSuppliers();
   };
 
   // Opening due bills

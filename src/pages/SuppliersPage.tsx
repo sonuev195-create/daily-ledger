@@ -244,7 +244,10 @@ export default function SuppliersPage() {
             <h1 className="text-2xl font-bold text-foreground">Suppliers</h1>
             <p className="text-sm text-muted-foreground">{suppliers.length} suppliers</p>
           </div>
-          <Button onClick={() => setIsAddOpen(true)} className="gap-2"><Plus className="w-4 h-4" /> Add</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsBulkOpen(true)} className="gap-1 text-xs"><Upload className="w-3 h-3" /> Bulk</Button>
+            <Button onClick={() => setIsAddOpen(true)} className="gap-2"><Plus className="w-4 h-4" /> Add</Button>
+          </div>
         </div>
 
         <div className={cn("border rounded-xl p-4 mb-6", totalBalance > 0 ? "bg-warning/10 border-warning/20" : "bg-success/10 border-success/20")}>

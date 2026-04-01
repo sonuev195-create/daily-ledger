@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Search, Phone, Plus, Edit2, Trash2, Wallet, AlertTriangle, Receipt } from 'lucide-react';
+import { Users, Search, Phone, Plus, Edit2, Trash2, Wallet, AlertTriangle, Receipt, Upload } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';

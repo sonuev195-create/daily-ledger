@@ -37,6 +37,8 @@ export function CustomerReport() {
   const [fromDate, setFromDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [toDate, setToDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   const [openingBalance, setOpeningBalance] = useState(0);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
   useEffect(() => {
     supabase.from('customers').select('*').order('name').then(({ data }) => {
@@ -212,17 +214,34 @@ export function CustomerReport() {
 
   return (
     <div className="space-y-4">
-      <select value={selectedCustId} onChange={e => setSelectedCustId(e.target.value)}
-        className="w-full h-10 px-3 text-sm bg-background border border-border rounded-xl">
-        <option value="">Select Customer</option>
-        {customers.map(c => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-            {Number(c.due_balance) > 0 ? ` (Due: ${formatINR(Number(c.due_balance))})` : ''}
-            {Number(c.advance_balance) > 0 ? ` (Adv: ${formatINR(Number(c.advance_balance))})` : ''}
-          </option>
-        ))}
-      </select>
+      {/* Customer search popup */}
+      <div className="relative">
+        <input
+          type="text"
+          value={customerSearchQuery}
+          onChange={e => { setCustomerSearchQuery(e.target.value); setShowCustomerDropdown(true); }}
+          onFocus={() => setShowCustomerDropdown(true)}
+          placeholder="Search customer by name..."
+          className="w-full h-10 px-3 text-sm bg-background border border-border rounded-xl"
+        />
+        {showCustomerDropdown && (
+          <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-xl shadow-lg max-h-60 overflow-y-auto">
+            {customers.filter(c => c.name.toLowerCase().includes(customerSearchQuery.toLowerCase())).map(c => (
+              <button key={c.id} onClick={() => { setSelectedCustId(c.id); setCustomerSearchQuery(c.name); setShowCustomerDropdown(false); }}
+                className={cn("w-full px-3 py-2 text-left text-sm hover:bg-secondary/50 flex justify-between items-center", selectedCustId === c.id && "bg-accent/10")}>
+                <span className="font-medium">{c.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {Number(c.due_balance) > 0 ? `Due: ${formatINR(Number(c.due_balance))}` : ''}
+                  {Number(c.advance_balance) > 0 ? ` Adv: ${formatINR(Number(c.advance_balance))}` : ''}
+                </span>
+              </button>
+            ))}
+            {customers.filter(c => c.name.toLowerCase().includes(customerSearchQuery.toLowerCase())).length === 0 && (
+              <div className="px-3 py-4 text-sm text-center text-muted-foreground">No customers found</div>
+            )}
+          </div>
+        )}
+      </div>
 
       {selectedCustId && (
         <>

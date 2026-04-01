@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Truck, Search, Phone, MapPin, Plus, Edit2, Trash2, CreditCard, ArrowUpRight, ArrowDownLeft, Wallet } from 'lucide-react';
+import { Truck, Search, Phone, MapPin, Plus, Edit2, Trash2, CreditCard, ArrowUpRight, ArrowDownLeft, Wallet, Upload } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -19,6 +20,7 @@ interface Supplier {
   phone: string | null;
   address: string | null;
   balance: number;
+  payment_type: string;
 }
 
 interface SupplierTransaction {
@@ -49,6 +51,7 @@ export default function SuppliersPage() {
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
+  const [formPaymentType, setFormPaymentType] = useState('date_wise');
   
   // Opening due bills
   const [isOpeningBillOpen, setIsOpeningBillOpen] = useState(false);
@@ -79,10 +82,10 @@ export default function SuppliersPage() {
     if (!formName.trim()) { toast.error('Name required'); return; }
     try {
       if (editSupplier) {
-        await supabase.from('suppliers').update({ name: formName, phone: formPhone || null, address: formAddress || null }).eq('id', editSupplier.id);
+        await supabase.from('suppliers').update({ name: formName, phone: formPhone || null, address: formAddress || null, payment_type: formPaymentType }).eq('id', editSupplier.id);
         toast.success('Updated');
       } else {
-        await supabase.from('suppliers').insert({ name: formName, phone: formPhone || null, address: formAddress || null });
+        await supabase.from('suppliers').insert({ name: formName, phone: formPhone || null, address: formAddress || null, payment_type: formPaymentType });
         toast.success('Added');
       }
       closeForm();
@@ -102,13 +105,53 @@ export default function SuppliersPage() {
     setFormName(s.name);
     setFormPhone(s.phone || '');
     setFormAddress(s.address || '');
+    setFormPaymentType(s.payment_type || 'date_wise');
     setIsAddOpen(true);
   };
 
   const closeForm = () => {
     setIsAddOpen(false);
     setEditSupplier(null);
-    setFormName(''); setFormPhone(''); setFormAddress('');
+    setFormName(''); setFormPhone(''); setFormAddress(''); setFormPaymentType('date_wise');
+  };
+
+  const togglePaymentType = async (supplier: Supplier) => {
+    const newType = supplier.payment_type === 'bill_wise' ? 'date_wise' : 'bill_wise';
+    await supabase.from('suppliers').update({ payment_type: newType }).eq('id', supplier.id);
+    toast.success(`Changed to ${newType === 'bill_wise' ? 'Bill-wise' : 'Date-wise'} payment`);
+    fetchSuppliers();
+  };
+
+  // Bulk import state
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+
+  const handleBulkImport = async () => {
+    const lines = bulkText.trim().split('\n').filter(l => l.trim());
+    if (lines.length === 0) { toast.error('No data to import'); return; }
+    let count = 0;
+    for (const line of lines) {
+      const cols = line.split('\t');
+      const name = cols[0]?.trim();
+      if (!name) continue;
+      const phone = cols[1]?.trim() || null;
+      const address = cols[2]?.trim() || null;
+      const balance = parseFloat(cols[3]?.trim() || '0') || 0;
+      const balanceDate = cols[4]?.trim() || format(new Date(), 'yyyy-MM-dd');
+      const { data: newSup } = await supabase.from('suppliers').insert({ name, phone, address }).select().single();
+      if (newSup && balance > 0) {
+        await addTransaction({
+          id: uuidv4(), date: new Date(balanceDate), section: 'purchase', type: 'opening_due',
+          amount: balance, payments: [], supplierId: newSup.id, supplierName: name,
+          billNumber: `PUR DUE 1`, due: balance, createdAt: new Date(), updatedAt: new Date(),
+        });
+      }
+      count++;
+    }
+    toast.success(`Imported ${count} suppliers`);
+    setIsBulkOpen(false);
+    setBulkText('');
+    fetchSuppliers();
   };
 
   // Opening due bills
@@ -202,7 +245,10 @@ export default function SuppliersPage() {
             <h1 className="text-2xl font-bold text-foreground">Suppliers</h1>
             <p className="text-sm text-muted-foreground">{suppliers.length} suppliers</p>
           </div>
-          <Button onClick={() => setIsAddOpen(true)} className="gap-2"><Plus className="w-4 h-4" /> Add</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsBulkOpen(true)} className="gap-1 text-xs"><Upload className="w-3 h-3" /> Bulk</Button>
+            <Button onClick={() => setIsAddOpen(true)} className="gap-2"><Plus className="w-4 h-4" /> Add</Button>
+          </div>
         </div>
 
         <div className={cn("border rounded-xl p-4 mb-6", totalBalance > 0 ? "bg-warning/10 border-warning/20" : "bg-success/10 border-success/20")}>
@@ -243,6 +289,9 @@ export default function SuppliersPage() {
                       <p className={cn("text-lg font-bold", s.balance > 0 ? "text-warning" : "text-success")}>{formatINR(Math.abs(s.balance))}</p>
                       <p className="text-xs text-muted-foreground">{s.balance > 0 ? 'Due' : 'Paid'}</p>
                     </div>
+                    <button onClick={() => togglePaymentType(s)} className={cn("text-[9px] px-1.5 py-0.5 rounded-md border font-medium shrink-0", s.payment_type === 'bill_wise' ? 'border-accent text-accent bg-accent/10' : 'border-border text-muted-foreground')}>
+                      {s.payment_type === 'bill_wise' ? 'Bill' : 'Date'}
+                    </button>
                     <Button variant="ghost" size="icon" onClick={() => openOpeningBills(s)} title="Add Opening Bills"><Plus className="w-4 h-4 text-accent" /></Button>
                     <Button variant="ghost" size="icon" onClick={() => handleEditSupplier(s)}><Edit2 className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="icon" onClick={() => handleDeleteSupplier(s.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
@@ -301,6 +350,13 @@ export default function SuppliersPage() {
             <div><label className="text-sm font-medium">Name *</label><Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Supplier name" className="mt-1" /></div>
             <div><label className="text-sm font-medium">Phone</label><Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="Phone" className="mt-1" /></div>
             <div><label className="text-sm font-medium">Address</label><Input value={formAddress} onChange={e => setFormAddress(e.target.value)} placeholder="Address" className="mt-1" /></div>
+            <div>
+              <label className="text-sm font-medium">Payment Type</label>
+              <div className="flex gap-2 mt-1">
+                <button onClick={() => setFormPaymentType('date_wise')} className={cn("flex-1 py-2 rounded-lg border text-sm font-medium transition-all", formPaymentType === 'date_wise' ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground")}>Date-wise</button>
+                <button onClick={() => setFormPaymentType('bill_wise')} className={cn("flex-1 py-2 rounded-lg border text-sm font-medium transition-all", formPaymentType === 'bill_wise' ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground")}>Bill-wise</button>
+              </div>
+            </div>
             <Button onClick={handleSaveSupplier} className="w-full">{editSupplier ? 'Update' : 'Add Supplier'}</Button>
           </div>
         </SheetContent>
@@ -329,6 +385,17 @@ export default function SuppliersPage() {
             ))}
             <Button variant="outline" size="sm" onClick={addOpeningBillRow} className="w-full gap-1"><Plus className="w-3 h-3" /> Add Row</Button>
             <Button onClick={saveOpeningBills} className="w-full">Save Opening Bills</Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+      {/* Bulk Import Sheet */}
+      <Sheet open={isBulkOpen} onOpenChange={open => !open && setIsBulkOpen(false)}>
+        <SheetContent side="bottom" className="h-auto max-h-[80vh] rounded-t-3xl">
+          <SheetHeader className="mb-4"><SheetTitle>Bulk Import Suppliers</SheetTitle></SheetHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Paste from Excel: <strong>Name, Phone, Address, Opening Due, Due Date</strong> (tab-separated, one per row)</p>
+            <Textarea value={bulkText} onChange={e => setBulkText(e.target.value)} placeholder="Paste data here..." rows={8} className="font-mono text-xs" />
+            <Button onClick={handleBulkImport} className="w-full">Import {bulkText.trim().split('\n').filter(l => l.trim()).length} Suppliers</Button>
           </div>
         </SheetContent>
       </Sheet>

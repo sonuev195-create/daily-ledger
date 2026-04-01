@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Search, Phone, Plus, Edit2, Trash2, Wallet, AlertTriangle, Receipt } from 'lucide-react';
+import { Users, Search, Phone, Plus, Edit2, Trash2, Wallet, AlertTriangle, Receipt, Upload } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -47,6 +48,8 @@ export default function CustomersPage() {
   const [formAddress, setFormAddress] = useState('');
   const [formDue, setFormDue] = useState('0');
   const [formDueDate, setFormDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
   useEffect(() => { fetchCustomers(); }, []);
 
   const fetchCustomers = async () => {
@@ -195,6 +198,48 @@ export default function CustomersPage() {
     setFormDueDate(format(new Date(), 'yyyy-MM-dd'));
   };
 
+  const handleBulkImport = async () => {
+    const lines = bulkText.trim().split('\n').filter(l => l.trim());
+    if (lines.length === 0) { toast.error('No data to import'); return; }
+    let count = 0;
+    for (const line of lines) {
+      const cols = line.split('\t');
+      const name = cols[0]?.trim();
+      if (!name) continue;
+      const address = cols[1]?.trim() || null;
+      const phone = cols[2]?.trim() || null;
+      const openingDue = parseFloat(cols[3]?.trim() || '0') || 0;
+      const dueDate = cols[4]?.trim() || format(new Date(), 'yyyy-MM-dd');
+      const nextDue = parseFloat(cols[5]?.trim() || '0') || 0;
+      const nextDueDate = cols[6]?.trim() || '';
+
+      const { data: newCust } = await supabase.from('customers').insert({ name, address, phone }).select().single();
+      if (newCust) {
+        if (openingDue > 0) {
+          const billNumber = await generateDailyBillNumber('OD', new Date(dueDate));
+          await addTransaction({
+            id: uuidv4(), date: new Date(dueDate), section: 'sale', type: 'opening_due',
+            amount: openingDue, payments: [], customerId: newCust.id, customerName: name,
+            billNumber, due: openingDue, createdAt: new Date(), updatedAt: new Date(),
+          });
+        }
+        if (nextDue > 0 && nextDueDate) {
+          const billNumber = await generateDailyBillNumber('OD', new Date(nextDueDate));
+          await addTransaction({
+            id: uuidv4(), date: new Date(nextDueDate), section: 'sale', type: 'opening_due',
+            amount: nextDue, payments: [], customerId: newCust.id, customerName: name,
+            billNumber, due: nextDue, createdAt: new Date(), updatedAt: new Date(),
+          });
+        }
+      }
+      count++;
+    }
+    toast.success(`Imported ${count} customers`);
+    setIsBulkOpen(false);
+    setBulkText('');
+    fetchCustomers();
+  };
+
   const filtered = customers.filter(c =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.phone?.includes(searchQuery)
@@ -211,9 +256,10 @@ export default function CustomersPage() {
             <h1 className="text-2xl font-bold text-foreground">Customers</h1>
             <p className="text-sm text-muted-foreground">{customers.length} customers</p>
           </div>
-          <Button onClick={() => setIsAddOpen(true)} className="gap-2">
-            <Plus className="w-4 h-4" /> Add
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsBulkOpen(true)} className="gap-1 text-xs"><Upload className="w-3 h-3" /> Bulk</Button>
+            <Button onClick={() => setIsAddOpen(true)} className="gap-2"><Plus className="w-4 h-4" /> Add</Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-6">
@@ -359,6 +405,17 @@ export default function CustomersPage() {
                )}
              </>
             <Button onClick={handleSaveCustomer} className="w-full">{editCustomer ? 'Update' : 'Add Customer'}</Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+      {/* Bulk Import Sheet */}
+      <Sheet open={isBulkOpen} onOpenChange={open => !open && setIsBulkOpen(false)}>
+        <SheetContent side="bottom" className="h-auto max-h-[80vh] rounded-t-3xl">
+          <SheetHeader className="mb-4"><SheetTitle>Bulk Import Customers</SheetTitle></SheetHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Paste from Excel: <strong>Name, Address, Mobile, Opening Due, Due Date, Next Due, Next Due Date</strong> (tab-separated, one per row)</p>
+            <Textarea value={bulkText} onChange={e => setBulkText(e.target.value)} placeholder="Paste data here..." rows={8} className="font-mono text-xs" />
+            <Button onClick={handleBulkImport} className="w-full">Import {bulkText.trim().split('\n').filter(l => l.trim()).length} Customers</Button>
           </div>
         </SheetContent>
       </Sheet>

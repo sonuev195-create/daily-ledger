@@ -289,6 +289,9 @@ export default function SuppliersPage() {
                       <p className={cn("text-lg font-bold", s.balance > 0 ? "text-warning" : "text-success")}>{formatINR(Math.abs(s.balance))}</p>
                       <p className="text-xs text-muted-foreground">{s.balance > 0 ? 'Due' : 'Paid'}</p>
                     </div>
+                    <button onClick={() => togglePaymentType(s)} className={cn("text-[9px] px-1.5 py-0.5 rounded-md border font-medium shrink-0", s.payment_type === 'bill_wise' ? 'border-accent text-accent bg-accent/10' : 'border-border text-muted-foreground')}>
+                      {s.payment_type === 'bill_wise' ? 'Bill' : 'Date'}
+                    </button>
                     <Button variant="ghost" size="icon" onClick={() => openOpeningBills(s)} title="Add Opening Bills"><Plus className="w-4 h-4 text-accent" /></Button>
                     <Button variant="ghost" size="icon" onClick={() => handleEditSupplier(s)}><Edit2 className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="icon" onClick={() => handleDeleteSupplier(s.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>

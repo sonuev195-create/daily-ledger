@@ -48,6 +48,8 @@ export default function CustomersPage() {
   const [formAddress, setFormAddress] = useState('');
   const [formDue, setFormDue] = useState('0');
   const [formDueDate, setFormDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
   useEffect(() => { fetchCustomers(); }, []);
 
   const fetchCustomers = async () => {

@@ -641,6 +641,18 @@ export function PurchaseInlineEntry({
           </div>
         )}
 
+        {/* Advance: show supplier advance balance info */}
+        {isAdvance && entry.supplierId && (
+          <div className="text-[10px] text-muted-foreground bg-info/10 rounded-lg px-2 py-1.5">
+            Payment amount will be recorded as advance for this supplier
+          </div>
+        )}
+
+        {/* Show supplier advance on bill types */}
+        {['purchase_bill_a', 'purchase_bill_b'].includes(entry.type) && entry.supplierId && (
+          <SupplierAdvanceInfo supplierId={entry.supplierId} />
+        )}
+
         {/* Payment modes - only for payment and expenses */}
         {(isPayment || isExpenses || entry.type === 'purchase_advance') && (
         <div>

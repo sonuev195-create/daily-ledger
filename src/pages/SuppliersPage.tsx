@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Truck, Search, Phone, MapPin, Plus, Edit2, Trash2, CreditCard, ArrowUpRight, ArrowDownLeft, Wallet } from 'lucide-react';
+import { Truck, Search, Phone, MapPin, Plus, Edit2, Trash2, CreditCard, ArrowUpRight, ArrowDownLeft, Wallet, Upload } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';

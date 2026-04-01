@@ -331,19 +331,59 @@ export function PurchaseInlineEntry({
 
       const isAdvance = entry.type === 'purchase_advance';
 
-      const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
-        date: selectedDate,
-        section: 'purchase' as TransactionSection,
-        type: dbType,
-        amount: (entry.type === 'purchase_payment' || isAdvance) ? totalPayments : amountNum,
-        payments: (isPayment || isExpenses || isAdvance) ? entry.payments.filter(p => p.amount > 0) : [],
-        billNumber: entry.billNumber || undefined,
-        supplierId: entry.supplierId,
-        supplierName: entry.supplierQuery || undefined,
-        reference: isAdvance ? 'advance' : (entry.reference || undefined),
-        billType: billType as any,
-        due: ['purchase_bill_a', 'purchase_bill_b'].includes(entry.type) ? amountNum : undefined,
-      };
+        // For advance, amount = total payments (no separate amount field)
+        const finalAmount = (entry.type === 'purchase_payment' || isAdvance) ? totalPayments : amountNum;
+
+        // For purchase bills, check if supplier has advance to apply
+        let supplierAdvance = 0;
+        if (['purchase_bill_a', 'purchase_bill_b'].includes(entry.type) && entry.supplierId) {
+          const { data: advTxns } = await supabase.from('transactions')
+            .select('id, amount, due')
+            .eq('supplier_id', entry.supplierId)
+            .eq('type', 'purchase_advance')
+            .gt('due', 0);
+          supplierAdvance = (advTxns || []).reduce((s, t) => s + Number(t.due || 0), 0);
+        }
+
+        // Calculate due for bills considering advance
+        let billDue = amountNum;
+        if (['purchase_bill_a', 'purchase_bill_b'].includes(entry.type)) {
+          const paidAmount = entry.payments.filter(p => p.amount > 0).reduce((s, p) => s + p.amount, 0);
+          billDue = amountNum - paidAmount;
+          // Apply supplier advance if available
+          if (supplierAdvance > 0 && billDue > 0) {
+            const advanceToApply = Math.min(supplierAdvance, billDue);
+            billDue -= advanceToApply;
+            // Reduce advance from advance transactions (FIFO)
+            let remainingAdvance = advanceToApply;
+            const { data: advTxns } = await supabase.from('transactions')
+              .select('id, amount, due')
+              .eq('supplier_id', entry.supplierId!)
+              .eq('type', 'purchase_advance')
+              .gt('due', 0)
+              .order('created_at', { ascending: true });
+            for (const at of (advTxns || [])) {
+              if (remainingAdvance <= 0) break;
+              const deduct = Math.min(remainingAdvance, Number(at.due || 0));
+              await supabase.from('transactions').update({ due: Number(at.due) - deduct }).eq('id', at.id);
+              remainingAdvance -= deduct;
+            }
+          }
+        }
+
+        const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+          date: selectedDate,
+          section: 'purchase' as TransactionSection,
+          type: dbType,
+          amount: finalAmount,
+          payments: (isPayment || isExpenses || isAdvance) ? entry.payments.filter(p => p.amount > 0) : entry.payments.filter(p => p.amount > 0),
+          billNumber: entry.billNumber || undefined,
+          supplierId: entry.supplierId,
+          supplierName: entry.supplierQuery || undefined,
+          reference: isAdvance ? 'advance' : (entry.reference || undefined),
+          billType: billType as any,
+          due: ['purchase_bill_a', 'purchase_bill_b'].includes(entry.type) ? billDue : (isAdvance ? totalPayments : undefined),
+        };
 
       await onSave(transaction);
 

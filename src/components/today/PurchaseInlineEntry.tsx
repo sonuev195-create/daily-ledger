@@ -837,6 +837,28 @@ export function PurchaseInlineEntry({
   );
 }
 
+// Supplier advance info component
+function SupplierAdvanceInfo({ supplierId }: { supplierId: string }) {
+  const [advance, setAdvance] = useState(0);
+  useEffect(() => {
+    supabase.from('transactions')
+      .select('due')
+      .eq('supplier_id', supplierId)
+      .eq('type', 'purchase_advance')
+      .gt('due', 0)
+      .then(({ data }) => {
+        setAdvance((data || []).reduce((s, t) => s + Number(t.due || 0), 0));
+      });
+  }, [supplierId]);
+  if (advance <= 0) return null;
+  return (
+    <div className="text-[10px] bg-success/10 text-success rounded-lg px-2 py-1.5 flex items-center justify-between">
+      <span>Supplier Advance Available</span>
+      <span className="font-semibold">{formatINR(advance)}</span>
+    </div>
+  );
+}
+
 // Inline column config component for OCR settings
 function ColumnConfigInline({ configName, onClose }: { configName: string; onClose: () => void }) {
   const [totalCols, setTotalCols] = useState(4);

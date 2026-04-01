@@ -408,6 +408,17 @@ export default function CustomersPage() {
           </div>
         </SheetContent>
       </Sheet>
+      {/* Bulk Import Sheet */}
+      <Sheet open={isBulkOpen} onOpenChange={open => !open && setIsBulkOpen(false)}>
+        <SheetContent side="bottom" className="h-auto max-h-[80vh] rounded-t-3xl">
+          <SheetHeader className="mb-4"><SheetTitle>Bulk Import Customers</SheetTitle></SheetHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Paste from Excel: <strong>Name, Address, Mobile, Opening Due, Due Date, Next Due, Next Due Date</strong> (tab-separated, one per row)</p>
+            <Textarea value={bulkText} onChange={e => setBulkText(e.target.value)} placeholder="Paste data here..." rows={8} className="font-mono text-xs" />
+            <Button onClick={handleBulkImport} className="w-full">Import {bulkText.trim().split('\n').filter(l => l.trim()).length} Customers</Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </AppLayout>
   );
 }

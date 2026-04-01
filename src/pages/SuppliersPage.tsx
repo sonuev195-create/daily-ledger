@@ -50,6 +50,7 @@ export default function SuppliersPage() {
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
+  const [formPaymentType, setFormPaymentType] = useState('date_wise');
   
   // Opening due bills
   const [isOpeningBillOpen, setIsOpeningBillOpen] = useState(false);

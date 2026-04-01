@@ -19,6 +19,7 @@ interface Supplier {
   phone: string | null;
   address: string | null;
   balance: number;
+  payment_type: string;
 }
 
 interface SupplierTransaction {

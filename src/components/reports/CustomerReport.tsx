@@ -37,6 +37,8 @@ export function CustomerReport() {
   const [fromDate, setFromDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [toDate, setToDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   const [openingBalance, setOpeningBalance] = useState(0);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
   useEffect(() => {
     supabase.from('customers').select('*').order('name').then(({ data }) => {

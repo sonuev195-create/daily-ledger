@@ -350,6 +350,13 @@ export default function SuppliersPage() {
             <div><label className="text-sm font-medium">Name *</label><Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Supplier name" className="mt-1" /></div>
             <div><label className="text-sm font-medium">Phone</label><Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="Phone" className="mt-1" /></div>
             <div><label className="text-sm font-medium">Address</label><Input value={formAddress} onChange={e => setFormAddress(e.target.value)} placeholder="Address" className="mt-1" /></div>
+            <div>
+              <label className="text-sm font-medium">Payment Type</label>
+              <div className="flex gap-2 mt-1">
+                <button onClick={() => setFormPaymentType('date_wise')} className={cn("flex-1 py-2 rounded-lg border text-sm font-medium transition-all", formPaymentType === 'date_wise' ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground")}>Date-wise</button>
+                <button onClick={() => setFormPaymentType('bill_wise')} className={cn("flex-1 py-2 rounded-lg border text-sm font-medium transition-all", formPaymentType === 'bill_wise' ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground")}>Bill-wise</button>
+              </div>
+            </div>
             <Button onClick={handleSaveSupplier} className="w-full">{editSupplier ? 'Update' : 'Add Supplier'}</Button>
           </div>
         </SheetContent>

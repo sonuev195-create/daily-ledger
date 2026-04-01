@@ -81,10 +81,10 @@ export default function SuppliersPage() {
     if (!formName.trim()) { toast.error('Name required'); return; }
     try {
       if (editSupplier) {
-        await supabase.from('suppliers').update({ name: formName, phone: formPhone || null, address: formAddress || null }).eq('id', editSupplier.id);
+        await supabase.from('suppliers').update({ name: formName, phone: formPhone || null, address: formAddress || null, payment_type: formPaymentType }).eq('id', editSupplier.id);
         toast.success('Updated');
       } else {
-        await supabase.from('suppliers').insert({ name: formName, phone: formPhone || null, address: formAddress || null });
+        await supabase.from('suppliers').insert({ name: formName, phone: formPhone || null, address: formAddress || null, payment_type: formPaymentType });
         toast.success('Added');
       }
       closeForm();

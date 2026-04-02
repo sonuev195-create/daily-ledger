@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { useItems } from '@/hooks/useSupabaseData';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
 import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
+import { CustomerSearchPopup } from '@/components/transactions/CustomerSearchPopup';
 
 type CustomerSubType = 'sale' | 'sales_return' | 'balance_paid' | 'customer_advance';
 

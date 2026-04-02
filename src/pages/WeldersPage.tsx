@@ -38,6 +38,8 @@ export default function WeldersPage() {
   const [editWelder, setEditWelder] = useState<Welder | null>(null);
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
+  const [formOpeningDue, setFormOpeningDue] = useState('');
+  const [formOpeningDueDate, setFormOpeningDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   useEffect(() => { fetchWelders(); }, []);
 

@@ -611,31 +611,19 @@ export function CustomerInlineEntry({
   };
 
   const renderCustomerSearch = () => (
-    <div className="relative">
-      <Input ref={customerInputRef} value={entry.customerQuery}
-        onChange={e => setEntry(prev => ({ ...prev, customerQuery: e.target.value, customerId: undefined, customerAdvance: 0 }))}
-        placeholder="Name or phone..." className="h-8 text-xs" enterKeyHint="next" />
-      <AnimatePresence>
-        {showCustomerDropdown && customerResults.length > 0 && (
-          <motion.div ref={dropdownRef} initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}
-            className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-            {customerResults.map(c => (
-              <button key={c.id} onClick={() => selectCustomer(c)}
-                className="w-full px-3 py-2 text-left hover:bg-secondary/50 text-xs border-b border-border/30 last:border-0">
-                <div className="flex justify-between">
-                  <span className="font-medium">{c.name}</span>
-                  <div className="flex gap-2">
-                    {c.advanceBalance > 0 && <span className="text-success">Adv: {formatINR(c.advanceBalance)}</span>}
-                    {c.dueBalance > 0 && <span className="text-warning">Due: {formatINR(c.dueBalance)}</span>}
-                  </div>
-                </div>
-                {c.phone && <span className="text-muted-foreground">{c.phone}</span>}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    <CustomerSearchPopup
+      value={entry.customerQuery}
+      onChange={(name, customerId, advance) => {
+        setEntry(prev => ({
+          ...prev,
+          customerQuery: name,
+          customerId: customerId || undefined,
+          customerAdvance: advance || 0,
+        }));
+      }}
+      placeholder="Search customer..."
+      className="w-full"
+    />
   );
 
   return (

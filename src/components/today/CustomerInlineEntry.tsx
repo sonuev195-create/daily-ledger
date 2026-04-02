@@ -561,12 +561,29 @@ export function CustomerInlineEntry({
 
       if (finalCustomerId) {
         if (entry.type === 'balance_paid') {
-          const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id));
+          // FIFO allocation: sort selected bills by date, close first bill fully then apply remainder
+          const selectedDueBills = entry.dueBills
+            .filter(b => entry.selectedBills.includes(b.id))
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
           let remaining = totalPayments;
           for (const bill of selectedDueBills) {
+            if (remaining <= 0) break;
             const payForBill = Math.min(remaining, bill.dueAmount);
             remaining -= payForBill;
-            await supabase.from('transactions').update({ due: bill.dueAmount - payForBill }).eq('id', bill.id);
+            const newDue = Math.max(0, bill.dueAmount - payForBill);
+            await supabase.from('transactions').update({ due: newDue }).eq('id', bill.id);
+          }
+          // If no specific bills selected, allocate to all due bills FIFO
+          if (selectedDueBills.length === 0 && entry.dueBills.length > 0) {
+            const allDueBills = [...entry.dueBills].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            let rem = totalPayments;
+            for (const bill of allDueBills) {
+              if (rem <= 0) break;
+              const payForBill = Math.min(rem, bill.dueAmount);
+              rem -= payForBill;
+              const newDue = Math.max(0, bill.dueAmount - payForBill);
+              await supabase.from('transactions').update({ due: newDue }).eq('id', bill.id);
+            }
           }
         }
 

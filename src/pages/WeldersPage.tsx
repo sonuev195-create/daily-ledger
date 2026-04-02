@@ -257,10 +257,22 @@ export default function WeldersPage() {
               <label className="text-sm font-medium">Name *</label>
               <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Welder name" className="mt-1" />
             </div>
-            <div>
+             <div>
               <label className="text-sm font-medium">Phone</label>
               <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="Phone number" className="mt-1" />
             </div>
+            {!editWelder && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium">Opening Due</label>
+                  <Input type="number" value={formOpeningDue} onChange={e => setFormOpeningDue(e.target.value)} placeholder="₹0" className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Due Date</label>
+                  <Input type="date" value={formOpeningDueDate} onChange={e => setFormOpeningDueDate(e.target.value)} className="mt-1" />
+                </div>
+              </div>
+            )}
             <Button onClick={handleSave} className="w-full">{editWelder ? 'Update' : 'Add Welder'}</Button>
           </div>
         </SheetContent>

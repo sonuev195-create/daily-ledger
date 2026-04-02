@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { useItems } from '@/hooks/useSupabaseData';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
 import { ItemSearchSelect } from '@/components/items/ItemSearchSelect';
+import { CustomerSearchPopup } from '@/components/transactions/CustomerSearchPopup';
 
 type CustomerSubType = 'sale' | 'sales_return' | 'balance_paid' | 'customer_advance';
 
@@ -560,12 +561,29 @@ export function CustomerInlineEntry({
 
       if (finalCustomerId) {
         if (entry.type === 'balance_paid') {
-          const selectedDueBills = entry.dueBills.filter(b => entry.selectedBills.includes(b.id));
+          // FIFO allocation: sort selected bills by date, close first bill fully then apply remainder
+          const selectedDueBills = entry.dueBills
+            .filter(b => entry.selectedBills.includes(b.id))
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
           let remaining = totalPayments;
           for (const bill of selectedDueBills) {
+            if (remaining <= 0) break;
             const payForBill = Math.min(remaining, bill.dueAmount);
             remaining -= payForBill;
-            await supabase.from('transactions').update({ due: bill.dueAmount - payForBill }).eq('id', bill.id);
+            const newDue = Math.max(0, bill.dueAmount - payForBill);
+            await supabase.from('transactions').update({ due: newDue }).eq('id', bill.id);
+          }
+          // If no specific bills selected, allocate to all due bills FIFO
+          if (selectedDueBills.length === 0 && entry.dueBills.length > 0) {
+            const allDueBills = [...entry.dueBills].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            let rem = totalPayments;
+            for (const bill of allDueBills) {
+              if (rem <= 0) break;
+              const payForBill = Math.min(rem, bill.dueAmount);
+              rem -= payForBill;
+              const newDue = Math.max(0, bill.dueAmount - payForBill);
+              await supabase.from('transactions').update({ due: newDue }).eq('id', bill.id);
+            }
           }
         }
 
@@ -610,31 +628,19 @@ export function CustomerInlineEntry({
   };
 
   const renderCustomerSearch = () => (
-    <div className="relative">
-      <Input ref={customerInputRef} value={entry.customerQuery}
-        onChange={e => setEntry(prev => ({ ...prev, customerQuery: e.target.value, customerId: undefined, customerAdvance: 0 }))}
-        placeholder="Name or phone..." className="h-8 text-xs" enterKeyHint="next" />
-      <AnimatePresence>
-        {showCustomerDropdown && customerResults.length > 0 && (
-          <motion.div ref={dropdownRef} initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}
-            className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-            {customerResults.map(c => (
-              <button key={c.id} onClick={() => selectCustomer(c)}
-                className="w-full px-3 py-2 text-left hover:bg-secondary/50 text-xs border-b border-border/30 last:border-0">
-                <div className="flex justify-between">
-                  <span className="font-medium">{c.name}</span>
-                  <div className="flex gap-2">
-                    {c.advanceBalance > 0 && <span className="text-success">Adv: {formatINR(c.advanceBalance)}</span>}
-                    {c.dueBalance > 0 && <span className="text-warning">Due: {formatINR(c.dueBalance)}</span>}
-                  </div>
-                </div>
-                {c.phone && <span className="text-muted-foreground">{c.phone}</span>}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    <CustomerSearchPopup
+      value={entry.customerQuery}
+      onChange={(name, customerId, advance) => {
+        setEntry(prev => ({
+          ...prev,
+          customerQuery: name,
+          customerId: customerId || undefined,
+          customerAdvance: advance || 0,
+        }));
+      }}
+      placeholder="Search customer..."
+      className="w-full"
+    />
   );
 
   return (

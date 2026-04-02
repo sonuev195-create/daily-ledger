@@ -68,7 +68,6 @@ const SUB_TYPES: { value: PurchaseSubType; label: string }[] = [
   { value: 'purchase_return_a', label: 'Return A' },
   { value: 'purchase_return_b', label: 'Return B' },
   { value: 'purchase_expenses', label: 'Expenses' },
-  { value: 'purchase_advance' as PurchaseSubType, label: 'Advance' },
 ];
 
 const shortPurchaseTypeLabel: Record<string, string> = {
@@ -576,7 +575,7 @@ export function PurchaseInlineEntry({
             )}
           </div>
 
-          {!isPayment && (
+          {!isPayment && !isAdvance && (
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Type</label>
               <Select value={entry.type} onValueChange={(v: string) => setEntry(prev => ({ ...prev, type: v as PurchaseSubType, selectedBills: [], dueBills: [] }))}>
@@ -653,8 +652,8 @@ export function PurchaseInlineEntry({
           <SupplierAdvanceInfo supplierId={entry.supplierId} />
         )}
 
-        {/* Payment modes - only for payment and expenses */}
-        {(isPayment || isExpenses || entry.type === 'purchase_advance') && (
+        {/* Payment modes - for payment, expenses, advance AND bill types */}
+        {(isPayment || isExpenses || isAdvance || isBillType) && (
         <div>
           <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
           <div className="space-y-1">
@@ -769,21 +768,19 @@ export function PurchaseInlineEntry({
                             }
                             setExtractedBillItems(updated);
                           }} placeholder="Pri Qty" className="w-16 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
-                          {secUnit && (
-                            <input type="number" value={item.secondaryQty || ''} onChange={(e) => {
-                              const updated = [...extractedBillItems];
-                              const secondaryValue = parseFloat(e.target.value) || 0;
-                              const masterItem = allItems.find(i => i.id === updated[idx].selectedItemId);
-                              updated[idx] = {
-                                ...updated[idx],
-                                secondaryQty: secondaryValue,
-                                primaryQty: masterItem?.conversionType === 'permanent' && masterItem.conversionRate
-                                  ? Number((secondaryValue / masterItem.conversionRate).toFixed(4))
-                                  : updated[idx].primaryQty,
-                              };
-                              setExtractedBillItems(updated);
-                            }} placeholder={secUnit} className="w-16 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
-                          )}
+                          <input type="number" value={item.secondaryQty || ''} onChange={(e) => {
+                            const updated = [...extractedBillItems];
+                            const secondaryValue = parseFloat(e.target.value) || 0;
+                            const masterItem = allItems.find(i => i.id === updated[idx].selectedItemId);
+                            updated[idx] = {
+                              ...updated[idx],
+                              secondaryQty: secondaryValue,
+                              primaryQty: masterItem?.conversionType === 'permanent' && masterItem.conversionRate
+                                ? Number((secondaryValue / masterItem.conversionRate).toFixed(4))
+                                : updated[idx].primaryQty,
+                            };
+                            setExtractedBillItems(updated);
+                          }} placeholder={secUnit || 'Sec Qty'} className="w-16 h-7 px-1 text-[11px] text-center bg-background/50 border border-border rounded" />
                           <input type="number" value={item.rate || ''} onChange={(e) => {
                             const updated = [...extractedBillItems];
                             const rate = parseFloat(e.target.value) || 0;

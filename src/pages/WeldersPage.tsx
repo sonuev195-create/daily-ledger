@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { formatINR } from '@/lib/format';
+import { v4 as uuidv4 } from 'uuid';
+import { addTransaction } from '@/lib/db';
 
 interface Welder {
   id: string;
@@ -36,6 +38,8 @@ export default function WeldersPage() {
   const [editWelder, setEditWelder] = useState<Welder | null>(null);
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
+  const [formOpeningDue, setFormOpeningDue] = useState('');
+  const [formOpeningDueDate, setFormOpeningDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   useEffect(() => { fetchWelders(); }, []);
 
@@ -89,7 +93,16 @@ export default function WeldersPage() {
         await supabase.from('welders').update({ name: formName, phone: formPhone || null }).eq('id', editWelder.id);
         toast.success('Welder updated');
       } else {
-        await supabase.from('welders').insert({ name: formName, phone: formPhone || null });
+        const { data: newWelder } = await supabase.from('welders').insert({ name: formName, phone: formPhone || null }).select().single();
+        // Save opening due if provided
+        const openingDueAmount = parseFloat(formOpeningDue) || 0;
+        if (newWelder && openingDueAmount > 0) {
+          await addTransaction({
+            id: uuidv4(), date: new Date(formOpeningDueDate), section: 'sale', type: 'opening_due',
+            amount: openingDueAmount, payments: [], welderId: newWelder.id,
+            billNumber: `WD/OD/1`, due: openingDueAmount, createdAt: new Date(), updatedAt: new Date(),
+          });
+        }
         toast.success('Welder added');
       }
       closeForm();
@@ -116,6 +129,8 @@ export default function WeldersPage() {
     setEditWelder(null);
     setFormName('');
     setFormPhone('');
+    setFormOpeningDue('');
+    setFormOpeningDueDate(format(new Date(), 'yyyy-MM-dd'));
   };
 
   const filtered = welders.filter(w =>
@@ -242,10 +257,22 @@ export default function WeldersPage() {
               <label className="text-sm font-medium">Name *</label>
               <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Welder name" className="mt-1" />
             </div>
-            <div>
+             <div>
               <label className="text-sm font-medium">Phone</label>
               <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="Phone number" className="mt-1" />
             </div>
+            {!editWelder && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium">Opening Due</label>
+                  <Input type="number" value={formOpeningDue} onChange={e => setFormOpeningDue(e.target.value)} placeholder="₹0" className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Due Date</label>
+                  <Input type="date" value={formOpeningDueDate} onChange={e => setFormOpeningDueDate(e.target.value)} className="mt-1" />
+                </div>
+              </div>
+            )}
             <Button onClick={handleSave} className="w-full">{editWelder ? 'Update' : 'Add Welder'}</Button>
           </div>
         </SheetContent>

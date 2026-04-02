@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { formatINR } from '@/lib/format';
+import { v4 as uuidv4 } from 'uuid';
+import { addTransaction } from '@/lib/db';
 
 interface Welder {
   id: string;

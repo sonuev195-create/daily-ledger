@@ -688,7 +688,7 @@ export function PurchaseInlineEntry({
             ))}
           </div>
         </div>
-        )
+        )}
 
         {/* Bill capture + Manual item entry for purchase bills */}
         {isBillType && (

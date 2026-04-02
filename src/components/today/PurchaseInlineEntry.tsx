@@ -575,7 +575,7 @@ export function PurchaseInlineEntry({
             )}
           </div>
 
-          {!isPayment && (
+          {!isPayment && !isAdvance && (
             <div>
               <label className="text-[10px] text-muted-foreground mb-0.5 block">Type</label>
               <Select value={entry.type} onValueChange={(v: string) => setEntry(prev => ({ ...prev, type: v as PurchaseSubType, selectedBills: [], dueBills: [] }))}>

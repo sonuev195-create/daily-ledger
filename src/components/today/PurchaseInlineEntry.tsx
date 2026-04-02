@@ -652,8 +652,8 @@ export function PurchaseInlineEntry({
           <SupplierAdvanceInfo supplierId={entry.supplierId} />
         )}
 
-        {/* Payment modes - only for payment and expenses */}
-        {(isPayment || isExpenses || entry.type === 'purchase_advance') && (
+        {/* Payment modes - for payment, expenses, advance AND bill types */}
+        {(isPayment || isExpenses || isAdvance || isBillType) && (
         <div>
           <label className="text-[10px] text-muted-foreground mb-0.5 block">Payment</label>
           <div className="space-y-1">
@@ -688,7 +688,7 @@ export function PurchaseInlineEntry({
             ))}
           </div>
         </div>
-        )}
+        )
 
         {/* Bill capture + Manual item entry for purchase bills */}
         {isBillType && (

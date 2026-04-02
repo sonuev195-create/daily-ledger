@@ -129,6 +129,8 @@ export default function WeldersPage() {
     setEditWelder(null);
     setFormName('');
     setFormPhone('');
+    setFormOpeningDue('');
+    setFormOpeningDueDate(format(new Date(), 'yyyy-MM-dd'));
   };
 
   const filtered = welders.filter(w =>

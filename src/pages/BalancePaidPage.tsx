@@ -215,10 +215,27 @@ export default function BalancePaidPage() {
       });
       if (txError) throw txError;
 
-      // If paying a specific bill, reduce its due
+      // FIFO bill allocation: close first bill fully, then apply remainder to next
       if (payingBill) {
+        // Single bill payment
         const newDue = Math.max(0, payingBill.due - amt);
         await supabase.from('transactions').update({ due: newDue }).eq('id', payingBill.id);
+      } else {
+        // Pay customer's due bills in FIFO order (oldest first)
+        const { data: dueBills } = await supabase.from('transactions')
+          .select('id, due, created_at')
+          .eq('customer_id', payingCustomer.id)
+          .gt('due', 0)
+          .order('created_at', { ascending: true });
+        
+        let remaining = amt;
+        for (const bill of (dueBills || [])) {
+          if (remaining <= 0) break;
+          const billDue = Number(bill.due);
+          const payForBill = Math.min(remaining, billDue);
+          remaining -= payForBill;
+          await supabase.from('transactions').update({ due: Math.max(0, billDue - payForBill) }).eq('id', bill.id);
+        }
       }
 
       // Update customer due_balance

@@ -68,7 +68,6 @@ const SUB_TYPES: { value: PurchaseSubType; label: string }[] = [
   { value: 'purchase_return_a', label: 'Return A' },
   { value: 'purchase_return_b', label: 'Return B' },
   { value: 'purchase_expenses', label: 'Expenses' },
-  { value: 'purchase_advance' as PurchaseSubType, label: 'Advance' },
 ];
 
 const shortPurchaseTypeLabel: Record<string, string> = {

@@ -93,7 +93,16 @@ export default function WeldersPage() {
         await supabase.from('welders').update({ name: formName, phone: formPhone || null }).eq('id', editWelder.id);
         toast.success('Welder updated');
       } else {
-        await supabase.from('welders').insert({ name: formName, phone: formPhone || null });
+        const { data: newWelder } = await supabase.from('welders').insert({ name: formName, phone: formPhone || null }).select().single();
+        // Save opening due if provided
+        const openingDueAmount = parseFloat(formOpeningDue) || 0;
+        if (newWelder && openingDueAmount > 0) {
+          await addTransaction({
+            id: uuidv4(), date: new Date(formOpeningDueDate), section: 'sale', type: 'opening_due',
+            amount: openingDueAmount, payments: [], welderId: newWelder.id,
+            billNumber: `WD/OD/1`, due: openingDueAmount, createdAt: new Date(), updatedAt: new Date(),
+          });
+        }
         toast.success('Welder added');
       }
       closeForm();
